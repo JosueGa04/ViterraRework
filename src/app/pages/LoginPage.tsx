@@ -15,7 +15,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (authReady && isAuthenticated) {
-      navigate(user?.mustChangePassword ? "/admin/cambiar-contrasena" : "/admin", { replace: true });
+      navigate(user?.mustChangePassword ? "/admin/cambiar-contrasena" : "/admin/dashboard", { replace: true });
     }
   }, [authReady, isAuthenticated, user?.mustChangePassword, navigate]);
 
@@ -27,7 +27,7 @@ export function LoginPage() {
     const result = await login(email, password);
     setIsLoading(false);
     if (result.ok) {
-      navigate(result.mustChangePassword ? "/admin/cambiar-contrasena" : "/admin");
+      navigate(result.mustChangePassword ? "/admin/cambiar-contrasena" : "/admin/dashboard");
     } else {
       setError(result.message ?? "No se pudo iniciar sesión.");
     }

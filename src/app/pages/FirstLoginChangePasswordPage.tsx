@@ -21,7 +21,7 @@ export function FirstLoginChangePasswordPage() {
       return;
     }
     if (!user?.mustChangePassword) {
-      navigate("/admin", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
     }
   }, [authReady, isAuthenticated, user?.mustChangePassword, navigate]);
 
@@ -65,7 +65,7 @@ export function FirstLoginChangePasswordPage() {
 
     setIsLoading(false);
     // Recarga completa para que AuthContext vuelva a leer `tokko_users` y no quede `mustChangePassword` obsoleto en memoria.
-    window.location.assign("/admin");
+    window.location.assign("/admin/dashboard");
   };
 
   if (!authReady || !isAuthenticated || !user?.mustChangePassword) {
