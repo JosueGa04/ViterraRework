@@ -178,6 +178,19 @@ import {
 } from "../../lib/supabaseSalesPipeline";
 import { foldSearchText } from "../../lib/searchText";
 import { buildAdminHref, parseAdminPath, type AdminTab, type CompanySubtab } from "./adminNavigation";
+import {
+  AdminActivitiesSkeleton,
+  AdminChartsRowSkeleton,
+  AdminClientsSkeleton,
+  AdminCompanySkeleton,
+  AdminDashboardSkeleton,
+  AdminDevelopmentsSkeleton,
+  AdminKpisSkeleton,
+  AdminLeadsTabSkeleton,
+  AdminPipelineDashboardSkeleton,
+  AdminPropertiesSkeleton,
+  AdminWorkspaceAuthLoadingShell,
+} from "./AdminSectionSkeletons";
 
 type TabType = AdminTab;
 
@@ -271,6 +284,7 @@ export function AdminWorkspace() {
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const {
     properties,
+    loading: catalogPropertiesLoading,
     reload: reloadProperties,
     patchProperty: patchCatalogProperty,
     applySavedProperty,
@@ -342,6 +356,20 @@ export function AdminWorkspace() {
   const canAccessCompanyModule = !isAdvisor;
   // Inventario (propiedades/desarrollos) solo editable por administradores.
   const canManageInventory = user?.role === "admin";
+
+  const crmBootstrapReady = pipelineSourcesHydrated;
+  /**
+   * Dashboard y KPI's esperan pipeline remoto (embudo coherente con Supabase). El tab Leads solo espera la query
+   * de leads: el pipeline ya tiene snapshot local por defecto hasta fusionar con la red.
+   */
+  const crmCoreLoading = leadsLoading || !crmBootstrapReady;
+  const dashboardChartsLoading = crmCoreLoading;
+  const leadsModuleLoading = leadsLoading;
+  const kpisModuleLoading = crmCoreLoading;
+  /** Sitio y ajustes no dependen del pipeline; usuarios puede mostrarse con leads aún cargando en segundo plano. */
+  const companyModuleLoading =
+    (companySubtab === "leadStages" && !crmBootstrapReady) ||
+    (companySubtab === "users" && leadsLoading);
 
   const logCatalogActivity = useCallback(
     async (row: {
@@ -430,71 +458,83 @@ export function AdminWorkspace() {
         return;
       }
 
-      const [leadsRes, devRes, groupsRes] = await Promise.all([
-        fetchActiveLeads(client),
-        fetchDevelopmentsWithUnits(client, { publicOnly: false }),
-        fetchActiveUserGroups(client),
-      ]);
-      if (cancelled) return;
+      const leadsP = fetchActiveLeads(client)
+        .then((leadsRes) => {
+          if (cancelled) return;
+          if (leadsRes.error) {
+            setLeadsError(leadsRes.error.message);
+            setLeads([]);
+          } else {
+            setLeads(leadsRes.data);
+            if (import.meta.env.DEV && leadsRes.data.length === 0) {
+              void logTableCountHints(client, "leads");
+            }
+          }
+          setLeadsLoading(false);
+        })
+        .catch((e: unknown) => {
+          if (cancelled) return;
+          setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
+          setLeads([]);
+          setLeadsLoading(false);
+        });
 
-      if (leadsRes.error) {
-        setLeadsError(leadsRes.error.message);
-        setLeads([]);
-      } else {
-        setLeads(leadsRes.data);
-        if (import.meta.env.DEV && leadsRes.data.length === 0) {
-          void logTableCountHints(client, "leads");
+      const devP = fetchDevelopmentsWithUnits(client, { publicOnly: false }).then((devRes) => {
+        if (cancelled) return;
+        if (devRes.error) {
+          toast.error(devRes.error.message);
+          setDevelopments([]);
+        } else {
+          setDevelopments(devRes.data ?? []);
+          if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
+            void logTableCountHints(client, "developments");
+          }
         }
-      }
-      setLeadsLoading(false);
+        setDevelopmentsLoading(false);
+      });
 
-      if (devRes.error) {
-        toast.error(devRes.error.message);
-        setDevelopments([]);
-      } else {
-        setDevelopments(devRes.data ?? []);
-        if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
-          void logTableCountHints(client, "developments");
-        }
-      }
-      setDevelopmentsLoading(false);
+      const bootstrapP = Promise.all([fetchActiveUserGroups(client), fetchSalesPipelineConfigs(client)]).then(
+        ([groupsRes, pipeRes]) => {
+          if (cancelled) return;
 
-      let groupsData: UserGroup[] = [];
-      if (groupsRes.error) {
-        if (import.meta.env.DEV) {
-          console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
-        }
-        setUserGroups([]);
-      } else {
-        groupsData = groupsRes.data;
-        setUserGroups(groupsRes.data);
-      }
+          let groupsData: UserGroup[] = [];
+          if (groupsRes.error) {
+            if (import.meta.env.DEV) {
+              console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
+            }
+            setUserGroups([]);
+          } else {
+            groupsData = groupsRes.data;
+            setUserGroups(groupsRes.data);
+          }
 
-      const allowedGroupIds = user
-        ? getAllowedPipelineGroupIds(user, groupsData)
-        : [DEFAULT_PIPELINE_GROUP_ID];
-      const localLegacy = loadPipelineByGroup();
-      const pipeRes = await fetchSalesPipelineConfigs(client);
-      if (cancelled) return;
-      if (pipeRes.error) {
-        if (import.meta.env.DEV) {
-          console.warn("[Viterra] sales_pipeline_configs:", pipeRes.error.message);
-        }
-        setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
-      } else {
-        setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
-      }
-      setPipelineSourcesHydrated(true);
+          const allowedGroupIds = user
+            ? getAllowedPipelineGroupIds(user, groupsData)
+            : [DEFAULT_PIPELINE_GROUP_ID];
+          const localLegacy = loadPipelineByGroup();
+          if (pipeRes.error) {
+            if (import.meta.env.DEV) {
+              console.warn("[Viterra] sales_pipeline_configs:", pipeRes.error.message);
+            }
+            setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
+          } else {
+            setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
+          }
+          setPipelineSourcesHydrated(true);
 
-      if (import.meta.env.DEV) {
-        const host = getSupabaseProjectHost();
-        if (host) {
-          console.info(
-            "[Viterra] Comprueba que este host coincide con tu proyecto en Supabase Dashboard:",
-            host
-          );
+          if (import.meta.env.DEV) {
+            const host = getSupabaseProjectHost();
+            if (host) {
+              console.info(
+                "[Viterra] Comprueba que este host coincide con tu proyecto en Supabase Dashboard:",
+                host
+              );
+            }
+          }
         }
-      }
+      );
+
+      await Promise.all([leadsP, devP, bootstrapP]);
     })();
 
     const savedClients = localStorage.getItem(CLIENTS_STORAGE_KEY);
@@ -2125,7 +2165,7 @@ export function AdminWorkspace() {
   };
 
   if (!user) {
-    return null;
+    return <AdminWorkspaceAuthLoadingShell />;
   }
 
   return (
@@ -2511,7 +2551,13 @@ export function AdminWorkspace() {
         {/* Dashboard Tab */}
         {activeTab === "dashboard" && (
           <div className="space-y-8">
-            {isAdvisor ? (
+            {dashboardChartsLoading ? (
+              isAdvisor || isGroupLeader ? (
+                <AdminPipelineDashboardSkeleton />
+              ) : (
+                <AdminDashboardSkeleton />
+              )
+            ) : isAdvisor ? (
               <AdvisorDashboard
                 leads={leadsForUser}
                 properties={properties}
@@ -2577,7 +2623,7 @@ export function AdminWorkspace() {
               </div>
             </div>
 
-            <Suspense fallback={adminModuleFallback("min-h-[280px]")}>
+            <Suspense fallback={<AdminChartsRowSkeleton />}>
               <AdminDashboardCharts trendData={dashboardLeadTrendData} sourceData={leadsBySourceData} />
             </Suspense>
               </>
@@ -2586,23 +2632,29 @@ export function AdminWorkspace() {
         )}
 
         {/* KPI's Tab */}
-        {activeTab === "kpis" && (
-          <Suspense fallback={adminModuleFallback()}>
-            <KPIsModule
-              user={user}
-              users={users}
-              groups={userGroups}
-              leads={leads}
-              properties={properties}
-              appointments={appointments}
-              customStages={customKanbanStages}
-              stageOrder={pipelineStageOrder}
-            />
-          </Suspense>
-        )}
+        {activeTab === "kpis" &&
+          (kpisModuleLoading ? (
+            <AdminKpisSkeleton />
+          ) : (
+            <Suspense fallback={<AdminKpisSkeleton />}>
+              <KPIsModule
+                user={user}
+                users={users}
+                groups={userGroups}
+                leads={leads}
+                properties={properties}
+                appointments={appointments}
+                customStages={customKanbanStages}
+                stageOrder={pipelineStageOrder}
+              />
+            </Suspense>
+          ))}
 
         {/* Leads Tab */}
-        {activeTab === "leads" && (
+        {activeTab === "leads" &&
+          (leadsModuleLoading ? (
+            <AdminLeadsTabSkeleton />
+          ) : (
           <div className="space-y-6">
             {/* Leads Header */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
@@ -2896,12 +2948,6 @@ export function AdminWorkspace() {
               </div>
             )}
 
-            {leadsLoading ? (
-              <div className="rounded-2xl border border-slate-200/80 bg-white/95 px-6 py-16 text-center text-slate-600 shadow-sm">
-                Cargando leads…
-              </div>
-            ) : (
-              <>
             {leadsView === "kanban" && (
               <LeadsKanbanBoard
                 leads={filteredLeadsForBoard}
@@ -3126,12 +3172,14 @@ export function AdminWorkspace() {
               )}
             </div>
             )}
-              </>
-            )}
           </div>
-        )}
+          ))}
 
-        {activeTab === "clients" && canAccessClients && (
+        {activeTab === "clients" &&
+          canAccessClients &&
+          (leadsModuleLoading ? (
+            <AdminClientsSkeleton />
+          ) : (
           <div className="space-y-6">
             <AdminClientsManager
               currentUser={user}
@@ -3149,7 +3197,7 @@ export function AdminWorkspace() {
               onSeedFromLeadConsumed={handleSeedClientFromLeadConsumed}
             />
           </div>
-        )}
+          ))}
 
         {activeTab === "agenda" && <AdminAgendaModule />}
 
@@ -3162,7 +3210,10 @@ export function AdminWorkspace() {
         )}
 
         {/* Properties Tab */}
-        {activeTab === "properties" && (
+        {activeTab === "properties" &&
+          (catalogPropertiesLoading ? (
+            <AdminPropertiesSkeleton />
+          ) : (
           <div className="space-y-6">
             {/* Properties Header */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
@@ -3758,13 +3809,11 @@ export function AdminWorkspace() {
               </div>
             )}
           </div>
-        )}
+          ))}
 
         {activeTab === "developments" &&
           (developmentsLoading ? (
-            <div className="py-16 text-center text-slate-600" style={{ fontWeight: 500 }}>
-              Cargando desarrollos…
-            </div>
+            <AdminDevelopmentsSkeleton />
           ) : (
             <AdminDevelopmentsManager
               developments={developments}
@@ -3773,7 +3822,11 @@ export function AdminWorkspace() {
             />
           ))}
 
-        {activeTab === "company" && canAccessCompanyModule && (
+        {activeTab === "company" &&
+          canAccessCompanyModule &&
+          (companyModuleLoading ? (
+            <AdminCompanySkeleton />
+          ) : (
           <div className="space-y-5">
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
               <div
@@ -4416,7 +4469,7 @@ export function AdminWorkspace() {
               )}
             </section>
           </div>
-        )}
+          ))}
 
         {/* Messages Tab */}
         {activeTab === "messages" && (

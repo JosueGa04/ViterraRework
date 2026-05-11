@@ -8,6 +8,7 @@ import {
 import type { CatalogActivityAction, CatalogEntityType } from "../../lib/catalogActivityPayload";
 import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
+import { AdminActivitiesSkeleton } from "../../pages/admin/AdminSectionSkeletons";
 
 const PAGE_SIZE = 30;
 
@@ -305,9 +306,7 @@ export function AdminActivitiesModule({ onOpenInModule }: Props) {
           Activa al menos un tipo de actividad arriba para ver resultados.
         </p>
       ) : loading ? (
-        <div className="flex min-h-[200px] items-center justify-center text-slate-600">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" strokeWidth={1.5} />
-        </div>
+        <AdminActivitiesSkeleton />
       ) : rows.length === 0 ? (
         <p className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
           No hay actividades con estos filtros. Ajusta fechas, asesor o tipo — o registra cambios desde Propiedades y

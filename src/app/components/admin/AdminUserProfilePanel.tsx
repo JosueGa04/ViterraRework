@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AdminProfileSkeleton } from "../../pages/admin/AdminSectionSkeletons";
 import { useAuth, type UserPermission } from "../../contexts/AuthContext";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import {
@@ -422,11 +423,7 @@ export function AdminUserProfilePanel() {
   if (!user) return null;
 
   if (loading) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-slate-600">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" strokeWidth={1.5} />
-      </div>
-    );
+    return <AdminProfileSkeleton />;
   }
 
   if (!displayRow) return null;

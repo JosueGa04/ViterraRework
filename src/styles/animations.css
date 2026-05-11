@@ -41,3 +41,43 @@
  * Velo al salir por arriba: antes usaba animation-timeline: view(), que en Safari
  * puede dejar un ::after blanco cubriendo el bloque. Desactivado hasta un fallback fiable.
  */
+
+/** CRM admin: barrido suave en placeholders mientras llegan datos (respeta reduced motion). */
+@keyframes viterra-admin-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .viterra-admin-skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .viterra-admin-skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    animation: viterra-admin-shimmer 1.75s ease-in-out infinite;
+    background: linear-gradient(
+      105deg,
+      transparent 0%,
+      transparent 38%,
+      rgba(255, 255, 255, 0.58) 50%,
+      transparent 62%,
+      transparent 100%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viterra-admin-skeleton-shimmer::after {
+    content: none !important;
+    animation: none !important;
+  }
+}
