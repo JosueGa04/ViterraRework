@@ -6,11 +6,94 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       <title>Viterra</title>
       <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+      <style>
+        html,
+        body {
+          height: 100%;
+          margin: 0;
+        }
+        body {
+          background: #f4f2ef; /* --color-brand-canvas */
+        }
+        #root {
+          height: 100%;
+        }
+        .viterra-boot {
+          min-height: 100vh;
+          min-height: 100dvh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background: #f4f2ef;
+          color: #141c2e;
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+            "Segoe UI Emoji";
+        }
+        .viterra-boot__inner {
+          width: min(520px, 100%);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+        }
+        .viterra-boot__brand {
+          letter-spacing: 0.28em;
+          font-size: 12px;
+          font-weight: 500;
+          text-transform: uppercase;
+        }
+        .viterra-boot__bar {
+          width: 120px;
+          height: 5px;
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.35);
+          overflow: hidden;
+          position: relative;
+        }
+        .viterra-boot__bar > span {
+          position: absolute;
+          inset: 0;
+          width: 45%;
+          border-radius: 999px;
+          background: rgba(154, 123, 79, 0.75); /* --color-brand-gold */
+          transform: translateX(-10%);
+          animation: viterra-boot 900ms ease-in-out infinite;
+        }
+        @keyframes viterra-boot {
+          0% {
+            transform: translateX(-30%);
+            opacity: 0.6;
+          }
+          50% {
+            transform: translateX(95%);
+            opacity: 1;
+          }
+          100% {
+            transform: translateX(210%);
+            opacity: 0.6;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .viterra-boot__bar > span {
+            animation: none;
+            transform: translateX(0);
+            width: 100%;
+            opacity: 0.7;
+          }
+        }
+      </style>
     </head>
 
     <body>
-      <div id="root"></div>
+      <div id="root">
+        <div class="viterra-boot" role="status" aria-live="polite" aria-label="Cargando">
+          <div class="viterra-boot__inner">
+            <div class="viterra-boot__brand">Viterra</div>
+            <div class="viterra-boot__bar" aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+      </div>
       <script type="module" src="/src/main.tsx"></script>
     </body>
   </html>

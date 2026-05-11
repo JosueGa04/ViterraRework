@@ -500,8 +500,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const c = getSupabaseClient();
       if (c) {
-        // Refuerzo con tokko_users + reintentos (JWT suele no traer role → default asesor).
-        const appUser = await loadUserWithTokkoMerge(c, session);
+        /**
+         * Refuerzo con `tokko_users` + reintentos.
+         * OJO: En rutas públicas esto no aporta valor, pero sí puede sumar segundos (queries + backoff).
+         * Solo lo hacemos en `/admin/*` para mejorar la consistencia de carga del sitio.
+         */
+        const appUser = tokkoDbNeededForPath(location.pathname)
+          ? await loadUserWithTokkoMerge(c, session)
+          : sessionToAppUser(session);
         setUser(appUser);
       } else {
         const appUser = sessionToAppUser(session);
@@ -524,7 +530,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [mergeSessionUserIntoDirectory]);
+  }, [location.pathname, mergeSessionUserIntoDirectory]);
 
   useEffect(() => {
     if (!tokkoDbNeededForPath(location.pathname)) return;

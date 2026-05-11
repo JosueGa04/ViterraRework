@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   Building2,
   Briefcase,
@@ -18,9 +19,15 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AdminProfileSkeleton } from "../../pages/admin/AdminSectionSkeletons";
 import { useAuth, type UserPermission } from "../../contexts/AuthContext";
 import { getSupabaseClient } from "../../lib/supabaseClient";
-import { fetchTokkoUserRow, updateTokkoUserProfile, type TokkoUserProfilePatch } from "../../lib/supabaseTokkoUsers";
+import {
+  fetchTokkoUserRow,
+  updateAuthUserProfileMetadata,
+  updateTokkoUserProfile,
+  type TokkoUserProfilePatch,
+} from "../../lib/supabaseTokkoUsers";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
@@ -76,13 +83,25 @@ type ProfileCacheEntry = {
   draft: Draft;
 };
 
+function displayRowFromAuthUser(u: { id: string; role: string; permissions: UserPermission[]; tokkoUserId?: string; updatedAt: string }): Record<string, unknown> {
+  return {
+    id: u.id,
+    role: u.role,
+    permissions: u.permissions,
+    tokko_user_id: u.tokkoUserId ?? "",
+    synced_at: null,
+    updated_at: u.updatedAt,
+    deleted_at: null,
+  };
+}
+
 const profileCache = new Map<string, ProfileCacheEntry>();
 
 const profilePermissionCards: Array<{
   value: UserPermission;
   label: string;
   description: string;
-  Icon: (props: { className?: string; strokeWidth?: number }) => JSX.Element;
+  Icon: LucideIcon;
 }> = [
   {
     value: "manage_leads",
@@ -138,6 +157,13 @@ export function AdminUserProfilePanel() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [initial, setInitial] = useState<Draft>(emptyDraft);
 
+  const hasTokkoDirectoryRow = row !== null;
+  const displayRow = useMemo(() => {
+    if (row) return row;
+    if (!user) return null;
+    return displayRowFromAuthUser(user);
+  }, [row, user]);
+
   const copyField = async (label: string, value: string) => {
     const text = value.trim();
     if (!text) {
@@ -168,7 +194,22 @@ export function AdminUserProfilePanel() {
       return;
     }
     if (!data) {
+      profileCache.delete(user.id);
       setRow(null);
+      const { data: authData } = await client.auth.getUser();
+      const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
+      const d: Draft = {
+        name: strVal(meta.name || meta.full_name) || user.name,
+        email: user.email,
+        phone: strVal(meta.phone) || user.profile.phone,
+        cellphone: strVal(meta.cellphone),
+        position: strVal(meta.position),
+        picture: strVal(meta.picture) || user.profile.picture,
+        branch_tokko_id: "",
+        payloadJson: "{}",
+      };
+      setDraft(d);
+      setInitial(d);
       setLoading(false);
       return;
     }
@@ -250,7 +291,7 @@ export function AdminUserProfilePanel() {
       patch.name = draft.name.trim();
     }
 
-    if (canEditSensitive && draft.email.trim() !== initial.email.trim()) {
+    if (row && canEditSensitive && draft.email.trim() !== initial.email.trim()) {
       patch.email = draft.email.trim() || null;
     }
 
@@ -266,7 +307,7 @@ export function AdminUserProfilePanel() {
       }
     }
 
-    if (canEditSensitive) {
+    if (row && canEditSensitive) {
       if (draft.branch_tokko_id.trim() !== initial.branch_tokko_id.trim()) {
         patch.branch_tokko_id = draft.branch_tokko_id.trim() || null;
       }
@@ -299,6 +340,25 @@ export function AdminUserProfilePanel() {
     }
 
     setSaving(true);
+    if (!row) {
+      const { error } = await updateAuthUserProfileMetadata(client, {
+        name: patch.name,
+        phone: patch.phone,
+        cellphone: patch.cellphone,
+        position: patch.position,
+        picture: patch.picture,
+      });
+      setSaving(false);
+      if (error) {
+        toast.error(error.message || "No se pudo guardar el perfil.");
+        return;
+      }
+      toast.success("Perfil actualizado en tu cuenta (Auth).");
+      await refreshUser();
+      await load();
+      return;
+    }
+
     const res = await updateTokkoUserProfile(client, user.id, patch);
     setSaving(false);
     if (res.error) {
@@ -321,6 +381,33 @@ export function AdminUserProfilePanel() {
     }
 
     setSaving(true);
+    if (!row) {
+      if (key === "email") {
+        setSaving(false);
+        toast.info("El correo solo se gestiona con una fila en directorio CRM o desde Auth.");
+        return;
+      }
+      const metaPatch: Parameters<typeof updateAuthUserProfileMetadata>[1] = {};
+      if (key === "phone") metaPatch.phone = "";
+      else if (key === "cellphone") metaPatch.cellphone = "";
+      else if (key === "position") metaPatch.position = "";
+      else if (key === "picture") metaPatch.picture = "";
+      else {
+        setSaving(false);
+        return;
+      }
+      const { error } = await updateAuthUserProfileMetadata(client, metaPatch);
+      setSaving(false);
+      if (error) {
+        toast.error(error.message || "No se pudo limpiar el campo.");
+        return;
+      }
+      toast.success("Campo eliminado.");
+      await refreshUser();
+      await load();
+      return;
+    }
+
     const res = await updateTokkoUserProfile(client, user.id, { [key]: null } as TokkoUserProfilePatch);
     setSaving(false);
     if (res.error) {
@@ -336,27 +423,26 @@ export function AdminUserProfilePanel() {
   if (!user) return null;
 
   if (loading) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-slate-600">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" strokeWidth={1.5} />
-      </div>
-    );
+    return <AdminProfileSkeleton />;
   }
 
-  if (!row) {
-    return (
-      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 p-6 text-sm text-amber-950" style={{ fontWeight: 500 }}>
-        No hay una fila vinculada en <span className="font-mono">tokko_users</span> para tu usuario. Pide a un administrador que
-        sincronice o cree el registro, o confirma que el <span className="font-mono">id</span> coincida con Supabase Auth.
-      </div>
-    );
-  }
+  if (!displayRow) return null;
 
-  const roRole = strVal(row.role) || "-";
-  const roPerms = Array.isArray(row.permissions) ? (row.permissions as string[]).filter(Boolean) : [];
+  const roRole = roleLabelByValue[strVal(displayRow.role)] || strVal(displayRow.role) || "-";
+  const roPerms = Array.isArray(displayRow.permissions) ? (displayRow.permissions as string[]).filter(Boolean) : [];
 
   return (
     <div className="space-y-3">
+      {!hasTokkoDirectoryRow ? (
+        <div
+          className="rounded-2xl border border-slate-200 bg-slate-50/95 p-4 text-sm text-slate-700 shadow-sm"
+          style={{ fontWeight: 500 }}
+        >
+          No hay fila en <span className="font-mono">tokko_users</span> para este usuario (p. ej. CRM sin Tokko). Puedes ver y editar
+          nombre, contacto y foto desde tu cuenta de Supabase Auth; rol y permisos siguen viniendo de la sesión. Si más adelante
+          sincronizas Tokko, el directorio CRM puede enlazarse por el mismo <span className="font-mono">id</span> que Auth.
+        </div>
+      ) : null}
       <section className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
         <div
           className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
@@ -425,8 +511,8 @@ export function AdminUserProfilePanel() {
                   <Mail className="mb-0.5 mr-1 inline h-3.5 w-3.5" strokeWidth={1.5} />
                   Correo
                 </Label>
-                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!(canEditSensitive && draft.email.trim())}>
-                  {canEditSensitive && draft.email.trim() ? (
+                <div className="flex h-7 w-16 shrink-0 items-center justify-end sm:w-20" aria-hidden={!(canEditSensitive && hasTokkoDirectoryRow && draft.email.trim())}>
+                  {canEditSensitive && hasTokkoDirectoryRow && draft.email.trim() ? (
                     <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={() => void clearField("email")}>
                       Quitar
                     </Button>
@@ -434,8 +520,9 @@ export function AdminUserProfilePanel() {
                 </div>
               </div>
               <input
-                className={cn(inputClass, !canEditSensitive && "bg-slate-50 text-slate-600")}
-                readOnly={!canEditSensitive}
+                className={cn(inputClass, (!canEditSensitive || !hasTokkoDirectoryRow) && "bg-slate-50 text-slate-600")}
+                readOnly={!canEditSensitive || !hasTokkoDirectoryRow}
+                title={!hasTokkoDirectoryRow ? "El correo se gestiona en Auth; para cambiarlo usa el flujo de Supabase o crea la fila en directorio CRM." : undefined}
                 value={draft.email}
                 onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
               />
@@ -555,13 +642,13 @@ export function AdminUserProfilePanel() {
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs text-slate-500"
-                onClick={() => void copyField("ID", strVal(row.id))}
+                onClick={() => void copyField("ID", strVal(displayRow.id))}
               >
                 <Copy className="mr-1 h-3.5 w-3.5" strokeWidth={1.7} />
                 Copiar
               </Button>
             </div>
-            <p className={readClass}>{strVal(row.id) || "-"}</p>
+            <p className={readClass}>{strVal(displayRow.id) || "-"}</p>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -571,14 +658,14 @@ export function AdminUserProfilePanel() {
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs text-slate-500"
-                onClick={() => void copyField("tokko_user_id", strVal(row.tokko_user_id))}
+                onClick={() => void copyField("tokko_user_id", strVal(displayRow.tokko_user_id))}
               >
                 <Copy className="mr-1 h-3.5 w-3.5" strokeWidth={1.7} />
                 Copiar
               </Button>
             </div>
             <div className={cn(readClass, "overflow-x-auto whitespace-nowrap font-mono text-xs")}>
-              {strVal(row.tokko_user_id) || "-"}
+              {strVal(displayRow.tokko_user_id) || "-"}
             </div>
           </div>
         </section>
@@ -587,15 +674,17 @@ export function AdminUserProfilePanel() {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Auditoría</h3>
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-600">synced_at</Label>
-            <p className={readClass}>{formatTs(row.synced_at)}</p>
+            <p className={readClass}>{formatTs(displayRow.synced_at)}</p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-600">updated_at</Label>
-            <p className={readClass}>{formatTs(row.updated_at)}</p>
+            <p className={readClass}>{formatTs(displayRow.updated_at)}</p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-600">deleted_at</Label>
-            <p className={readClass}>{row.deleted_at == null || strVal(row.deleted_at) === "" ? "-" : formatTs(row.deleted_at)}</p>
+            <p className={readClass}>
+              {displayRow.deleted_at == null || strVal(displayRow.deleted_at) === "" ? "-" : formatTs(displayRow.deleted_at)}
+            </p>
           </div>
         </section>
       </div>

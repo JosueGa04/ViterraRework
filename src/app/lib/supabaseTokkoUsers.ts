@@ -16,8 +16,8 @@ export async function fetchTokkoUserRow(client: SupabaseClient, userId: string) 
 }
 
 /** Listado para el módulo Equipo y accesos (respeta RLS del proyecto). */
-export function fetchAllTokkoUsersForDirectory(client: SupabaseClient) {
-  return client.from("tokko_users").select("*").order("email", { ascending: true, nullsFirst: false });
+export async function fetchAllTokkoUsersForDirectory(client: SupabaseClient) {
+  return await client.from("tokko_users").select("*").order("email", { ascending: true, nullsFirst: false });
 }
 
 type TokkoUserAccessPayload = {
@@ -87,4 +87,35 @@ export async function updateTokkoUserProfile(
   if (patch.payload !== undefined) row.payload = patch.payload;
 
   return client.from("tokko_users").update(row).eq("id", userId);
+}
+
+/** Cuando no hay fila en `tokko_users`, el perfil editable vive en `user_metadata` de Supabase Auth. */
+export async function updateAuthUserProfileMetadata(
+  client: SupabaseClient,
+  patch: {
+    name?: string;
+    phone?: string | null;
+    cellphone?: string | null;
+    position?: string | null;
+    picture?: string | null;
+  }
+) {
+  const { data, error: guErr } = await client.auth.getUser();
+  if (guErr) return { data: { user: null }, error: guErr };
+  if (!data.user) {
+    return { data: { user: null }, error: { message: "No autenticado" } };
+  }
+  const meta = { ...(data.user.user_metadata ?? {}) } as Record<string, unknown>;
+  if (patch.name !== undefined) {
+    const n = patch.name.trim();
+    if (!n) return { data: { user: null }, error: { message: "El nombre es obligatorio." } };
+    meta.name = n;
+    meta.full_name = n;
+  }
+  if (patch.phone !== undefined) meta.phone = (patch.phone ?? "").trim();
+  if (patch.cellphone !== undefined) meta.cellphone = (patch.cellphone ?? "").trim();
+  if (patch.position !== undefined) meta.position = (patch.position ?? "").trim();
+  if (patch.picture !== undefined) meta.picture = (patch.picture ?? "").trim();
+
+  return client.auth.updateUser({ data: meta });
 }

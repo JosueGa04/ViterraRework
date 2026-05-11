@@ -47,13 +47,22 @@ function loadMerged(): SiteContent {
   try {
     const raw = localStorage.getItem(SITE_CONTENT_KEY);
     if (!raw) return DEFAULT_SITE_CONTENT;
-    const parsed = JSON.parse(raw) as Partial<SiteContent>;
-    const first = deepMerge(DEFAULT_SITE_CONTENT as Record<string, unknown>, parsed as Record<string, unknown>) as SiteContent;
-    const keys = Object.keys(DEFAULT_SITE_CONTENT) as (keyof SiteContent)[];
-    const repaired = { ...first };
-    for (const key of keys) {
-      repaired[key] = mergeSiteSection(key, first[key]);
-    }
+    const parsedUnknown = JSON.parse(raw) as unknown;
+    const parsedRecord =
+      typeof parsedUnknown === "object" && parsedUnknown !== null
+        ? (parsedUnknown as Record<string, unknown>)
+        : {};
+    const mergedRecord = deepMerge(
+      DEFAULT_SITE_CONTENT as unknown as Record<string, unknown>,
+      parsedRecord
+    );
+    const repaired: SiteContent = {
+      home: mergeSiteSection("home", mergedRecord.home),
+      contact: mergeSiteSection("contact", mergedRecord.contact),
+      services: mergeSiteSection("services", mergedRecord.services),
+      about: mergeSiteSection("about", mergedRecord.about),
+      developments: mergeSiteSection("developments", mergedRecord.developments),
+    };
     return normalizeLegacyContact(repaired);
   } catch {
     return DEFAULT_SITE_CONTENT;

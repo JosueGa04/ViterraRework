@@ -42,7 +42,9 @@ function DraggableLeadCard({
 
   return (
     <div
-      ref={dragRef}
+      ref={(el) => {
+        dragRef(el);
+      }}
       className={`group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm transition-all duration-200 active:cursor-grabbing ${
         isDragging ? "scale-[0.98] opacity-60 shadow-lg" : "hover:border-slate-300/90 hover:shadow-md"
       }`}
@@ -135,7 +137,9 @@ function KanbanColumn({
       }`}
     >
       <div
-        ref={dropRef}
+        ref={(el) => {
+          dropRef(el);
+        }}
         className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white/90 to-slate-50/40 shadow-[inset_0_1px_2px_rgba(20,28,46,0.04)] transition-colors ${
           isOver ? "bg-primary/[0.04] ring-2 ring-primary/30 ring-offset-2 ring-offset-slate-50/50" : ""
         } min-h-[min(70vh,560px)] flex-1`}

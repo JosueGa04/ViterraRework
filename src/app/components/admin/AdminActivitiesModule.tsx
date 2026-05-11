@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Building2, Home, Loader2, UserCircle2 } from "lucide-react";
+import { ArrowRight, Building2, Check, Home, Loader2, UserCircle2 } from "lucide-react";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import {
   fetchCatalogActivities,
@@ -8,6 +8,7 @@ import {
 import type { CatalogActivityAction, CatalogEntityType } from "../../lib/catalogActivityPayload";
 import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
+import { AdminActivitiesSkeleton } from "../../pages/admin/AdminSectionSkeletons";
 
 const PAGE_SIZE = 30;
 
@@ -256,7 +257,7 @@ export function AdminActivitiesModule({ onOpenInModule }: Props) {
           <div className="mt-4 space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Tipo de actividad</p>
             <div
-              className="flex flex-wrap gap-2 sm:gap-2.5"
+              className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1.5 sm:inline-flex sm:flex-nowrap"
               role="group"
               aria-label="Filtrar por tipo de actividad"
             >
@@ -273,14 +274,22 @@ export function AdminActivitiesModule({ onOpenInModule }: Props) {
                   aria-pressed={on}
                   onClick={() => set(!on)}
                   className={cn(
-                    "inline-flex min-h-[2.5rem] items-center rounded-2xl border px-4 py-2 text-left text-sm transition-all duration-200",
+                    "inline-flex min-h-[2.375rem] min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors sm:flex-initial sm:px-3.5",
                     on
-                      ? "border-primary/45 bg-gradient-to-b from-primary/[0.14] via-primary/[0.08] to-white text-brand-navy shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_4px_14px_-4px_rgba(200,16,46,0.22)] ring-2 ring-primary/20"
-                      : "border-slate-200/95 bg-white text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] hover:border-slate-300 hover:bg-slate-50/90 hover:text-slate-800",
+                      ? "bg-white font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200/90"
+                      : "font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900",
                   )}
-                  style={{ fontWeight: on ? 600 : 500 }}
                 >
-                  <span className="max-w-[14rem] leading-snug sm:max-w-none">{label}</span>
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded border text-white transition-colors",
+                      on ? "border-slate-700 bg-slate-800" : "border-slate-300 bg-white",
+                    )}
+                    aria-hidden
+                  >
+                    {on ? <Check className="h-3 w-3 stroke-[3]" /> : null}
+                  </span>
+                  <span className="min-w-0 max-w-[16rem] leading-snug sm:max-w-none">{label}</span>
                 </button>
               ))}
             </div>
@@ -297,9 +306,7 @@ export function AdminActivitiesModule({ onOpenInModule }: Props) {
           Activa al menos un tipo de actividad arriba para ver resultados.
         </p>
       ) : loading ? (
-        <div className="flex min-h-[200px] items-center justify-center text-slate-600">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" strokeWidth={1.5} />
-        </div>
+        <AdminActivitiesSkeleton />
       ) : rows.length === 0 ? (
         <p className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
           No hay actividades con estos filtros. Ajusta fechas, asesor o tipo — o registra cambios desde Propiedades y

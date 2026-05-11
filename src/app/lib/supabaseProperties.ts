@@ -195,8 +195,8 @@ export async function fetchCatalogProperties(client: SupabaseClient) {
  * Solo propiedades destacadas (portada). Pocas filas — no usar el listado completo en el home.
  * Índice recomendado en Postgres: `(featured) WHERE featured = true` o partial index en `featured`.
  */
-export function fetchFeaturedPropertiesForHome(client: SupabaseClient) {
-  return client
+export async function fetchFeaturedPropertiesForHome(client: SupabaseClient) {
+  return await client
     .from("properties")
     .select("*")
     .eq("featured", true)

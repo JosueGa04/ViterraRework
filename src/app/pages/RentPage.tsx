@@ -7,6 +7,11 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import {
+  sortCatalogProperties,
+  CATALOG_PROPERTY_SORT_OPTIONS,
+  type CatalogPropertySortKey,
+} from "../lib/catalogPropertySort";
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
@@ -48,8 +53,13 @@ export function RentPage() {
   );
   const catalogPrices = useMemo(() => rentProperties.map((p) => p.price), [rentProperties]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
-  const [sortBy, setSortBy] = useState("newest");
+  const [sortBy, setSortBy] = useState<CatalogPropertySortKey>("newest");
   const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+
+  const displayedProperties = useMemo(
+    () => sortCatalogProperties(filteredProperties, sortBy),
+    [filteredProperties, sortBy]
+  );
 
   useEffect(() => {
     setFilteredProperties(rentProperties);
@@ -96,30 +106,6 @@ export function RentPage() {
       handleSearch(filters);
     }
   }, [searchParams, handleSearch]);
-
-  const handleSort = (value: string) => {
-    setSortBy(value);
-    let sorted = [...filteredProperties];
-
-    switch (value) {
-      case "price-low":
-        sorted.sort((a, b) => a.price - b.price);
-        break;
-      case "price-high":
-        sorted.sort((a, b) => b.price - a.price);
-        break;
-      case "area-large":
-        sorted.sort((a, b) => b.area - a.area);
-        break;
-      case "area-small":
-        sorted.sort((a, b) => a.area - b.area);
-        break;
-      default:
-        break;
-    }
-
-    setFilteredProperties(sorted);
-  };
 
   const heroContainerVariants = {
     hidden: {},
@@ -222,7 +208,7 @@ export function RentPage() {
                 <p className="font-heading text-sm font-medium text-brand-navy/90 not-italic">
                   {loading
                     ? "Cargando propiedades..."
-                    : `${filteredProperties.length} propiedad${filteredProperties.length !== 1 ? "es" : ""} disponible${filteredProperties.length !== 1 ? "s" : ""}`}
+                    : `${displayedProperties.length} propiedad${displayedProperties.length !== 1 ? "es" : ""} disponible${displayedProperties.length !== 1 ? "s" : ""}`}
                 </p>
               </div>
             )}
@@ -273,14 +259,14 @@ export function RentPage() {
               {viewMode === "grid" && (
                 <select
                   value={sortBy}
-                  onChange={(e) => handleSort(e.target.value)}
+                  onChange={(e) => setSortBy(e.target.value as CatalogPropertySortKey)}
                   className="font-heading rounded-lg border border-brand-navy/15 bg-white px-4 py-2 text-sm font-normal text-brand-navy not-italic transition-shadow duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  <option value="newest">Más recientes</option>
-                  <option value="price-low">Precio: Menor a mayor</option>
-                  <option value="price-high">Precio: Mayor a menor</option>
-                  <option value="area-large">Área: Mayor a menor</option>
-                  <option value="area-small">Área: Menor a mayor</option>
+                  {CATALOG_PROPERTY_SORT_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
@@ -290,7 +276,7 @@ export function RentPage() {
             <PropertyGridSkeleton />
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 items-stretch md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredProperties.map((property, index) => (
+              {displayedProperties.map((property, index) => (
                 <Reveal key={property.id} className="h-full" delay={Math.min(index * 0.055, 0.4)} y={24}>
                   <PropertyCard property={property} disablePreview />
                 </Reveal>
@@ -298,11 +284,11 @@ export function RentPage() {
             </div>
           ) : (
             <Reveal y={20}>
-              <PropertyMap properties={filteredProperties} mapHeightClassName="h-[58vh] min-h-[320px] max-h-[460px]" />
+              <PropertyMap properties={displayedProperties} mapHeightClassName="h-[58vh] min-h-[320px] max-h-[460px]" />
             </Reveal>
           )}
 
-          {!loading && filteredProperties.length === 0 && (
+          {!loading && displayedProperties.length === 0 && (
             <motion.div
               className="py-20 text-center"
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
