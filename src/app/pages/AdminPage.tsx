@@ -247,8 +247,12 @@ export function AdminPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState<string | null>(null);
-  const { properties, reload: reloadProperties, patchProperty: patchCatalogProperty } =
-    useCatalogProperties();
+  const {
+    properties,
+    reload: reloadProperties,
+    patchProperty: patchCatalogProperty,
+    applySavedProperty,
+  } = useCatalogProperties();
   const [newPropertyDraftId, setNewPropertyDraftId] = useState(() => crypto.randomUUID());
   const [developments, setDevelopments] = useState<Development[]>([]);
   const [developmentsLoading, setDevelopmentsLoading] = useState(true);
@@ -1461,7 +1465,7 @@ export function AdminPage() {
       toast.success(next ? "Propiedad destacada en la portada." : "Propiedad ya no aparece destacada en la portada.");
       void reloadProperties();
     },
-    [properties, reloadProperties, patchCatalogProperty]
+    [properties, reloadProperties, patchCatalogProperty, applySavedProperty]
   );
 
   const openLeadDetail = useCallback(

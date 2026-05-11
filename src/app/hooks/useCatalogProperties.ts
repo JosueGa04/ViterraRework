@@ -110,5 +110,5 @@ export function useCatalogProperties() {
     void reload();
   }, [reload]);
 
-  return { properties, loading, error, reload, patchProperty };
+  return { properties, loading, error, reload, patchProperty, applySavedProperty };
 }
