@@ -11,9 +11,18 @@ const SYNC_SESSION_TIMEOUT_MS = 8_000;
 /** Por intento; si la red cuelga, no dejar "Cargando…" indefinidamente. */
 const FETCH_PROPERTIES_TIMEOUT_MS = 25_000;
 
-export function useCatalogProperties() {
+export type UseCatalogPropertiesOptions = {
+  /** Si es false, no se dispara la carga automática (p. ej. pestañas admin que no usan el catálogo). */
+  enabled?: boolean;
+  /** Listado admin: consulta sin columna `payload` (menos transferencia). */
+  omitPayload?: boolean;
+};
+
+export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
+  const enabled = opts?.enabled !== false;
+  const omitPayload = Boolean(opts?.omitPayload);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => enabled);
   const [error, setError] = useState<string | null>(null);
   const fetchGenerationRef = useRef(0);
 
@@ -57,7 +66,7 @@ export function useCatalogProperties() {
       for (let attempt = 0; attempt < CATALOG_FETCH_ATTEMPTS; attempt++) {
         try {
           const { data, error: qErr } = await withTimeout(
-            fetchCatalogProperties(client),
+            fetchCatalogProperties(client, omitPayload ? { omitPayload: true } : undefined),
             FETCH_PROPERTIES_TIMEOUT_MS,
             "Catálogo"
           );
@@ -99,7 +108,7 @@ export function useCatalogProperties() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [omitPayload]);
 
   /** Actualiza una fila en memoria (p. ej. destacado) sin esperar un refetch completo. */
   const patchProperty = useCallback((id: string, patch: Partial<Property>) => {
@@ -107,8 +116,12 @@ export function useCatalogProperties() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     void reload();
-  }, [reload]);
+  }, [enabled, reload]);
 
   return { properties, loading, error, reload, patchProperty, applySavedProperty };
 }

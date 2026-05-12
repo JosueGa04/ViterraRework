@@ -212,12 +212,9 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
     >
       <div className={cn(cardClass, "px-4 py-3 sm:px-5 sm:py-4")}>
         <div className="mb-2">
-          <h3 className={cn(titleClass, "text-[15px] sm:text-base")}>
-            <span className="font-semibold">Precio</span>
-            <span className={cn("font-normal", isAmbient ? "text-white/80" : "text-slate-500")}> · rango</span>
-            <span className={cn("ml-2 text-[10px] font-medium uppercase tracking-wider", isAmbient ? "text-white/45" : "text-slate-400")}>
-              MXN
-            </span>
+          <h3 className={cn(titleClass, "text-[15px] sm:text-base font-semibold")}>
+            Rango de precios{" "}
+            <span className="uppercase tracking-wider">| MXN</span>
           </h3>
         </div>
 

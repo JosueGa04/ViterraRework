@@ -253,6 +253,33 @@ export function AdminWorkspace() {
     [navigate]
   );
 
+  /** Evita pedir catálogo, leads o desarrollos enteros en pestañas que no los usan (mejora mucho el tiempo hasta interactuar). */
+  const adminRemoteDataPlan = useMemo(() => {
+    const needsLeads =
+      activeTab === "dashboard" ||
+      activeTab === "kpis" ||
+      activeTab === "leads" ||
+      activeTab === "clients" ||
+      (activeTab === "company" && companySubtab !== "site");
+
+    const needsDevelopments =
+      activeTab === "developments" ||
+      activeTab === "leads" ||
+      activeTab === "clients" ||
+      (activeTab === "company" && (companySubtab === "users" || companySubtab === "settings"));
+
+    const needsCatalog =
+      activeTab === "dashboard" ||
+      activeTab === "kpis" ||
+      activeTab === "leads" ||
+      activeTab === "clients" ||
+      activeTab === "properties" ||
+      activeTab === "developments" ||
+      (activeTab === "company" && (companySubtab === "users" || companySubtab === "settings"));
+
+    return { needsLeads, needsDevelopments, needsCatalog };
+  }, [activeTab, companySubtab]);
+
   useEffect(() => {
     if (!location.pathname.startsWith("/admin")) return;
     const parsed = parseAdminPath(location.pathname);
@@ -288,7 +315,7 @@ export function AdminWorkspace() {
     reload: reloadProperties,
     patchProperty: patchCatalogProperty,
     applySavedProperty,
-  } = useCatalogProperties();
+  } = useCatalogProperties({ enabled: adminRemoteDataPlan.needsCatalog, omitPayload: true });
   const [newPropertyDraftId, setNewPropertyDraftId] = useState(() => crypto.randomUUID());
   const [developments, setDevelopments] = useState<Development[]>([]);
   const [developmentsLoading, setDevelopmentsLoading] = useState(true);
@@ -413,7 +440,7 @@ export function AdminWorkspace() {
     }
   }, [activeTab]);
 
-  // Verificar autenticación y cargar datos
+  // Verificar autenticación y cargar datos (grupos + pipeline siempre; leads / desarrollos / catálogo según pestaña).
   useEffect(() => {
     if (!authReady) return;
     if (!isAuthenticated) {
@@ -425,11 +452,23 @@ export function AdminWorkspace() {
       return;
     }
 
+    const { needsLeads, needsDevelopments } = adminRemoteDataPlan;
+
+    if (needsLeads) {
+      setLeadsLoading(true);
+      setLeadsError(null);
+    } else {
+      setLeadsLoading(false);
+      setLeadsError(null);
+    }
+    if (needsDevelopments) {
+      setDevelopmentsLoading(true);
+    } else {
+      setDevelopmentsLoading(false);
+    }
+
     let cancelled = false;
     (async () => {
-      setLeadsLoading(true);
-      setDevelopmentsLoading(true);
-      setLeadsError(null);
       const client = getSupabaseClient();
       if (!client) {
         setLeadsError(
@@ -439,6 +478,7 @@ export function AdminWorkspace() {
         setDevelopments([]);
         setLeadsLoading(false);
         setDevelopmentsLoading(false);
+        setUserGroups([]);
         setPipelineByGroup(loadPipelineByGroup());
         setPipelineSourcesHydrated(true);
         return;
@@ -453,45 +493,56 @@ export function AdminWorkspace() {
         setDevelopments([]);
         setLeadsLoading(false);
         setDevelopmentsLoading(false);
+        setUserGroups([]);
         setPipelineByGroup(loadPipelineByGroup());
         setPipelineSourcesHydrated(true);
         return;
       }
 
-      const leadsP = fetchActiveLeads(client)
-        .then((leadsRes) => {
-          if (cancelled) return;
-          if (leadsRes.error) {
-            setLeadsError(leadsRes.error.message);
-            setLeads([]);
-          } else {
-            setLeads(leadsRes.data);
-            if (import.meta.env.DEV && leadsRes.data.length === 0) {
-              void logTableCountHints(client, "leads");
-            }
-          }
-          setLeadsLoading(false);
-        })
-        .catch((e: unknown) => {
-          if (cancelled) return;
-          setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
-          setLeads([]);
-          setLeadsLoading(false);
-        });
+      const leadsP = needsLeads
+        ? fetchActiveLeads(client)
+            .then((leadsRes) => {
+              if (cancelled) return;
+              if (leadsRes.error) {
+                setLeadsError(leadsRes.error.message);
+                setLeads([]);
+              } else {
+                setLeads(leadsRes.data);
+                if (import.meta.env.DEV && leadsRes.data.length === 0) {
+                  void logTableCountHints(client, "leads");
+                }
+              }
+              setLeadsLoading(false);
+            })
+            .catch((e: unknown) => {
+              if (cancelled) return;
+              setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
+              setLeads([]);
+              setLeadsLoading(false);
+            })
+        : Promise.resolve().then(() => {
+            if (cancelled) return;
+            setLeadsLoading(false);
+          });
 
-      const devP = fetchDevelopmentsWithUnits(client, { publicOnly: false }).then((devRes) => {
-        if (cancelled) return;
-        if (devRes.error) {
-          toast.error(devRes.error.message);
-          setDevelopments([]);
-        } else {
-          setDevelopments(devRes.data ?? []);
-          if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
-            void logTableCountHints(client, "developments");
-          }
-        }
-        setDevelopmentsLoading(false);
-      });
+      const devP = needsDevelopments
+        ? fetchDevelopmentsWithUnits(client, { publicOnly: false }).then((devRes) => {
+            if (cancelled) return;
+            if (devRes.error) {
+              toast.error(devRes.error.message);
+              setDevelopments([]);
+            } else {
+              setDevelopments(devRes.data ?? []);
+              if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
+                void logTableCountHints(client, "developments");
+              }
+            }
+            setDevelopmentsLoading(false);
+          })
+        : Promise.resolve().then(() => {
+            if (cancelled) return;
+            setDevelopmentsLoading(false);
+          });
 
       const bootstrapP = Promise.all([fetchActiveUserGroups(client), fetchSalesPipelineConfigs(client)]).then(
         ([groupsRes, pipeRes]) => {
@@ -551,7 +602,15 @@ export function AdminWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, isAuthenticated, authReady, user?.mustChangePassword, user?.id, user?.role]);
+  }, [
+    navigate,
+    isAuthenticated,
+    authReady,
+    user?.mustChangePassword,
+    user?.id,
+    user?.role,
+    adminRemoteDataPlan,
+  ]);
 
   useEffect(() => {
     if (!pipelineSourcesHydrated) return;

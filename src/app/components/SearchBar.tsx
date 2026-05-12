@@ -1,5 +1,5 @@
-import { Search } from "lucide-react";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { ChevronDown, Search } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useId } from "react";
 import { Link, useSearchParams } from "react-router";
 import { cn } from "./ui/utils";
 import {
@@ -28,6 +28,10 @@ export interface SearchFilters {
   status: string;
   minPrice: string;
   maxPrice: string;
+  minBedrooms: string;
+  minBathrooms: string;
+  minArea: string;
+  maxArea: string;
 }
 
 /** Altura unificada para inputs, selects y botón principal (evita desalineación). */
@@ -49,13 +53,20 @@ export function SearchBar({
   catalogPriceSlices,
 }: SearchBarProps) {
   const [searchParams] = useSearchParams();
+  const advancedToggleId = useId();
+  const advancedRegionId = `${advancedToggleId}-region`;
   const [priceOp, setPriceOp] = useState<"venta" | "alquiler">("venta");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({
     query: "",
     type: "",
     status: "",
     minPrice: "",
     maxPrice: "",
+    minBedrooms: "",
+    minBathrooms: "",
+    minArea: "",
+    maxArea: "",
   });
 
   const isPremium = variant === "premium";
@@ -76,23 +87,43 @@ export function SearchBar({
     return { effectiveCatalogPrices: flat, showPriceOperationToggle: false };
   }, [catalogPriceSlices, catalogPrices, priceOp]);
 
+  /** Listados solo venta (/venta) o solo alquiler (/renta): la operación no se elige aquí. */
+  const isCatalogOperationLocked = defaultStatus === "venta" || defaultStatus === "alquiler";
+  const showStatusFilter = !showPriceOperationToggle && !isCatalogOperationLocked;
+
   const showCatalogPriceRange = effectiveCatalogPrices.length > 0;
   const catalogRangeRef = useRef<SearchBarCatalogPriceRangeHandle>(null);
 
   useEffect(() => {
     const fromUrl = searchParams.get("status") || "";
+    const status = isCatalogOperationLocked
+      ? defaultStatus
+      : fromUrl || defaultStatus || "";
     const urlFilters: SearchFilters = {
       query: searchParams.get("query") || "",
       type: searchParams.get("type") || "",
-      status: fromUrl || defaultStatus || "",
+      status,
       minPrice: searchParams.get("minPrice") || "",
       maxPrice: searchParams.get("maxPrice") || "",
+      minBedrooms: searchParams.get("minBedrooms") || "",
+      minBathrooms: searchParams.get("minBathrooms") || "",
+      minArea: searchParams.get("minArea") || "",
+      maxArea: searchParams.get("maxArea") || "",
     };
 
     setFilters(urlFilters);
     if (urlFilters.status === "alquiler") setPriceOp("alquiler");
     else if (urlFilters.status === "venta") setPriceOp("venta");
-  }, [searchParams, defaultStatus]);
+  }, [searchParams, defaultStatus, isCatalogOperationLocked]);
+
+  useEffect(() => {
+    const hasAdv =
+      searchParams.get("minBedrooms") ||
+      searchParams.get("minBathrooms") ||
+      searchParams.get("minArea") ||
+      searchParams.get("maxArea");
+    if (hasAdv) setAdvancedOpen(true);
+  }, [searchParams]);
 
   const setPriceOperation = (op: "venta" | "alquiler") => {
     setPriceOp(op);
@@ -100,11 +131,14 @@ export function SearchBar({
   };
 
   const mapZoneHref = useMemo(() => {
-    const s =
-      showPriceOperationToggle ? priceOp : filters.status || defaultStatus;
+    const s = showPriceOperationToggle
+      ? priceOp
+      : isCatalogOperationLocked
+        ? defaultStatus
+        : filters.status || defaultStatus;
     const q = s ? `?status=${encodeURIComponent(s)}` : "";
     return `/propiedades/mapa${q}`;
-  }, [filters.status, defaultStatus, showPriceOperationToggle, priceOp]);
+  }, [filters.status, defaultStatus, showPriceOperationToggle, priceOp, isCatalogOperationLocked]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,13 +147,14 @@ export function SearchBar({
       ...filters,
       ...pricePatch,
       ...(showPriceOperationToggle ? { status: priceOp } : {}),
+      ...(isCatalogOperationLocked ? { status: defaultStatus } : {}),
     };
     setFilters(next);
     onSearch?.(next);
   };
 
   const labelClass = cn(
-    "block mb-2 uppercase tracking-[0.16em]",
+    "block mb-2 text-left uppercase tracking-[0.16em]",
     isAmbient && "mb-3 text-[10px] font-medium text-white/75",
     isPremium && !isAmbient && "text-[10px] text-brand-navy/60 font-medium",
     !isPremium && !isAmbient && "text-sm font-medium text-slate-700"
@@ -178,7 +213,9 @@ export function SearchBar({
           "grid grid-cols-1 gap-4 sm:gap-4",
           showPriceOperationToggle
             ? "lg:grid-cols-[minmax(10.25rem,auto)_minmax(0,1.5fr)_minmax(0,0.9fr)_minmax(11rem,auto)] lg:items-end lg:gap-x-5"
-            : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5",
+            : showStatusFilter
+              ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
+              : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5",
           isAmbient && "gap-y-5 lg:gap-y-0"
         )}
       >
@@ -235,7 +272,7 @@ export function SearchBar({
           <label className={labelClass}>Ubicación o palabra clave</label>
           <input
             type="text"
-            placeholder="Ej: Centro, apartamento…"
+            placeholder="Ej: Zapopan, San Javier…"
             value={filters.query}
             onChange={(e) => setFilters({ ...filters, query: e.target.value })}
             className={fieldClass}
@@ -262,7 +299,7 @@ export function SearchBar({
           </select>
         </div>
 
-        {!showPriceOperationToggle ? (
+        {showStatusFilter ? (
           <div className="min-w-0">
             <label className={labelClass}>Estado</label>
             <select
@@ -290,6 +327,111 @@ export function SearchBar({
             <span>Buscar</span>
           </button>
         </div>
+      </div>
+
+      <div className="mt-5">
+        <div className="flex justify-center sm:justify-start">
+          <button
+            type="button"
+            id={advancedToggleId}
+            aria-expanded={advancedOpen}
+            aria-controls={advancedRegionId}
+            onClick={() => setAdvancedOpen((o) => !o)}
+            className={cn(
+              "inline-flex items-center gap-1.5 border-b border-dotted pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors",
+              isAmbient
+                ? "border-white/35 text-white/75 hover:border-white/60 hover:text-white"
+                : "border-slate-400 text-slate-600 hover:border-primary hover:text-primary"
+            )}
+          >
+            {advancedOpen ? "Ocultar filtros avanzados" : "Filtros avanzados"}
+            <ChevronDown
+              className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", advancedOpen && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+        </div>
+        {advancedOpen ? (
+          <div
+            id={advancedRegionId}
+            role="region"
+            aria-labelledby={advancedToggleId}
+            className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-5"
+          >
+            <div className="min-w-0">
+              <label className={labelClass} htmlFor={`${advancedToggleId}-beds`}>
+                Recámaras (mín.)
+              </label>
+              <select
+                id={`${advancedToggleId}-beds`}
+                value={filters.minBedrooms}
+                onChange={(e) => setFilters({ ...filters, minBedrooms: e.target.value })}
+                className={cn(
+                  fieldClass,
+                  "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
+                )}
+                style={selectChevronStyle}
+              >
+                <option value="">Cualquiera</option>
+                <option value="1">1 o más</option>
+                <option value="2">2 o más</option>
+                <option value="3">3 o más</option>
+                <option value="4">4 o más</option>
+                <option value="5">5 o más</option>
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className={labelClass} htmlFor={`${advancedToggleId}-baths`}>
+                Baños (mín.)
+              </label>
+              <select
+                id={`${advancedToggleId}-baths`}
+                value={filters.minBathrooms}
+                onChange={(e) => setFilters({ ...filters, minBathrooms: e.target.value })}
+                className={cn(
+                  fieldClass,
+                  "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
+                )}
+                style={selectChevronStyle}
+              >
+                <option value="">Cualquiera</option>
+                <option value="1">1 o más</option>
+                <option value="2">2 o más</option>
+                <option value="3">3 o más</option>
+                <option value="4">4 o más</option>
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className={labelClass} htmlFor={`${advancedToggleId}-amin`}>
+                Superficie (m²)
+              </label>
+              <div className="flex min-w-0 items-stretch gap-2 sm:gap-3">
+                <input
+                  id={`${advancedToggleId}-amin`}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  aria-label="Superficie mínima en m²"
+                  placeholder={isAmbient ? "Mín." : "Mín. m²"}
+                  value={filters.minArea}
+                  onChange={(e) => setFilters({ ...filters, minArea: e.target.value })}
+                  className={cn(fieldClass, "min-w-0 flex-1 tabular-nums")}
+                />
+                <input
+                  id={`${advancedToggleId}-amax`}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  aria-label="Superficie máxima en m²"
+                  placeholder={isAmbient ? "Máx." : "Máx. m²"}
+                  value={filters.maxArea}
+                  onChange={(e) => setFilters({ ...filters, maxArea: e.target.value })}
+                  className={cn(fieldClass, "min-w-0 flex-1 tabular-nums")}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {showMapZoneLink && (

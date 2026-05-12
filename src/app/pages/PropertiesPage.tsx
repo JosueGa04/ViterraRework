@@ -11,6 +11,7 @@ import {
   CATALOG_PROPERTY_SORT_OPTIONS,
   type CatalogPropertySortKey,
 } from "../lib/catalogPropertySort";
+import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilters";
 import { SlidersHorizontal, Building2, Map, LayoutGrid, MapPinned } from "lucide-react";
 
 export function PropertiesPage() {
@@ -68,6 +69,8 @@ export function PropertiesPage() {
       filtered = filtered.filter((property) => property.price <= Number(filters.maxPrice));
     }
 
+    filtered = applyAdvancedPropertyFilters(filtered, filters);
+
     setFilteredProperties(filtered);
   }, [properties]);
 
@@ -79,10 +82,22 @@ export function PropertiesPage() {
       status: searchParams.get("status") || "",
       minPrice: searchParams.get("minPrice") || "",
       maxPrice: searchParams.get("maxPrice") || "",
+      minBedrooms: searchParams.get("minBedrooms") || "",
+      minBathrooms: searchParams.get("minBathrooms") || "",
+      minArea: searchParams.get("minArea") || "",
+      maxArea: searchParams.get("maxArea") || "",
     };
 
     const hasFilters =
-      filters.query || filters.type || filters.status || filters.minPrice || filters.maxPrice;
+      filters.query ||
+      filters.type ||
+      filters.status ||
+      filters.minPrice ||
+      filters.maxPrice ||
+      filters.minBedrooms ||
+      filters.minBathrooms ||
+      filters.minArea ||
+      filters.maxArea;
 
     if (hasFilters) {
       handleSearch(filters);

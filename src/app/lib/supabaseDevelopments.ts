@@ -87,21 +87,37 @@ function groupUnitsByDevelopment(rows: DevelopmentUnitRow[] | null): Map<string,
   return m;
 }
 
+/** PostgREST: tamaño prudente de lista `in` por petición. */
+const LINKED_COUNT_TOKKO_BATCH = 120;
+
 /**
- * Cuenta propiedades por `development_tokko_id` (keys en minúsculas) para cruzar con `developments.tokko_id`.
+ * Cuenta propiedades por `development_tokko_id` solo para los `tokko_id` dados
+ * (evita traer toda la tabla `properties`, que antes hacía muy lento el admin y el catálogo paginado).
  */
-async function fetchLinkedPropertyCountByTokkoLower(
-  client: SupabaseClient
+async function fetchLinkedPropertyCountsForTokkoIds(
+  client: SupabaseClient,
+  tokkoIdsRaw: string[]
 ): Promise<Map<string, number>> {
-  const res = await client.from("properties").select("development_tokko_id");
   const m = new Map<string, number>();
-  if (res.error) return m;
-  for (const raw of res.data ?? []) {
-    const row = raw as { development_tokko_id?: string | null };
-    const tid = typeof row.development_tokko_id === "string" ? row.development_tokko_id.trim() : "";
-    if (!tid) continue;
-    const key = tid.toLowerCase();
-    m.set(key, (m.get(key) ?? 0) + 1);
+  const verbatim = [...new Set(tokkoIdsRaw.map((t) => String(t).trim()).filter(Boolean))];
+  if (verbatim.length === 0) return m;
+
+  for (let i = 0; i < verbatim.length; i += LINKED_COUNT_TOKKO_BATCH) {
+    const batch = verbatim.slice(i, i + LINKED_COUNT_TOKKO_BATCH);
+    const res = await client.from("properties").select("development_tokko_id").in("development_tokko_id", batch);
+    if (res.error) {
+      if (import.meta.env.DEV) {
+        console.warn("[Viterra] fetchLinkedPropertyCountsForTokkoIds:", res.error.message);
+      }
+      continue;
+    }
+    for (const raw of res.data ?? []) {
+      const row = raw as { development_tokko_id?: string | null };
+      const tid = typeof row.development_tokko_id === "string" ? row.development_tokko_id.trim() : "";
+      if (!tid) continue;
+      const key = tid.toLowerCase();
+      m.set(key, (m.get(key) ?? 0) + 1);
+    }
   }
   return m;
 }
@@ -176,9 +192,12 @@ export async function fetchDevelopmentsWithUnits(
   if (rows.length === 0) return { data: [] as Development[], error: null };
 
   const ids = rows.map((r) => r.id);
+  const pageTokkos = rows
+    .map((r) => (typeof r.tokko_id === "string" ? r.tokko_id.trim() : ""))
+    .filter(Boolean);
   const [unitRes, linkedByTokko] = await Promise.all([
     client.from("development_units").select("*").in("development_id", ids),
-    fetchLinkedPropertyCountByTokkoLower(client),
+    fetchLinkedPropertyCountsForTokkoIds(client, pageTokkos),
   ]);
   if (unitRes.error) return { data: [] as Development[], error: unitRes.error };
   const byDev = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]);
@@ -201,9 +220,6 @@ export type FetchDevelopmentsPageOpts = {
  * Orden: destacados primero, luego nombre (coincide con las secciones de la página).
  */
 export async function fetchDevelopmentsPage(client: SupabaseClient, opts: FetchDevelopmentsPageOpts) {
-  const linkedByTokko =
-    opts.linkedByTokko ?? (await fetchLinkedPropertyCountByTokkoLower(client));
-
   let q = client.from("developments").select("*");
   if (opts.publicOnly) {
     q = q.eq("display_on_web", true);
@@ -213,14 +229,33 @@ export async function fetchDevelopmentsPage(client: SupabaseClient, opts: FetchD
     .order("name")
     .range(opts.offset, opts.offset + opts.limit - 1);
 
+  const mergeLinked = (pageMap: Map<string, number>) => {
+    const out = new Map<string, number>();
+    if (opts.linkedByTokko) {
+      for (const [k, v] of opts.linkedByTokko) out.set(k, v);
+    }
+    for (const [k, v] of pageMap) out.set(k, v);
+    return out;
+  };
+
   if (devRes.error) {
-    return { data: [] as Development[], error: devRes.error, linkedByTokko };
+    return {
+      data: [] as Development[],
+      error: devRes.error,
+      linkedByTokko: opts.linkedByTokko ?? new Map<string, number>(),
+    };
   }
 
   const rows = (devRes.data ?? []) as DevelopmentRow[];
   if (rows.length === 0) {
-    return { data: [] as Development[], error: null, linkedByTokko };
+    return { data: [] as Development[], error: null, linkedByTokko: opts.linkedByTokko ?? new Map<string, number>() };
   }
+
+  const pageTokkos = rows
+    .map((r) => (typeof r.tokko_id === "string" ? r.tokko_id.trim() : ""))
+    .filter(Boolean);
+  const linkedForPage = await fetchLinkedPropertyCountsForTokkoIds(client, pageTokkos);
+  const linkedByTokko = mergeLinked(linkedForPage);
 
   const ids = rows.map((r) => r.id);
   const unitRes = await client.from("development_units").select("*").in("development_id", ids);
@@ -271,9 +306,10 @@ export async function fetchDevelopmentById(
   if (devRes.error) return { data: null, error: devRes.error };
   const row = devRes.data as DevelopmentRow | null;
   if (!row) return { data: null, error: null };
+  const tokko = typeof row.tokko_id === "string" ? row.tokko_id.trim() : "";
   const [unitRes, linkedByTokko] = await Promise.all([
     client.from("development_units").select("*").eq("development_id", id),
-    fetchLinkedPropertyCountByTokkoLower(client),
+    fetchLinkedPropertyCountsForTokkoIds(client, tokko ? [tokko] : []),
   ]);
   if (unitRes.error) return { data: null, error: unitRes.error };
   const units = groupUnitsByDevelopment((unitRes.data ?? []) as DevelopmentUnitRow[]).get(id) ?? [];

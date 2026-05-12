@@ -83,7 +83,6 @@ export type PropertyRow = {
   lng: number | null;
   images: string[];
   deleted_at: string | null;
-  payload: Record<string, unknown>;
   synced_at?: string | null;
   updated_at?: string | null;
   featured: boolean;
@@ -103,6 +102,8 @@ export type PropertyRow = {
   age?: number | null;
   parking_spaces?: number | null;
   development_tokko_id?: string | null;
+  /** Ausente en listados admin sin columna `payload` (JSON grande). */
+  payload?: Record<string, unknown>;
 };
 
 /**
@@ -185,10 +186,22 @@ export function idFromPropertyWriteResult(data: unknown): string | undefined {
   return undefined;
 }
 
-export async function fetchCatalogProperties(client: SupabaseClient) {
+/** Columnas para listados admin: excluye `payload` (JSON Tokko grande) que no usa `rowToProperty`. */
+const ADMIN_CATALOG_PROPERTY_COLUMNS =
+  "id,tokko_id,title,price,location,bedrooms,bathrooms,area,image,type,status,lat,lng,images,deleted_at,synced_at,updated_at,featured,colony,amenities,services,additional_features,publication_title,full_address,description,rich_description,reference_code,public_url,surface_land,expenses,age,parking_spaces,development_tokko_id";
+
+export type FetchCatalogPropertiesOpts = {
+  /** Admin inventario: menos datos por fila (sin columna `payload`). */
+  omitPayload?: boolean;
+};
+
+export async function fetchCatalogProperties(
+  client: SupabaseClient,
+  opts?: FetchCatalogPropertiesOpts
+) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
-  /** `select('*')` incluye `bedrooms` y `bathrooms`; `rowToProperty` las mapea al modelo. */
-  return client.from("properties").select("*").order("updated_at", { ascending: false });
+  const selection = opts?.omitPayload ? ADMIN_CATALOG_PROPERTY_COLUMNS : "*";
+  return client.from("properties").select(selection).order("updated_at", { ascending: false });
 }
 
 /**

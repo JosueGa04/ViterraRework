@@ -88,6 +88,10 @@ export function HomePage() {
     if (filters.status) params.append("status", filters.status);
     if (filters.minPrice) params.append("minPrice", filters.minPrice);
     if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
+    if (filters.minBedrooms) params.append("minBedrooms", filters.minBedrooms);
+    if (filters.minBathrooms) params.append("minBathrooms", filters.minBathrooms);
+    if (filters.minArea) params.append("minArea", filters.minArea);
+    if (filters.maxArea) params.append("maxArea", filters.maxArea);
     const status = filters.status === "venta" ? "venta" : "renta";
     window.location.href = `/${status}?${params.toString()}`;
   };
