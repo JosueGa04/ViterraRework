@@ -7,6 +7,9 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
 import {
   sortCatalogProperties,
   CATALOG_PROPERTY_SORT_OPTIONS,
@@ -16,13 +19,15 @@ import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilter
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
+import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { cn } from "../components/ui/utils";
 import {
   viterraHeroSectionClass,
   viterraHeroCenteredStackClass,
   viterraHeroCenteredInnerClass,
   viterraHeroMainClass,
-  viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 
@@ -46,6 +51,9 @@ function PropertyGridSkeleton() {
 
 export function RentPage() {
   const reduceMotion = useReducedMotion();
+  const pl = usePreviewLayout();
+  const { content } = useSiteContent();
+  const hero = mergeSiteSection("rent", content.rent);
   const [searchParams] = useSearchParams();
   const { properties, loading } = useCatalogProperties();
   const rentProperties = useMemo(
@@ -145,28 +153,21 @@ export function RentPage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
+      <PreviewSectionChrome blockId="rent-hero" label="Cabecera">
       <section className={viterraHeroSectionClass}>
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <motion.img
-            src="https://media.admagazine.com/photos/686d8644af6250fff2506526/16:9/w_2560%2Cc_limit/departamento-tipo-loft-forma-optima-aprovechar-espacios-pequenos.jpg"
-            alt="Propiedades en Renta"
-            className="h-full w-full object-cover"
-            initial={false}
-            animate={
-              reduceMotion
-                ? { scale: 1.05 }
-                : { scale: [1.05, 1.07, 1.05] }
-            }
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
-            }
-          />
-          <div
-            className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
-            aria-hidden
-          />
+          <PreviewFieldPulse blockId="rent-hero" fieldKey="rent-hero-bg" layout="cover" className="h-full w-full">
+            <HeroBackdropMedia
+              src={hero.heroImage ?? ""}
+              fallbackSrc="https://media.admagazine.com/photos/686d8644af6250fff2506526/16:9/w_2560%2Cc_limit/departamento-tipo-loft-forma-optima-aprovechar-espacios-pequenos.jpg"
+              reduceMotion={!!reduceMotion}
+            />
+            <div
+              className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
+              aria-hidden
+            />
+          </PreviewFieldPulse>
         </div>
 
         <div className={viterraHeroCenteredStackClass}>
@@ -177,19 +178,30 @@ export function RentPage() {
             animate="visible"
           >
             <ViterraHeroTopClusterAnimated
-              kicker="Viterra · Listados"
+              kicker={
+                <PreviewFieldPulse blockId="rent-hero" fieldKey="rent-hero-kicker" className="inline-block">
+                  {hero.heroKicker}
+                </PreviewFieldPulse>
+              }
               itemVariants={heroItemVariants}
               reduceMotion={!!reduceMotion}
             />
             <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
-              <h1 className={viterraHeroTitleClass}>Propiedades en Renta</h1>
+              <h1 className={pl.heroTitleClass()}>
+                <PreviewFieldPulse blockId="rent-hero" fieldKey="rent-hero-title" className="block">
+                  {hero.heroTitle}
+                </PreviewFieldPulse>
+              </h1>
             </motion.div>
             <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
-              Encuentra tu hogar ideal en las mejores ubicaciones de Guadalajara
+              <PreviewFieldPulse blockId="rent-hero" fieldKey="rent-hero-subtitle" className="block w-full">
+                {hero.heroSubtitle}
+              </PreviewFieldPulse>
             </motion.p>
           </motion.div>
         </div>
       </section>
+      </PreviewSectionChrome>
 
       <section className="border-b border-brand-navy/10 bg-brand-canvas py-12">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -317,6 +329,8 @@ export function RentPage() {
           )}
         </div>
       </section>
+
+      </main>
 
       <Footer />
     </div>

@@ -1,22 +1,128 @@
 /**
  * Contenido editable del sitio (excepto listados Renta/Compra que siguen en sus rutas).
- * Persistencia: localStorage bajo SITE_CONTENT_KEY.
+ * Persistencia: tabla `site_content_sections` en Supabase (JSON por página); imágenes en Storage bucket `site`.
  */
 
-export const SITE_CONTENT_KEY = "viterra_site_content";
+import { SOCIAL_LINKS, type HeaderSocialIconId } from "../app/config/socialLinks";
 
-export type ServiceCardLink = "/renta" | "/venta" | "/desarrollos" | "/contacto" | "";
+/** Enlaces de redes en la barra superior (lista ordenada; URL vacía = no se muestra). */
+export type HeaderNavSocialLink = {
+  id: HeaderSocialIconId;
+  label: string;
+  href: string;
+};
+
+/** Claves de icono Lucide usadas en el grafo de servicios y en el editor. */
+export const SERVICE_ICON_KEYS = [
+  "home",
+  "building2",
+  "settings2",
+  "fileCheck2",
+  "scale",
+  "barChart3",
+  "phone",
+  "mail",
+  "messageCircle",
+  "landmark",
+  "key",
+  "handshake",
+  "briefcase",
+  "treePine",
+  "hardHat",
+  "hammer",
+  "search",
+  "sparkles",
+  "shieldCheck",
+  "users",
+  "clipboardList",
+] as const;
+export type ServiceIconKey = (typeof SERVICE_ICON_KEYS)[number];
+
+/** Posición en % (opcional, legado). La web muestra los bloques en columna; el campo puede seguir en JSON antiguo. */
+export type ServiceDetailCanvasLayout = { x: number; y: number; w: number; h: number };
+
+type DL = { layout?: ServiceDetailCanvasLayout };
+
+export type ServiceDetailBlock =
+  | (DL & { id: string; type: "heading"; text: string })
+  | (DL & { id: string; type: "subheading"; text: string })
+  | (DL & { id: string; type: "paragraph"; text: string })
+  /** Párrafo con línea de contacto (tel. + correo); el enlace `tel:` se arma a partir de dígitos y `+`. */
+  | (DL & { id: string; type: "contactParagraph"; text: string; phone: string; email: string })
+  | (DL & { id: string; type: "quote"; text: string; attribution?: string })
+  | (DL & { id: string; type: "callout"; text: string })
+  | (DL & { id: string; type: "bulletList"; items: string[] })
+  | (DL & { id: string; type: "image"; src: string; alt: string })
+  | (DL & { id: string; type: "twoColumn"; text: string; imageSrc: string; imageAlt: string })
+  | (DL & { id: string; type: "embedVideo"; url: string; caption?: string })
+  | (DL & { id: string; type: "spacer"; size: "sm" | "md" | "lg" })
+  | (DL & { id: string; type: "contact"; items: ContactInfoItem[] })
+  | (DL & { id: string; type: "cta"; label: string; href: string; variant?: "primary" | "secondary" })
+  | (DL & { id: string; type: "divider" })
+  | (DL & { id: string; type: "faqBlock"; items: { question: string; answer: string }[] })
+  | (DL & { id: string; type: "gallery"; images: { src: string; alt: string }[] })
+  | (DL & { id: string; type: "iconCard"; iconKey: ServiceIconKey; title: string; body: string })
+  | (DL & { id: string; type: "widthBand"; mode: "full" | "content"; label?: string });
+
+/** Listados existentes a los que puede enlazar el CTA principal del nodo (en lugar de la página dedicada). */
+export const SERVICE_PRIMARY_LISTING_HREFS = ["/renta", "/venta", "/desarrollos"] as const;
+export type ServicePrimaryListingHref = (typeof SERVICE_PRIMARY_LISTING_HREFS)[number];
+
+/** Icono de cada enlace rápido en el panel lateral del grafo de servicios (Lucide). */
+export const SERVICE_CARD_CONTACT_LINK_ICONS = ["messageCircle", "mail", "phone", "link"] as const;
+export type ServiceCardContactLinkIcon = (typeof SERVICE_CARD_CONTACT_LINK_ICONS)[number];
+
+export type ServiceCardContactLink = {
+  label: string;
+  href: string;
+  icon: ServiceCardContactLinkIcon;
+};
+
+/** Enlaces por defecto bajo las viñetas del panel (sustituibles por tarjeta). */
+export const DEFAULT_SERVICE_CARD_CONTACT_LINKS: ServiceCardContactLink[] = [
+  {
+    label: "WhatsApp",
+    href: "https://wa.me/523300000000?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20sus%20servicios.",
+    icon: "messageCircle",
+  },
+  { label: "Correo", href: "mailto:contacto@viterra.mx", icon: "mail" },
+  { label: "Llamada", href: "tel:+523300000000", icon: "phone" },
+];
+
+function cloneDefaultServiceCardContactLinks(): ServiceCardContactLink[] {
+  return DEFAULT_SERVICE_CARD_CONTACT_LINKS.map((l) => ({ ...l }));
+}
 
 export interface ServiceCardContent {
   title: string;
   description: string;
-  bullets: [string, string, string];
+  bullets: string[];
+  /** Texto del enlace principal hacia la página dedicada (`/servicios/d/:slug`) o al listado si `primaryListingHref` está definido. */
   linkLabel: string;
-  /** Rutas fijas; vacío = sin enlace */
-  linkTo: ServiceCardLink;
+  /** Slug para `/servicios/d/:slug`. Vacío si la tarjeta solo enlaza a un listado (`primaryListingHref`). */
+  slug: string;
+  /** Si se define, el CTA del grafo/panel enlaza a este listado en lugar de `/servicios/d/:slug`. */
+  primaryListingHref?: ServicePrimaryListingHref;
+  /** Etiqueta corta en el panel del grafo (p. ej. «ADQUISICIÓN»). */
+  tag?: string;
+  iconKey: ServiceIconKey;
+  /** Enlaces rápidos bajo las viñetas (WhatsApp, correo, tel., enlaces personalizados). */
+  contactLinks: ServiceCardContactLink[];
+  /** Contenido de la página `/servicios/d/:slug`. */
+  detailBlocks: ServiceDetailBlock[];
 }
 
 export type ContactFaqItem = { question: string; answer: string };
+
+/** Icono de cada fila en «Información de contacto» (mapeado a Lucide en la página). */
+export type ContactInfoIcon = "map" | "phone" | "mail" | "clock" | "building" | "message";
+
+export type ContactInfoItem = {
+  title: string;
+  /** Varias líneas: separar con Enter (\n). */
+  body: string;
+  icon: ContactInfoIcon;
+};
 
 export type ContactDeepLinks = {
   saleLabel: string;
@@ -27,13 +133,37 @@ export type ContactDeepLinks = {
   servicesHref: string;
 };
 
-/** URLs opcionales por red; si faltan, la página usa `SOCIAL_LINKS` del config. */
-export type ContactSocialOverrides = {
-  facebook?: string;
-  instagram?: string;
-  twitter?: string;
-  linkedin?: string;
-  youtube?: string;
+/** Plataformas disponibles para enlaces en el bloque «Redes» de contacto. */
+export const CONTACT_SOCIAL_PLATFORMS = [
+  "facebook",
+  "instagram",
+  "x",
+  "linkedin",
+  "youtube",
+  "tiktok",
+  "threads",
+  "whatsapp",
+  "website",
+] as const;
+
+export type ContactSocialPlatform = (typeof CONTACT_SOCIAL_PLATFORMS)[number];
+
+export type ContactSocialLinkItem = {
+  platform: ContactSocialPlatform;
+  /** URL completa (https://…). Vacío: no se muestra el icono en la web. */
+  url: string;
+};
+
+export const CONTACT_SOCIAL_LABELS: Record<ContactSocialPlatform, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  x: "X",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+  threads: "Threads",
+  whatsapp: "WhatsApp",
+  website: "Sitio web",
 };
 
 export interface SiteContent {
@@ -63,24 +193,29 @@ export interface SiteContent {
     experienceLead: string;
     experienceBody: string;
     experienceCta: string;
+    /** Imagen a la izquierda (por defecto) o a la derecha en escritorio. */
+    experienceMediaPosition?: "left" | "right";
     closingKicker: string;
     closingTitle: string;
     closingSubtitle: string;
     closingBtnPrimary: string;
     closingBtnSecondary: string;
   };
+  /** Redes sociales del encabezado global (iconos junto al logo en escritorio / móvil). */
+  header: {
+    navSocial: HeaderNavSocialLink[];
+  };
   contact: {
+    /** Ritmo vertical del hero (cabecera contacto). */
+    heroSectionDensity?: "default" | "compact" | "airy";
+    /** Fondo de la cabecera (imagen o vídeo MP4/WebM/MOV; misma URL que en otras páginas). */
+    heroImage: string;
+    /** Línea pequeña encima del título (p. ej. «Viterra · Contacto»). */
+    heroKicker: string;
     heroTitle: string;
     heroSubtitle: string;
     infoTitle: string;
-    addressTitle: string;
-    addressLines: string;
-    phoneTitle: string;
-    phoneLines: string;
-    emailTitle: string;
-    emailLines: string;
-    hoursTitle: string;
-    hoursLines: string;
+    infoItems: ContactInfoItem[];
     quickTitle: string;
     quickSubtitle: string;
     quickWhatsappLabel: string;
@@ -104,7 +239,7 @@ export interface SiteContent {
     socialKicker: string;
     socialTitle: string;
     socialIntro: string;
-    social: ContactSocialOverrides;
+    socialLinks: ContactSocialLinkItem[];
     deepLinks: ContactDeepLinks;
     advisorCta: string;
     closingKicker: string;
@@ -125,6 +260,8 @@ export interface SiteContent {
     ctaButton: string;
   };
   about: {
+    heroImage: string;
+    heroKicker: string;
     heroTitle: string;
     heroSubtitle: string;
     storyKicker: string;
@@ -154,10 +291,25 @@ export interface SiteContent {
   };
   developments: {
     heroImage: string;
+    heroKicker: string;
     heroTitle: string;
     heroSubtitle: string;
     featuredKicker: string;
     featuredTitle: string;
+  };
+  /** Cabecera de `/renta` (listado; el catálogo sigue en Supabase). */
+  rent: {
+    heroImage: string;
+    heroKicker: string;
+    heroTitle: string;
+    heroSubtitle: string;
+  };
+  /** Cabecera de `/venta` (listado). */
+  sale: {
+    heroImage: string;
+    heroKicker: string;
+    heroTitle: string;
+    heroSubtitle: string;
   };
 }
 
@@ -198,18 +350,37 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     closingBtnPrimary: "Contacto",
     closingBtnSecondary: "Ver listados",
   },
+  header: {
+    navSocial: SOCIAL_LINKS.map((l) => ({ id: l.id, label: l.label, href: l.href })),
+  },
   contact: {
+    heroImage: "https://blog.grupoguia.mx/hubfs/DJI_20241206140245_0034_D.jpg",
+    heroKicker: "Viterra · Contacto",
     heroTitle: "Contáctanos",
     heroSubtitle: "Estamos aquí para ayudarte a encontrar tu hogar ideal",
     infoTitle: "Información de Contacto",
-    addressTitle: "Dirección",
-    addressLines: "Av Terranova 1455 local 102\nProvidencia 4a Secc., 44639 Zapopan, Jal.",
-    phoneTitle: "Teléfono",
-    phoneLines: "(123) 456-7890\n(098) 765-4321",
-    emailTitle: "Email",
-    emailLines: "info@viterra.com\nventas@viterra.com",
-    hoursTitle: "Horario",
-    hoursLines: "Lunes - Viernes: 9:00 - 18:00\nSábados: 10:00 - 14:00\nDomingos: Cerrado",
+    infoItems: [
+      {
+        icon: "map",
+        title: "Dirección",
+        body: "Av Terranova 1455 local 102\nProvidencia 4a Secc., 44639 Zapopan, Jal.",
+      },
+      {
+        icon: "phone",
+        title: "Teléfono",
+        body: "(123) 456-7890\n(098) 765-4321",
+      },
+      {
+        icon: "mail",
+        title: "Email",
+        body: "info@viterra.com\nventas@viterra.com",
+      },
+      {
+        icon: "clock",
+        title: "Horario",
+        body: "Lunes - Viernes: 9:00 - 18:00\nSábados: 10:00 - 14:00\nDomingos: Cerrado",
+      },
+    ],
     quickTitle: "¿Necesitas ayuda inmediata?",
     quickSubtitle: "Nuestro equipo está disponible para atenderte por WhatsApp",
     quickWhatsappLabel: "Chatear por WhatsApp",
@@ -257,7 +428,13 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     socialKicker: "Redes",
     socialTitle: "Encuéntranos en línea",
     socialIntro: "Síguenos para novedades, propiedades destacadas y contenido del sector.",
-    social: {},
+    socialLinks: [
+      { platform: "facebook", url: "#" },
+      { platform: "instagram", url: "#" },
+      { platform: "x", url: "#" },
+      { platform: "linkedin", url: "#" },
+      { platform: "youtube", url: "#" },
+    ],
     deepLinks: {
       saleLabel: "Catálogo de venta",
       saleHref: "/venta",
@@ -287,7 +464,12 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
           "Encuentra el hogar perfecto para ti. Contamos con una amplia selección de propiedades en renta en las mejores zonas de Guadalajara.",
         bullets: ["Propiedades verificadas y de calidad", "Asesoría personalizada", "Proceso rápido y seguro"],
         linkLabel: "Ver propiedades en renta",
-        linkTo: "/renta",
+        slug: "",
+        primaryListingHref: "/renta",
+        tag: "ARRENDAMIENTO",
+        iconKey: "home",
+        contactLinks: cloneDefaultServiceCardContactLinks(),
+        detailBlocks: [],
       },
       {
         title: "Venta de Propiedades",
@@ -295,7 +477,12 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
           "Invierte en tu patrimonio con las mejores opciones del mercado. Te ayudamos a encontrar la propiedad ideal.",
         bullets: ["Análisis de inversión", "Financiamiento disponible", "Trámites legales incluidos"],
         linkLabel: "Ver propiedades en venta",
-        linkTo: "/venta",
+        slug: "",
+        primaryListingHref: "/venta",
+        tag: "ADQUISICIÓN",
+        iconKey: "building2",
+        contactLinks: cloneDefaultServiceCardContactLinks(),
+        detailBlocks: [],
       },
       {
         title: "Desarrollos Inmobiliarios",
@@ -303,29 +490,46 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
           "Proyectos exclusivos en preventa y construcción. Asegura tu inversión con las mejores plusvalías.",
         bullets: ["Precios de preventa", "Seguimiento de obra", "Garantía de desarrolladora"],
         linkLabel: "Ver desarrollos",
-        linkTo: "/desarrollos",
+        slug: "",
+        primaryListingHref: "/desarrollos",
+        tag: "DESARROLLO",
+        iconKey: "fileCheck2",
+        contactLinks: cloneDefaultServiceCardContactLinks(),
+        detailBlocks: [],
       },
       {
         title: "Asesoría Legal",
         description:
           "Acompañamiento legal completo en todas tus transacciones inmobiliarias para garantizar tu seguridad.",
         bullets: ["Revisión de contratos", "Trámites notariales", "Escrituración segura"],
-        linkLabel: "",
-        linkTo: "",
+        linkLabel: "Conocer más",
+        slug: "asesoria-legal",
+        tag: "JURÍDICO",
+        iconKey: "scale",
+        contactLinks: cloneDefaultServiceCardContactLinks(),
+        detailBlocks: [],
       },
       {
         title: "Avalúos y Valuación",
         description: "Conoce el valor real de tu propiedad con nuestros avalúos profesionales certificados.",
         bullets: ["Avalúos certificados", "Análisis de mercado", "Reporte detallado"],
-        linkLabel: "",
-        linkTo: "",
+        linkLabel: "Conocer más",
+        slug: "avaluos-y-valuacion",
+        tag: "VALORACIÓN",
+        iconKey: "barChart3",
+        contactLinks: cloneDefaultServiceCardContactLinks(),
+        detailBlocks: [],
       },
       {
         title: "Administración de Propiedades",
         description: "Despreocúpate y deja la gestión de tu propiedad en manos de expertos profesionales.",
         bullets: ["Cobranza de rentas", "Mantenimiento preventivo", "Atención a inquilinos"],
-        linkLabel: "",
-        linkTo: "",
+        linkLabel: "Conocer más",
+        slug: "administracion-propiedades",
+        tag: "GESTIÓN",
+        iconKey: "settings2",
+        contactLinks: cloneDefaultServiceCardContactLinks(),
+        detailBlocks: [],
       },
     ],
     ctaTitle: "¿Necesitas ayuda con tu proyecto inmobiliario?",
@@ -333,6 +537,8 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     ctaButton: "Contactar Ahora",
   },
   about: {
+    heroImage: "/images/about-nosotros-hero.png",
+    heroKicker: "Viterra · Nosotros",
     heroTitle: "Sobre nosotros",
     heroSubtitle: "Conoce nuestra trayectoria y compromiso con la excelencia inmobiliaria",
     storyKicker: "Nuestra Trayectoria",
@@ -408,10 +614,25 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   developments: {
     heroImage:
       "https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436",
+    heroKicker: "Viterra · Desarrollos",
     heroTitle: "Proyectos Excepcionales",
     heroSubtitle:
       "Descubre nuestros desarrollos inmobiliarios exclusivos con arquitectura vanguardista y amenidades de clase mundial.",
     featuredKicker: "Destacados",
     featuredTitle: "Proyectos Exclusivos",
+  },
+  rent: {
+    heroImage:
+      "https://media.admagazine.com/photos/686d8644af6250fff2506526/16:9/w_2560%2Cc_limit/departamento-tipo-loft-forma-optima-aprovechar-espacios-pequenos.jpg",
+    heroKicker: "Viterra · Listados",
+    heroTitle: "Propiedades en Renta",
+    heroSubtitle: "Encuentra tu hogar ideal en las mejores ubicaciones de Guadalajara",
+  },
+  sale: {
+    heroImage:
+      "https://plus.unsplash.com/premium_photo-1661954372617-15780178eb2e?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8bHV4dXJ5JTIwaG91c2V8ZW58MHx8MHx8fDA%3D",
+    heroKicker: "Viterra · Listados",
+    heroTitle: "Propiedades en Venta",
+    heroSubtitle: "Invierte en tu patrimonio con las mejores opciones del mercado",
   },
 };

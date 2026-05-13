@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { motion, type Variants } from "motion/react";
 import { ChevronsDown } from "lucide-react";
 import {
@@ -9,7 +10,7 @@ import {
 import { cn } from "./ui/utils";
 
 type ViterraHeroTopClusterAnimatedProps = {
-  kicker: string;
+  kicker: ReactNode;
   itemVariants: Variants;
   reduceMotion: boolean;
 };

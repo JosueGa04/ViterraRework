@@ -3,16 +3,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  Home,
-  Building2,
-  BarChart3,
-  FileCheck2,
-  Scale,
-  Settings2,
-  type LucideIcon,
-} from "lucide-react";
 import type { ServiceCardContent } from "../../data/siteContent";
+import { serviceIconForKey, serviceOrbitAnglesDeg } from "../../lib/serviceIcons";
+import { resolveServiceCardPrimaryHref } from "../../lib/serviceCardPrimaryHref";
 
 const VITERRA_MARK_MONO = "/images/branding/viterra-mark-mono-alpha.png";
 
@@ -20,7 +13,6 @@ const VB = 520;
 const CX = 260;
 const CY = 260;
 const RADIUS = 200;
-const ANGLES = [90, 30, 330, 270, 210, 150] as const;
 
 const NODE_INACTIVE = 40;
 const NODE_ACTIVE = 52;
@@ -32,32 +24,6 @@ function degToRad(deg: number) {
 
 function pct(v: number) {
   return `${(v / VB) * 100}%`;
-}
-
-function normalizeTitle(s: string) {
-  return s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-function iconForTitle(title: string): LucideIcon {
-  const t = normalizeTitle(title);
-  if (t.includes("renta")) return Home;
-  if (t.includes("venta")) return Building2;
-  if (t.includes("desarrollos")) return BarChart3;
-  if (t.includes("avaluos")) return FileCheck2;
-  if (t.includes("legal")) return Scale;
-  if (t.includes("administracion")) return Settings2;
-  return Home;
-}
-
-function slotForTitle(title: string): number {
-  const t = normalizeTitle(title);
-  if (t.includes("renta")) return 0;
-  if (t.includes("venta")) return 1;
-  if (t.includes("desarrollos")) return 2;
-  if (t.includes("legal")) return 3;
-  if (t.includes("avaluos")) return 4;
-  if (t.includes("administracion")) return 5;
-  return 0;
 }
 
 function pathFromCenterTo(x: number, y: number) {
@@ -87,17 +53,22 @@ export function ServicesNodeGraphTwoState({ cards, reduceMotion }: Props) {
   const indexedCards = useMemo(() => cards.map((c, i) => ({ ...c, i })), [cards]);
   const activeIndex = activeService ?? 0;
   const active = indexedCards[activeIndex] ?? indexedCards[0];
-  const ActiveIcon = iconForTitle(active?.title ?? "");
+  const ActiveIcon = serviceIconForKey(active?.iconKey ?? "building2");
 
-  const positions = useMemo(
-    () =>
-      indexedCards.map((c) => {
-        const slot = slotForTitle(c.title);
-        const a = degToRad(ANGLES[slot] - 90);
-        return { x: CX + RADIUS * Math.cos(a), y: CY + RADIUS * Math.sin(a) };
-      }),
-    [indexedCards],
-  );
+  const positions = useMemo(() => {
+    const n = Math.max(indexedCards.length, 1);
+    const MIN_CHORD = 84;
+    let orbitR = RADIUS;
+    if (n > 1) {
+      orbitR = Math.min(222, Math.max(RADIUS - 8, MIN_CHORD / (2 * Math.sin(Math.PI / n))));
+    }
+    const angles = serviceOrbitAnglesDeg(n);
+    return indexedCards.map((_, i) => {
+      const deg = angles[i % angles.length] ?? 270;
+      const a = degToRad(deg - 90);
+      return { x: CX + orbitR * Math.cos(a), y: CY + orbitR * Math.sin(a) };
+    });
+  }, [indexedCards]);
 
   const openDetail = (index: number) => {
     setActiveService(index);
@@ -199,13 +170,19 @@ export function ServicesNodeGraphTwoState({ cards, reduceMotion }: Props) {
 
                 {indexedCards.map((card, i) => {
                   const p = positions[i]!;
-                  const Icon = iconForTitle(card.title);
+                  const Icon = serviceIconForKey(card.iconKey);
                   const isHovered = hovered === i;
+                  const tipDx = p.x - CX;
+                  const tipDy = p.y - CY;
+                  const tipLen = Math.hypot(tipDx, tipDy) || 1;
+                  const tipUx = tipDx / tipLen;
+                  const tipUy = tipDy / tipLen;
+                  const labelRadialDist = NODE_ACTIVE / 2 + 38;
                   return (
                     <motion.div
                       key={`node-${card.title}-${i}`}
                       className="absolute z-[5]"
-                      style={{ left: pct(p.x), top: pct(p.y), transform: "translate(-50%, -50%)" }}
+                      style={{ left: pct(p.x), top: pct(p.y), width: 0, height: 0 }}
                       initial={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                       transition={{ duration: 0.3, delay: i * 0.05 }}
@@ -217,8 +194,11 @@ export function ServicesNodeGraphTwoState({ cards, reduceMotion }: Props) {
                         onClick={() => openDetail(i)}
                         whileHover={reduceMotion ? undefined : { scale: 1.1 }}
                         whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-                        className="relative mx-auto flex items-center justify-center rounded-full bg-[rgba(255,255,255,0.04)]"
+                        className="relative flex items-center justify-center rounded-full bg-[rgba(255,255,255,0.04)]"
                         style={{
+                          position: "absolute",
+                          left: -NODE_ACTIVE / 2,
+                          top: -NODE_ACTIVE / 2,
                           width: NODE_ACTIVE,
                           height: NODE_ACTIVE,
                           border: "1px solid rgba(220,38,38,0.25)",
@@ -228,8 +208,23 @@ export function ServicesNodeGraphTwoState({ cards, reduceMotion }: Props) {
                         <motion.span layoutId="active-node" className="absolute inset-0 rounded-full" />
                         <Icon className="h-[22px] w-[22px] text-white/85" strokeWidth={1.6} />
                       </motion.button>
-                      <div className="pointer-events-none mt-[10px] flex max-w-[90px] flex-col items-center text-center">
-                        <span className={isHovered ? "text-white" : "text-white/50"} style={{ fontSize: 11, fontFamily: "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: 1.3, letterSpacing: "0.05em" }}>
+                      <div
+                        className="pointer-events-none absolute left-0 top-0 flex max-w-[min(148px,36vw)] flex-col items-center text-center"
+                        style={{
+                          transform: `translate(-50%, -50%) translate(${tipUx * labelRadialDist}px, ${tipUy * labelRadialDist}px)`,
+                        }}
+                      >
+                        <span
+                          className={isHovered ? "text-white" : "text-white/50"}
+                          style={{
+                            fontSize: 11,
+                            fontFamily: "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, monospace",
+                            lineHeight: 1.35,
+                            letterSpacing: "0.05em",
+                            overflowWrap: "anywhere",
+                            wordBreak: "break-word",
+                          }}
+                        >
                           {card.title}
                         </span>
                         <AnimatePresence>
@@ -320,13 +315,19 @@ export function ServicesNodeGraphTwoState({ cards, reduceMotion }: Props) {
                     ))}
                   </div>
 
-                  {active?.linkTo && active?.linkLabel ? (
+                  {(() => {
+                    const href = active ? resolveServiceCardPrimaryHref(active) : null;
+                    return href ? (
                     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.48 }}>
-                      <Link to={active.linkTo} className="mt-10 inline-flex w-fit items-center justify-center bg-white px-8 py-4 font-semibold text-[#DC2626] transition-colors hover:bg-[#0A0F1E] hover:text-white">
-                        Ver detalle completo →
+                      <Link
+                        to={href}
+                        className="mt-10 inline-flex w-fit items-center justify-center bg-white px-8 py-4 font-semibold text-[#DC2626] transition-colors hover:bg-[#0A0F1E] hover:text-white"
+                      >
+                        {(active?.linkLabel && active.linkLabel.trim()) || "Continuar"} →
                       </Link>
                     </motion.div>
-                  ) : null}
+                    ) : null;
+                  })()}
                 </div>
                 <ActiveIcon className="pointer-events-none absolute bottom-10 right-10 h-20 w-20 text-white/10" strokeWidth={1.6} />
               </motion.div>

@@ -105,8 +105,10 @@ export function PropertiesPage() {
   }, [searchParams, handleSearch]);
 
   return (
-    <div className="viterra-page min-h-screen flex flex-col bg-white" >
+    <div className="viterra-page min-h-screen flex flex-col bg-white">
       <Header />
+
+      <main className="flex min-h-0 flex-1 flex-col">
 
       {/* Page Header */}
       <section className="relative min-h-[58vh] sm:min-h-[64vh] md:min-h-[72vh] flex flex-col justify-center bg-brand-navy overflow-hidden py-14 md:py-20">
@@ -222,6 +224,8 @@ export function PropertiesPage() {
           )}
         </div>
       </section>
+
+      </main>
 
       <Footer />
     </div>

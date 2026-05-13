@@ -10,7 +10,10 @@ import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
+import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
@@ -34,6 +37,7 @@ export function HomePage() {
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
   const h = content.home;
+  const experienceMediaOnRight = h.experienceMediaPosition === "right";
   const {
     properties: featuredProperties,
     loading: featuredLoading,
@@ -123,6 +127,8 @@ export function HomePage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white">
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
+
       {/* Hero portada: layout propio (no compartido con el resto de páginas). */}
       <PreviewSectionChrome blockId="home-hero" label="Portada principal">
       <section
@@ -133,23 +139,15 @@ export function HomePage() {
         }
       >
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <motion.img
-            src={h.heroImage}
-            alt=""
-            className="h-full w-full object-cover"
-            initial={false}
-            animate={
-              reduceMotion
-                ? { scale: 1.05 }
-                : { scale: [1.05, 1.07, 1.05] }
-            }
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
-            }
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
+          <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-bg" layout="cover">
+            <HeroBackdropMedia
+              src={h.heroImage}
+              fallbackSrc={DEFAULT_SITE_CONTENT.home.heroImage}
+              reduceMotion={!!reduceMotion}
+              imageProps={{ decoding: "async", fetchPriority: "high" }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
+          </PreviewFieldPulse>
         </div>
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-10 text-center sm:px-6 sm:pt-12 lg:px-8 lg:pt-16">
@@ -163,37 +161,50 @@ export function HomePage() {
               variants={heroItemVariants}
               className="text-[11px] font-normal uppercase tracking-[0.35em] text-white/70 md:text-xs lg:mt-2"
             >
-              {h.heroKicker}
+              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-kicker" className="block">
+                {h.heroKicker}
+              </PreviewFieldPulse>
             </motion.p>
 
             <motion.h1
               variants={heroItemVariants}
-              className="px-2 text-[2.35rem] font-light leading-[1.05] tracking-tight text-white not-italic sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl"
+              className={pl.homePortadaTitleClass()}
               style={{ fontFamily: "var(--font-hero-display)", fontWeight: 300 }}
             >
-              {h.heroTitle}
+              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-title" className="block">
+                {h.heroTitle}
+              </PreviewFieldPulse>
             </motion.h1>
 
             <motion.p variants={heroItemVariants} className="mx-auto max-w-xl text-lg font-light leading-relaxed text-white/88 md:text-xl">
-              {h.heroSubtitle}
+              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-subtitle" className="block">
+                {h.heroSubtitle}
+              </PreviewFieldPulse>
             </motion.p>
 
             <motion.div
               variants={heroItemVariants}
               className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-[11px] uppercase tracking-[0.28em] text-white/65 md:text-xs"
             >
-              <Link to="/desarrollos" className="py-1 font-normal transition-colors hover:text-white">
-                {h.heroLinkDevLabel}
-              </Link>
+              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-devLink" className="inline-flex">
+                <Link to="/desarrollos" className="py-1 font-normal transition-colors hover:text-white">
+                  {h.heroLinkDevLabel}
+                </Link>
+              </PreviewFieldPulse>
               <span className="hidden text-white/30 sm:inline">|</span>
-              <Link to="/nosotros" className="py-1 font-normal transition-colors hover:text-white">
-                {h.heroLinkAboutLabel}
-              </Link>
+              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-aboutLink" className="inline-flex">
+                <Link to="/nosotros" className="py-1 font-normal transition-colors hover:text-white">
+                  {h.heroLinkAboutLabel}
+                </Link>
+              </PreviewFieldPulse>
             </motion.div>
 
             <motion.div
               variants={heroItemVariants}
-              className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-5 pt-4 sm:grid-cols-2 sm:items-center sm:gap-x-6 sm:gap-y-0 sm:pt-2 md:gap-x-10"
+              className={cn(
+                "mx-auto grid w-full max-w-3xl gap-5 pt-4 sm:items-center sm:gap-x-6 sm:gap-y-0 sm:pt-2 md:gap-x-10",
+                pl.gridCols("grid-cols-1 sm:grid-cols-2"),
+              )}
             >
               <div className="flex w-full justify-center sm:justify-end">
                 <motion.button
@@ -203,7 +214,9 @@ export function HomePage() {
                   transition={{ type: "spring", stiffness: 400, damping: 24 }}
                   className="flex w-full max-w-sm min-w-0 cursor-pointer items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
                 >
-                  {h.heroCtaPrimary}
+                  <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-ctaPrimary" className="block w-full">
+                    {h.heroCtaPrimary}
+                  </PreviewFieldPulse>
                 </motion.button>
               </div>
               <div className="flex w-full justify-center sm:justify-start">
@@ -211,7 +224,9 @@ export function HomePage() {
                   to="/venta"
                   className="group flex shrink-0 items-center gap-2 border-b border-white/40 py-4 text-sm font-light leading-snug tracking-wide text-white transition-colors hover:border-white"
                 >
-                  {h.heroCtaSecondary}
+                  <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-ctaSecondary" className="inline-flex shrink-0">
+                    {h.heroCtaSecondary}
+                  </PreviewFieldPulse>
                   <ArrowRight className="h-4 w-4 shrink-0 opacity-80 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </div>
@@ -227,22 +242,27 @@ export function HomePage() {
         id="busqueda"
         className={cn(
           "relative flex flex-col justify-center overflow-hidden border-b border-brand-navy/20",
-          "h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
-          "max-h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
-          "min-h-0",
-          "scroll-mt-[var(--viterra-sticky-header-offset)]",
-          "py-5 md:py-6"
+          "min-h-0 scroll-mt-[var(--viterra-sticky-header-offset)]",
+          pl.preview
+            ? "h-auto max-h-none py-10 sm:py-12"
+            : cn(
+                "h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
+                "max-h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
+                "py-5 md:py-6"
+              )
         )}
       >
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <img
-            src={h.searchImage}
-            alt=""
-            className="w-full h-full object-cover scale-105"
-            loading="lazy"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/88 via-black/55 to-black/80" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
+          <PreviewFieldPulse blockId="home-search" fieldKey="home-search-image" layout="cover">
+            <img
+              src={h.searchImage}
+              alt=""
+              className="w-full h-full object-cover scale-105"
+              loading="lazy"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/88 via-black/55 to-black/80" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
+          </PreviewFieldPulse>
         </div>
         {/* Velo radial: oscurece el centro (donde están filtros y texto) sin “tapar” todo el encuadre */}
         <div
@@ -250,19 +270,32 @@ export function HomePage() {
           className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_135%_92%_at_50%_58%,rgb(0_0_0/0.78)_0%,rgb(0_0_0/0.42)_48%,rgb(0_0_0/0.14)_72%,transparent_100%)]"
         />
 
-        <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col justify-center overflow-x-visible px-4 py-1 sm:px-6 lg:px-8">
-          <Reveal className="mb-3 shrink-0 md:mb-4" y={28}>
+        <div
+          className={cn(
+            "relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-col overflow-x-visible px-4 sm:px-6 lg:px-8",
+            pl.preview ? "flex-none py-1" : "flex-1 justify-center py-1"
+          )}
+        >
+          <Reveal className={cn("mb-3 shrink-0", pl.preview ? "mb-8 sm:mb-10" : "md:mb-4")} y={28}>
             <div>
-              <SectionKicker tone="light">{h.searchKicker}</SectionKicker>
+              <SectionKicker tone="light">
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-kicker" className="inline-block">
+                  {h.searchKicker}
+                </PreviewFieldPulse>
+              </SectionKicker>
               <h2 className="font-heading font-light mt-4 text-center text-2xl leading-tight tracking-tight text-white [text-shadow:0_2px_28px_rgb(0_0_0/0.55),0_1px_2px_rgb(0_0_0/0.4)] sm:text-3xl md:text-4xl lg:text-[2.2rem]">
-                {h.searchTitle}
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-title" className="inline-block">
+                  {h.searchTitle}
+                </PreviewFieldPulse>
               </h2>
               <p className="font-heading mx-auto mt-2 max-w-xl text-center text-sm font-light not-italic leading-relaxed text-white/90 [text-shadow:0_1px_18px_rgb(0_0_0/0.5)] md:text-base">
-                {h.searchSubtitle}
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-subtitle" className="block">
+                  {h.searchSubtitle}
+                </PreviewFieldPulse>
               </p>
             </div>
           </Reveal>
-          <Reveal delay={0.06} y={16}>
+          <Reveal delay={0.06} y={16} className={pl.preview ? "mt-4 sm:mt-6" : undefined}>
             <motion.div
               initial={reduceMotion ? false : { opacity: 0.92, y: 8 }}
               whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
@@ -280,6 +313,13 @@ export function HomePage() {
       {/* Selección — fondo blanco (sin imagen de fondo) */}
       <PreviewSectionChrome blockId="home-selection" label="Selección de propiedades">
       <section className="relative scroll-fade-exit-white bg-white py-20 md:py-28">
+        {h.selectionImage?.trim() ? (
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[min(38vh,380px)] overflow-hidden" aria-hidden>
+            <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-image" layout="cover" className="h-full min-h-[12rem]">
+              <img src={h.selectionImage} alt="" className="h-full w-full object-cover opacity-[0.09]" />
+            </PreviewFieldPulse>
+          </div>
+        ) : null}
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal
             className={cn(
@@ -288,21 +328,34 @@ export function HomePage() {
             )}
             y={24}
           >
-            <div className="lg:max-w-[65%]">
-              <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-brand-navy/55">{h.selectionKicker}</p>
+            <div className={cn(!pl.preview && "lg:max-w-[65%]")}>
+              <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-brand-navy/55">
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-kicker" className="inline-block">
+                  {h.selectionKicker}
+                </PreviewFieldPulse>
+              </p>
               <span className="mb-6 block h-px w-10 bg-primary" aria-hidden />
               <h2 className="font-heading text-3xl font-light leading-[1.12] tracking-tight text-brand-navy sm:text-4xl md:text-5xl lg:text-[3.25rem]">
-                {h.selectionTitle}
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-title" className="inline-block">
+                  {h.selectionTitle}
+                </PreviewFieldPulse>
               </h2>
               <p className="mt-5 max-w-xl text-[15px] font-light leading-relaxed text-brand-navy/70 md:text-base">
-                {h.selectionSubtitle}
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-subtitle" className="block">
+                  {h.selectionSubtitle}
+                </PreviewFieldPulse>
               </p>
             </div>
             <Link
               to="/venta"
-              className="inline-flex shrink-0 items-center gap-2 self-start border-b border-brand-navy/35 pb-1 text-[11px] uppercase tracking-[0.22em] text-brand-navy transition-colors hover:border-primary hover:text-primary lg:self-auto"
+              className={cn(
+                "inline-flex shrink-0 items-center gap-2 self-start border-b border-brand-navy/35 pb-1 text-[11px] uppercase tracking-[0.22em] text-brand-navy transition-colors hover:border-primary hover:text-primary",
+                !pl.preview && "lg:self-auto"
+              )}
             >
-              {h.selectionCatalogLink}
+              <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-catalogLink" className="inline-flex shrink-0">
+                {h.selectionCatalogLink}
+              </PreviewFieldPulse>
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Reveal>
@@ -416,12 +469,21 @@ export function HomePage() {
             )}
           </div>
 
-          <Reveal className="mt-20 flex flex-col items-center justify-center gap-8 border-t border-brand-navy/10 pt-12 text-sm sm:flex-row" y={18} delay={0.06}>
+          <Reveal
+            className={cn(
+              "mt-20 flex flex-col items-center justify-center gap-8 border-t border-brand-navy/10 pt-12 text-sm",
+              !pl.preview && "sm:flex-row"
+            )}
+            y={18}
+            delay={0.06}
+          >
             <Link
               to="/renta"
               className="inline-flex items-center gap-2 border-b border-brand-navy/25 pb-1 text-[11px] uppercase tracking-[0.16em] text-brand-navy/85 transition-colors hover:border-primary hover:text-primary"
             >
-              {h.selectionRentLabel}
+              <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-rentLabel" className="inline-flex shrink-0">
+                {h.selectionRentLabel}
+              </PreviewFieldPulse>
               <ArrowRight className="h-4 w-4" />
             </Link>
             <span className="hidden h-4 w-px bg-brand-navy/15 sm:inline" aria-hidden />
@@ -429,7 +491,9 @@ export function HomePage() {
               to="/venta"
               className="inline-flex items-center gap-2 border-b border-brand-navy/25 pb-1 text-[11px] uppercase tracking-[0.16em] text-brand-navy/85 transition-colors hover:border-primary hover:text-primary"
             >
-              {h.selectionSaleLabel}
+              <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-saleLabel" className="inline-flex shrink-0">
+                {h.selectionSaleLabel}
+              </PreviewFieldPulse>
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Reveal>
@@ -453,7 +517,7 @@ export function HomePage() {
             </p>
           </Reveal>
 
-          <div className="mx-auto grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className={cn("mx-auto grid max-w-5xl gap-4", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
             {[
               {
                 id: "post-1",
@@ -537,50 +601,85 @@ export function HomePage() {
       <section className={cn("grid min-h-[420px] lg:min-h-[540px]", pl.gridCols("grid-cols-1 lg:grid-cols-2"))}>
         <motion.div
           className={cn(
-            "relative min-h-[300px] overflow-hidden lg:min-h-0",
-            pl.preview ? "order-2" : "order-2 lg:order-1"
+            /* En preview el grid es siempre 1 col.: sin altura de fila hermana, `lg:min-h-0` + img absoluta colapsa a 0. */
+            "relative min-h-[300px] overflow-hidden",
+            pl.preview
+              ? experienceMediaOnRight
+                ? "order-2"
+                : "order-1"
+              : cn("order-2 lg:min-h-0", experienceMediaOnRight ? "lg:order-2" : "lg:order-1")
           )}
           initial={reduceMotion ? false : { opacity: 0 }}
           whileInView={reduceMotion ? undefined : { opacity: 1 }}
           viewport={{ once: true, amount: 0.35 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <motion.img
-            src={h.experienceImage}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-            initial={reduceMotion ? false : { scale: 1.1 }}
-            whileInView={reduceMotion ? undefined : { scale: 1 }}
-            viewport={{ once: true, amount: 0.35 }}
-            transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-          />
+          <PreviewFieldPulse
+            blockId="home-experience"
+            fieldKey="home-experience-mediaPosition"
+            layout="cover"
+            className="absolute inset-0 min-h-0"
+          >
+            <PreviewFieldPulse
+              blockId="home-experience"
+              fieldKey="home-experience-image"
+              layout="cover"
+              className="absolute inset-0 h-full w-full min-h-0"
+            >
+              <motion.img
+                src={h.experienceImage}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                initial={reduceMotion ? false : { scale: 1.1 }}
+                whileInView={reduceMotion ? undefined : { scale: 1 }}
+                viewport={{ once: true, amount: 0.35 }}
+                transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+              />
+            </PreviewFieldPulse>
+          </PreviewFieldPulse>
         </motion.div>
         <div
           className={cn(
-            "order-1 flex flex-col justify-center bg-brand-navy px-5 py-14 text-white sm:px-8 md:py-16 lg:px-16 lg:py-24",
-            pl.preview ? "" : "lg:order-2"
+            "flex flex-col justify-center bg-brand-navy px-5 py-14 text-white sm:px-8 md:py-16 lg:px-16 lg:py-24",
+            pl.preview
+              ? experienceMediaOnRight
+                ? "order-1"
+                : "order-2"
+              : cn("order-1", experienceMediaOnRight ? "lg:order-1" : "lg:order-2")
           )}
         >
           <Reveal y={22} delay={0.04}>
             <div>
-              <p className="text-[10px] uppercase tracking-[0.32em] text-white/45 font-normal mb-5">{h.experienceKicker}</p>
+              <p className="text-[10px] uppercase tracking-[0.32em] text-white/45 font-normal mb-5">
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-kicker" className="inline-block">
+                  {h.experienceKicker}
+                </PreviewFieldPulse>
+              </p>
               <span className="block h-px w-10 bg-primary mb-8" aria-hidden />
               <h3 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] tracking-tight leading-[1.15] mb-6">
-                {h.experienceTitle}
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-title" className="inline-block">
+                  {h.experienceTitle}
+                </PreviewFieldPulse>
               </h3>
               <p className="font-heading text-lg md:text-xl not-italic text-white/70 leading-relaxed max-w-md mb-4 font-light">
-                {h.experienceLead}
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-lead" className="block">
+                  {h.experienceLead}
+                </PreviewFieldPulse>
               </p>
               <p className="text-white/78 font-light leading-relaxed max-w-md mb-10 text-[15px]">
-                {h.experienceBody}
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-body" className="block">
+                  {h.experienceBody}
+                </PreviewFieldPulse>
               </p>
               <motion.div whileHover={reduceMotion ? undefined : { x: 3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
                 <Link
                   to="/nosotros"
                   className="inline-flex items-center gap-2 self-start uppercase tracking-[0.22em] text-[11px] border border-white/50 px-9 py-3.5 hover:bg-white hover:text-brand-navy transition-colors duration-300"
                 >
-                  {h.experienceCta}
-                  <ArrowRight className="w-4 h-4" />
+                  <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-cta" className="inline-flex items-center gap-2">
+                    {h.experienceCta}
+                    <ArrowRight className="w-4 h-4" />
+                  </PreviewFieldPulse>
                 </Link>
               </motion.div>
             </div>
@@ -594,12 +693,20 @@ export function HomePage() {
       <section className="py-24 md:py-32 bg-brand-canvas border-t border-brand-navy/10">
         <Reveal className="mx-auto max-w-3xl px-4 text-center sm:px-6" y={26}>
           <div>
-            <SectionKicker>{h.closingKicker}</SectionKicker>
+            <SectionKicker>
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-kicker" className="inline-block">
+                {h.closingKicker}
+              </PreviewFieldPulse>
+            </SectionKicker>
             <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] text-brand-navy tracking-tight mt-8 mb-5 leading-tight">
-              {h.closingTitle}
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-title" className="inline-block">
+                {h.closingTitle}
+              </PreviewFieldPulse>
             </h2>
             <p className="text-brand-navy/70 font-light mb-12 leading-relaxed text-[15px] md:text-base max-w-lg mx-auto">
-              {h.closingSubtitle}
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-subtitle" className="block">
+                {h.closingSubtitle}
+              </PreviewFieldPulse>
             </p>
             <div className={cn("flex gap-4 justify-center", pl.preview ? "flex-col" : "flex-col sm:flex-row")}>
               <motion.div whileHover={reduceMotion ? undefined : { y: -2 }} transition={{ type: "spring", stiffness: 400, damping: 28 }}>
@@ -607,8 +714,10 @@ export function HomePage() {
                   to="/contacto"
                   className="inline-flex items-center justify-center gap-2 uppercase tracking-[0.2em] text-[11px] bg-brand-navy text-white px-10 py-4 transition-colors hover:brightness-110"
                 >
-                  {h.closingBtnPrimary}
-                  <ArrowRight className="w-4 h-4" />
+                  <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-btnPrimary" className="inline-flex items-center gap-2">
+                    {h.closingBtnPrimary}
+                    <ArrowRight className="w-4 h-4" />
+                  </PreviewFieldPulse>
                 </Link>
               </motion.div>
               <motion.div whileHover={reduceMotion ? undefined : { y: -2 }} transition={{ type: "spring", stiffness: 400, damping: 28 }}>
@@ -616,7 +725,9 @@ export function HomePage() {
                   to="/renta"
                   className="inline-flex items-center justify-center gap-2 uppercase tracking-[0.2em] text-[11px] border border-brand-navy/25 text-brand-navy px-10 py-4 transition-colors hover:border-primary hover:text-brand-burgundy bg-white/70"
                 >
-                  {h.closingBtnSecondary}
+                  <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-btnSecondary" className="inline-flex shrink-0">
+                    {h.closingBtnSecondary}
+                  </PreviewFieldPulse>
                 </Link>
               </motion.div>
             </div>
@@ -624,6 +735,8 @@ export function HomePage() {
         </Reveal>
       </section>
       </PreviewSectionChrome>
+
+      </main>
 
       <Footer />
     </div>

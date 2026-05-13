@@ -1,11 +1,11 @@
-import { Facebook, Instagram, Linkedin, Twitter, Youtube } from "lucide-react";
+import { Facebook, Instagram, Linkedin, Youtube } from "lucide-react";
 import { SOCIAL_LINKS, type SocialNetworkId } from "../config/socialLinks";
+import { XLogoIcon } from "./social/XLogoIcon";
 import { cn } from "./ui/utils";
 
-const iconById: Record<SocialNetworkId, typeof Facebook> = {
+const iconById: Record<Exclude<SocialNetworkId, "x">, typeof Facebook> = {
   facebook: Facebook,
   instagram: Instagram,
-  x: Twitter,
   linkedin: Linkedin,
   youtube: Youtube,
 };
@@ -51,7 +51,7 @@ export function SocialFollowStrip({ className, theme = "light", flush = false }:
         </p>
         <ul className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
           {SOCIAL_LINKS.map(({ id, label, href }) => {
-            const Icon = iconById[id];
+            const Lucide = id === "x" ? null : iconById[id as Exclude<SocialNetworkId, "x">];
             return (
               <li key={id}>
                 <a
@@ -70,7 +70,11 @@ export function SocialFollowStrip({ className, theme = "light", flush = false }:
                       "border border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary"
                   )}
                 >
-                  <Icon className="h-5 w-5" strokeWidth={1.5} aria-hidden />
+                  {id === "x" ? (
+                    <XLogoIcon className="h-5 w-5" />
+                  ) : Lucide ? (
+                    <Lucide className="h-5 w-5" strokeWidth={1.5} aria-hidden />
+                  ) : null}
                 </a>
               </li>
             );

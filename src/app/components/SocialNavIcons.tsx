@@ -1,14 +1,21 @@
 import { useLocation } from "react-router";
-import { Facebook, Instagram, Linkedin, Twitter, Youtube } from "lucide-react";
-import { SOCIAL_LINKS, type SocialNetworkId } from "../config/socialLinks";
+import { Facebook, Instagram, Linkedin, Youtube, Link as LinkIcon, MessageCircle } from "lucide-react";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { useSitePreviewVirtualPath } from "../../contexts/SitePreviewVirtualPathContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
+import type { HeaderSocialIconId } from "../config/socialLinks";
+import { XLogoIcon } from "./social/XLogoIcon";
 import { cn } from "./ui/utils";
 
-const iconById: Record<SocialNetworkId, typeof Facebook> = {
+const iconById: Partial<Record<Exclude<HeaderSocialIconId, "x">, typeof Facebook>> = {
   facebook: Facebook,
   instagram: Instagram,
-  x: Twitter,
   linkedin: Linkedin,
   youtube: Youtube,
+  tiktok: LinkIcon,
+  threads: LinkIcon,
+  whatsapp: MessageCircle,
+  website: LinkIcon,
 };
 
 const sizeStyles = {
@@ -26,9 +33,17 @@ type SocialNavIconsProps = {
 
 export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsProps) {
   const location = useLocation();
+  const sitePreviewPath = useSitePreviewVirtualPath();
+  const { content } = useSiteContent();
+  /** En el iframe del editor la URL real es `/admin/site-preview-frame`; la ruta pública va en el contexto. */
+  const pathname = sitePreviewPath ?? location.pathname;
   const hidden =
-    location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
+    pathname.startsWith("/admin") || pathname.startsWith("/login");
   if (hidden) return null;
+
+  const headerSocial = mergeSiteSection("header", content.header).navSocial;
+  const links = headerSocial.filter((l) => l.href.trim().length > 0);
+  if (links.length === 0) return null;
 
   const { pad, icon } = sizeStyles[iconSize];
 
@@ -42,8 +57,9 @@ export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsPro
         className
       )}
     >
-      {SOCIAL_LINKS.map(({ id, label, href }) => {
-        const Icon = iconById[id];
+      {links.map(({ id, label, href }) => {
+        const Lucide =
+          id === "x" ? null : (iconById[id as Exclude<HeaderSocialIconId, "x">] ?? LinkIcon);
         return (
           <li key={id} className="shrink-0">
             <a
@@ -60,7 +76,11 @@ export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsPro
                 pad
               )}
             >
-              <Icon className={icon} strokeWidth={1.5} aria-hidden />
+              {id === "x" ? (
+                <XLogoIcon className={icon} />
+              ) : (
+                <Lucide className={icon} strokeWidth={1.5} aria-hidden />
+              )}
             </a>
           </li>
         );

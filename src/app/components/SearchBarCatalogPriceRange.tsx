@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useState } from "react";
+import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import { Slider } from "./ui/slider";
 import { cn } from "./ui/utils";
 
@@ -92,6 +93,7 @@ function rangeToPriceStrings(
 
 export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeHandle, Props>(
   function SearchBarCatalogPriceRange({ prices, minPrice, maxPrice, onChange, variant }, ref) {
+  const previewCanvas = usePreviewCanvas();
   const isAmbient = variant === "ambient";
   const isPremium = variant === "premium";
   const manualToggleId = useId();
@@ -204,13 +206,19 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
   return (
     <div
       className={cn(
-        "mt-4 border-t pt-4",
+        "border-t pt-4",
+        previewCanvas ? "mt-3 pt-3" : "mt-4",
         isAmbient && "border-white/10",
         isPremium && "border-brand-navy/10",
         !isPremium && !isAmbient && "border-slate-200"
       )}
     >
-      <div className={cn(cardClass, "px-4 py-3 sm:px-5 sm:py-4")}>
+      <div
+        className={cn(
+          cardClass,
+          previewCanvas ? "px-3 py-2.5 sm:px-4 sm:py-3" : "px-4 py-3 sm:px-5 sm:py-4"
+        )}
+      >
         <div className="mb-2">
           <h3 className={cn(titleClass, "text-[15px] sm:text-base font-semibold")}>
             Rango de precios{" "}
@@ -281,9 +289,17 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
             id={manualRegionId}
             role="region"
             aria-labelledby={manualToggleId}
-            className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end sm:gap-2.5"
+            className={cn(
+              "mt-3 grid grid-cols-1 gap-3",
+              !previewCanvas && "sm:grid-cols-[1fr_auto_1fr] sm:items-end sm:gap-2.5"
+            )}
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div
+              className={cn(
+                "flex flex-col gap-2",
+                !previewCanvas && "sm:flex-row sm:items-center sm:gap-3"
+              )}
+            >
               <span
                 className={cn(
                   "shrink-0 text-xs font-medium",
@@ -306,11 +322,23 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
               </div>
             </div>
 
-            <div className={cn("hidden pb-2 text-center text-slate-300 sm:block", isAmbient && "text-white/35")} aria-hidden>
+            <div
+              className={cn(
+                "hidden pb-2 text-center text-slate-300",
+                !previewCanvas && "sm:block",
+                isAmbient && "text-white/35"
+              )}
+              aria-hidden
+            >
               —
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div
+              className={cn(
+                "flex flex-col gap-2",
+                !previewCanvas && "sm:flex-row sm:items-center sm:gap-3"
+              )}
+            >
               <span
                 className={cn(
                   "shrink-0 text-xs font-medium",

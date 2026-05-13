@@ -1,6 +1,7 @@
 import { ChevronDown, Search } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useId } from "react";
 import { Link, useSearchParams } from "react-router";
+import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import { cn } from "./ui/utils";
 import {
   SearchBarCatalogPriceRange,
@@ -52,6 +53,7 @@ export function SearchBar({
   catalogPrices,
   catalogPriceSlices,
 }: SearchBarProps) {
+  const previewCanvas = usePreviewCanvas();
   const [searchParams] = useSearchParams();
   const advancedToggleId = useId();
   const advancedRegionId = `${advancedToggleId}-region`;
@@ -140,6 +142,13 @@ export function SearchBar({
     return `/propiedades/mapa${q}`;
   }, [filters.status, defaultStatus, showPriceOperationToggle, priceOp, isCatalogOperationLocked]);
 
+  const mainGridWide =
+    showPriceOperationToggle
+      ? "lg:grid-cols-[minmax(10.25rem,auto)_minmax(0,1.5fr)_minmax(0,0.9fr)_minmax(11rem,auto)] lg:items-end lg:gap-x-5"
+      : showStatusFilter
+        ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
+        : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5";
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const pricePatch = catalogRangeRef.current?.getPriceFilterPatch() ?? {};
@@ -155,7 +164,8 @@ export function SearchBar({
 
   const labelClass = cn(
     "block mb-2 text-left uppercase tracking-[0.16em]",
-    isAmbient && "mb-3 text-[10px] font-medium text-white/75",
+    isAmbient && "text-[10px] font-medium text-white/75",
+    isAmbient && (previewCanvas ? "mb-4 sm:mb-4" : "mb-3"),
     isPremium && !isAmbient && "text-[10px] text-brand-navy/60 font-medium",
     !isPremium && !isAmbient && "text-sm font-medium text-slate-700"
   );
@@ -189,7 +199,7 @@ export function SearchBar({
     isAmbient && "h-11 min-h-[2.75rem]",
     "inline-flex w-full shrink-0 items-center justify-center gap-2 font-medium transition-colors",
     isAmbient &&
-      "rounded-none border border-primary/70 bg-primary/[0.14] px-5 text-[11px] uppercase tracking-[0.14em] text-white shadow-[0_2px_14px_rgb(0_0_0/0.4),0_0_0_1px_rgb(200_16_46_/_0.25)_inset] hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-[0_4px_20px_rgb(200_16_46_/_0.35)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+      "rounded-none border border-primary/70 bg-primary/[0.14] px-5 text-[11px] uppercase tracking-[0.14em] text-white shadow-[0_2px_14px_rgb(0_0_0/0.4),0_0_0_1px_rgb(200_16_46_/_0.25)_inset] hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-[0_4px_20px_rgb(200_16_46_/_0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:ring-offset-0",
     isPremium &&
       !isAmbient &&
       "rounded-none bg-primary px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-brand-red-hover focus-visible:ring-1 focus-visible:ring-brand-burgundy focus-visible:ring-offset-2",
@@ -211,12 +221,9 @@ export function SearchBar({
       <div
         className={cn(
           "grid grid-cols-1 gap-4 sm:gap-4",
-          showPriceOperationToggle
-            ? "lg:grid-cols-[minmax(10.25rem,auto)_minmax(0,1.5fr)_minmax(0,0.9fr)_minmax(11rem,auto)] lg:items-end lg:gap-x-5"
-            : showStatusFilter
-              ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
-              : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5",
-          isAmbient && "gap-y-5 lg:gap-y-0"
+          !previewCanvas && mainGridWide,
+          isAmbient &&
+            (previewCanvas ? "gap-y-6 sm:gap-y-7" : "gap-y-5 lg:gap-y-0")
         )}
       >
         {showPriceOperationToggle ? (
@@ -226,7 +233,8 @@ export function SearchBar({
               role="group"
               aria-label="Venta o alquiler"
               className={cn(
-                "flex w-full max-w-md rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]",
+                "flex w-full rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]",
+                !previewCanvas && "max-w-md",
                 isAmbient
                   ? "border-white/25 bg-black/35 backdrop-blur-sm"
                   : "border-slate-200 bg-slate-100/90"
@@ -268,7 +276,7 @@ export function SearchBar({
           </div>
         ) : null}
 
-        <div className="min-w-0 lg:min-w-[12rem]">
+        <div className={cn("min-w-0", !previewCanvas && "lg:min-w-[12rem]")}>
           <label className={labelClass}>Ubicación o palabra clave</label>
           <input
             type="text"
@@ -318,7 +326,12 @@ export function SearchBar({
           </div>
         ) : null}
 
-        <div className="flex min-w-0 flex-col gap-2">
+        <div
+          className={cn(
+            "flex min-w-0 flex-col",
+            isAmbient && previewCanvas ? "gap-4" : "gap-2"
+          )}
+        >
           <label className={cn(labelClass, "text-transparent")} aria-hidden="true">
             Buscar
           </label>
@@ -329,8 +342,13 @@ export function SearchBar({
         </div>
       </div>
 
-      <div className="mt-5">
-        <div className="flex justify-center sm:justify-start">
+      <div className={cn(isAmbient && previewCanvas ? "mt-7 sm:mt-8" : "mt-5")}>
+        <div
+          className={cn(
+            "flex",
+            previewCanvas ? "justify-center" : "justify-center sm:justify-start"
+          )}
+        >
           <button
             type="button"
             id={advancedToggleId}
@@ -356,7 +374,10 @@ export function SearchBar({
             id={advancedRegionId}
             role="region"
             aria-labelledby={advancedToggleId}
-            className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-5"
+            className={cn(
+              "mt-4 grid grid-cols-1 gap-4",
+              !previewCanvas && "sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-5"
+            )}
           >
             <div className="min-w-0">
               <label className={labelClass} htmlFor={`${advancedToggleId}-beds`}>
@@ -482,7 +503,8 @@ export function SearchBar({
       ) : (
         <div
           className={cn(
-            "mt-5 grid grid-cols-1 gap-4 border-t pt-5 md:grid-cols-2 md:gap-x-6",
+            "mt-5 grid grid-cols-1 gap-4 border-t pt-5",
+            !previewCanvas && "md:grid-cols-2 md:gap-x-6",
             isAmbient && "border-white/15",
             isPremium && !isAmbient && "border-brand-navy/10",
             !isPremium && !isAmbient && "border-slate-200"

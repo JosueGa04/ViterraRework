@@ -7,6 +7,9 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { PropertyCard, type Property } from "../components/PropertyCard";
 import { PropertyMap } from "../components/PropertyMap";
 import { useCatalogProperties } from "../hooks/useCatalogProperties";
+import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
 import {
   sortCatalogProperties,
   CATALOG_PROPERTY_SORT_OPTIONS,
@@ -16,13 +19,15 @@ import { applyAdvancedPropertyFilters } from "../lib/applyAdvancedPropertyFilter
 import { SlidersHorizontal, Map, LayoutGrid } from "lucide-react";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
+import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { cn } from "../components/ui/utils";
 import {
   viterraHeroSectionClass,
   viterraHeroCenteredStackClass,
   viterraHeroCenteredInnerClass,
   viterraHeroMainClass,
-  viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 
@@ -46,6 +51,9 @@ function PropertyGridSkeleton() {
 
 export function SalePage() {
   const reduceMotion = useReducedMotion();
+  const pl = usePreviewLayout();
+  const { content } = useSiteContent();
+  const hero = mergeSiteSection("sale", content.sale);
   const [searchParams] = useSearchParams();
   const { properties, loading } = useCatalogProperties();
   const saleProperties = useMemo(
@@ -145,28 +153,21 @@ export function SalePage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
+      <PreviewSectionChrome blockId="sale-hero" label="Cabecera">
       <section className={viterraHeroSectionClass}>
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <motion.img
-            src="https://plus.unsplash.com/premium_photo-1661954372617-15780178eb2e?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8bHV4dXJ5JTIwaG91c2V8ZW58MHx8MHx8fDA%3D"
-            alt="Propiedades en Venta"
-            className="h-full w-full object-cover"
-            initial={false}
-            animate={
-              reduceMotion
-                ? { scale: 1.05 }
-                : { scale: [1.05, 1.07, 1.05] }
-            }
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
-            }
-          />
-          <div
-            className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
-            aria-hidden
-          />
+          <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-bg" layout="cover" className="h-full w-full">
+            <HeroBackdropMedia
+              src={hero.heroImage ?? ""}
+              fallbackSrc="https://plus.unsplash.com/premium_photo-1661954372617-15780178eb2e?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8bHV4dXJ5JTIwaG91c2V8ZW58MHx8MHx8fDA%3D"
+              reduceMotion={!!reduceMotion}
+            />
+            <div
+              className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60"
+              aria-hidden
+            />
+          </PreviewFieldPulse>
         </div>
 
         <div className={viterraHeroCenteredStackClass}>
@@ -177,19 +178,30 @@ export function SalePage() {
             animate="visible"
           >
             <ViterraHeroTopClusterAnimated
-              kicker="Viterra · Listados"
+              kicker={
+                <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-kicker" className="inline-block">
+                  {hero.heroKicker}
+                </PreviewFieldPulse>
+              }
               itemVariants={heroItemVariants}
               reduceMotion={!!reduceMotion}
             />
             <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
-              <h1 className={viterraHeroTitleClass}>Propiedades en Venta</h1>
+              <h1 className={pl.heroTitleClass()}>
+                <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-title" className="block">
+                  {hero.heroTitle}
+                </PreviewFieldPulse>
+              </h1>
             </motion.div>
             <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
-              Invierte en tu patrimonio con las mejores opciones del mercado
+              <PreviewFieldPulse blockId="sale-hero" fieldKey="sale-hero-subtitle" className="block w-full">
+                {hero.heroSubtitle}
+              </PreviewFieldPulse>
             </motion.p>
           </motion.div>
         </div>
       </section>
+      </PreviewSectionChrome>
 
       <section className="border-b border-brand-navy/10 bg-brand-canvas py-12">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -317,6 +329,8 @@ export function SalePage() {
           )}
         </div>
       </section>
+
+      </main>
 
       <Footer />
     </div>

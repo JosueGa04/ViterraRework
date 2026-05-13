@@ -6,7 +6,10 @@ import { Target, Award, TrendingUp, Shield, Sparkles } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { Reveal } from "../components/Reveal";
 import {
   Carousel,
@@ -22,7 +25,6 @@ import {
   viterraHeroCenteredStackClass,
   viterraHeroCenteredInnerClass,
   viterraHeroMainClass,
-  viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 
@@ -103,7 +105,7 @@ export function AboutPage() {
   const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
-  const a = content.about;
+  const a = mergeSiteSection("about", content.about);
   const statsGridRef = useRef<HTMLDivElement>(null);
   const statsInView = useInView(statsGridRef, { once: true, amount: 0.28 });
 
@@ -130,26 +132,18 @@ export function AboutPage() {
     <div className="viterra-page flex min-h-screen flex-col bg-white">
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
       <PreviewSectionChrome blockId="about-hero" label="Cabecera">
       <section className={viterraHeroSectionClass}>
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <motion.img
-            src="/images/about-nosotros-hero.png"
-            alt=""
-            className="h-full w-full object-cover"
-            initial={false}
-            animate={
-              reduceMotion
-                ? { scale: 1.05 }
-                : { scale: [1.05, 1.07, 1.05] }
-            }
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
-            }
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
+          <PreviewFieldPulse blockId="about-hero" fieldKey="about-hero-bg" layout="cover" className="h-full w-full">
+            <HeroBackdropMedia
+              src={a.heroImage ?? ""}
+              fallbackSrc="/images/about-nosotros-hero.png"
+              reduceMotion={!!reduceMotion}
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
+          </PreviewFieldPulse>
         </div>
         <div className={viterraHeroCenteredStackClass}>
           <motion.div
@@ -159,15 +153,25 @@ export function AboutPage() {
             animate="visible"
           >
             <ViterraHeroTopClusterAnimated
-              kicker="Viterra · Nosotros"
+              kicker={
+                <PreviewFieldPulse blockId="about-hero" fieldKey="about-hero-kicker" className="inline-block">
+                  {a.heroKicker}
+                </PreviewFieldPulse>
+              }
               itemVariants={heroItemVariants}
               reduceMotion={!!reduceMotion}
             />
             <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
-              <h1 className={viterraHeroTitleClass}>{a.heroTitle}</h1>
+              <h1 className={pl.heroTitleClass()}>
+                <PreviewFieldPulse blockId="about-hero" fieldKey="about-hero-title" className="block">
+                  {a.heroTitle}
+                </PreviewFieldPulse>
+              </h1>
             </motion.div>
             <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
-              {a.heroSubtitle}
+              <PreviewFieldPulse blockId="about-hero" fieldKey="about-hero-subtitle" className="block w-full">
+                {a.heroSubtitle}
+              </PreviewFieldPulse>
             </motion.p>
           </motion.div>
         </div>
@@ -451,18 +455,23 @@ export function AboutPage() {
             className="w-full"
             aria-label="Carrusel del equipo"
           >
-            <CarouselContent className="-ml-3 md:-ml-4">
+            <CarouselContent className={cn(pl.preview ? "-ml-0" : "-ml-3 md:-ml-4")}>
               {a.team.map((member, index) => (
                 <CarouselItem
                   key={`${member.name}-${index}`}
-                  className="basis-full pl-3 sm:basis-1/2 md:pl-4 lg:basis-1/3"
+                  className={cn("basis-full pl-3", !pl.preview && "sm:basis-1/2 md:pl-4 lg:basis-1/3")}
                 >
                   <motion.div
                     className="h-full border border-brand-navy/10 bg-white p-8 text-center transition-colors hover:border-brand-navy/25"
                     whileHover={reduceMotion ? undefined : { y: -2 }}
                     transition={{ type: "spring", stiffness: 380, damping: 28 }}
                   >
-                    <div className="mx-auto mb-6 aspect-square w-[min(7.5rem,42vw)] overflow-hidden border border-brand-navy/15 bg-primary">
+                    <div
+                      className={cn(
+                        "mx-auto mb-6 aspect-square overflow-hidden border border-brand-navy/15 bg-primary",
+                        pl.preview ? "w-28 max-w-full" : "w-[min(7.5rem,42vw)]"
+                      )}
+                    >
                       {member.image ? (
                         <ImageWithFallback
                           src={member.image}
@@ -489,16 +498,24 @@ export function AboutPage() {
             </CarouselContent>
             <CarouselPrevious
               aria-label="Anterior"
-              className="left-1 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-none border-brand-navy/25 bg-white text-brand-navy shadow-md hover:bg-brand-canvas disabled:opacity-40 sm:left-0"
+              className={cn(
+                "left-1 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-none border-brand-navy/25 bg-white text-brand-navy shadow-md hover:bg-brand-canvas disabled:opacity-40 sm:left-0",
+                pl.preview && "hidden"
+              )}
             />
             <CarouselNext
               aria-label="Siguiente"
-              className="right-1 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-none border-brand-navy/25 bg-white text-brand-navy shadow-md hover:bg-brand-canvas disabled:opacity-40 sm:right-0"
+              className={cn(
+                "right-1 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-none border-brand-navy/25 bg-white text-brand-navy shadow-md hover:bg-brand-canvas disabled:opacity-40 sm:right-0",
+                pl.preview && "hidden"
+              )}
             />
           </Carousel>
         </div>
       </section>
       </PreviewSectionChrome>
+
+      </main>
 
       <Footer />
     </div>

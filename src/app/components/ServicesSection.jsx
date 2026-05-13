@@ -1,112 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
+import { useVisualSiteEditorOptional } from "../../contexts/VisualSiteEditorContext";
+import { PreviewFieldPulse } from "./admin/siteEditor/PreviewFieldPulse";
+import { PreviewSectionChrome } from "./admin/siteEditor/PreviewSectionChrome";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
+import { resolveServiceCardPrimaryHref } from "../../lib/serviceCardPrimaryHref";
+import { serviceIconForKey, serviceOrbitAnglesDeg } from "../../lib/serviceIcons";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  Home,
-  Building2,
-  Settings2,
-  FileCheck2,
-  Scale,
-  BarChart3,
-  Phone,
-  Mail,
-  MessageCircle,
-} from "lucide-react";
-
-const SERVICES = [
-  {
-    id: 1,
-    index: "01",
-    tag: "ADQUISICIÓN",
-    name: "Venta de Propiedades",
-    description:
-      "Invierte en tu patrimonio con las mejores opciones del mercado. Te acompañamos en cada etapa para encontrar la propiedad ideal.",
-    benefits: [
-      "Análisis de inversión personalizado",
-      "Financiamiento disponible",
-      "Trámites legales incluidos",
-    ],
-    icon: Building2,
-    ctaLink: "/servicios/venta",
-  },
-  {
-    id: 2,
-    index: "02",
-    tag: "ARRENDAMIENTO",
-    name: "Renta de Propiedades",
-    description:
-      "Encuentra el hogar perfecto para ti en las mejores zonas de Guadalajara con acompañamiento personalizado en todo el proceso.",
-    benefits: [
-      "Propiedades verificadas y de calidad",
-      "Asesoría personalizada",
-      "Proceso rápido y seguro",
-    ],
-    icon: Home,
-    ctaLink: "/servicios/renta",
-  },
-  {
-    id: 3,
-    index: "03",
-    tag: "GESTIÓN",
-    name: "Administración de Propiedades",
-    description:
-      "Maximiza tu rentabilidad sin preocupaciones. Gestionamos tu propiedad con estándares profesionales y transparencia total.",
-    benefits: [
-      "Cobranza puntual de rentas",
-      "Mantenimiento preventivo",
-      "Atención profesional a inquilinos",
-    ],
-    icon: Settings2,
-    ctaLink: "/servicios/administracion",
-  },
-  {
-    id: 4,
-    index: "04",
-    tag: "VALORACIÓN",
-    name: "Avalúos y Valuación",
-    description:
-      "Conoce el valor real de tu propiedad con dictámenes certificados y respaldo legal para cualquier operación inmobiliaria.",
-    benefits: [
-      "Dictamen certificado oficial",
-      "Análisis comparativo de mercado",
-      "Respaldo legal completo",
-    ],
-    icon: BarChart3,
-    ctaLink: "/servicios/avaluos",
-  },
-  {
-    id: 5,
-    index: "05",
-    tag: "JURÍDICO",
-    name: "Asesoría Legal",
-    description:
-      "Protege tu inversión con asesoría jurídica especializada en derecho inmobiliario. Contratos, escrituras y due diligence.",
-    benefits: [
-      "Contratos a medida y revisión",
-      "Escrituración notarial",
-      "Seguridad jurídica garantizada",
-    ],
-    icon: Scale,
-    ctaLink: "/servicios/legal",
-  },
-  {
-    id: 6,
-    index: "06",
-    tag: "DESARROLLO",
-    name: "Desarrollos Inmobiliarios",
-    description:
-      "Proyectos exclusivos en preventa y construcción. Asegura tu inversión con los mejores precios de entrada al mercado.",
-    benefits: [
-      "Acceso a precios de preventa",
-      "Seguimiento puntual de obra",
-      "Garantía de desarrolladora",
-    ],
-    icon: FileCheck2,
-    ctaLink: "/servicios/desarrollos",
-  },
-];
+import { Phone, Mail, MessageCircle, Link2 } from "lucide-react";
 
 const FONT_TITLE = '"Poppins", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
 const FONT_UI = '"Poppins", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
@@ -124,53 +29,73 @@ const TOKENS = {
 };
 
 const CONTAINER = 500;
-const CENTER = CONTAINER / 2; // 280
+const CENTER = CONTAINER / 2;
 const RADIUS = 170;
 const NODE_DIAM = 48;
 const NODE_R = NODE_DIAM / 2;
 const RETURN_NODE_DIAM = 64;
 
-const ANGLES = [270, 330, 30, 90, 150, 210];
+function servicePanelContactIcon(icon) {
+  switch (icon) {
+    case "mail":
+      return Mail;
+    case "phone":
+      return Phone;
+    case "link":
+      return Link2;
+    default:
+      return MessageCircle;
+  }
+}
 
-const CONTACT_LINKS = {
-  whatsapp: "https://wa.me/523300000000?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20sus%20servicios.",
-  email: "mailto:contacto@viterra.mx",
-  phone: "tel:+523300000000",
-};
+/** Texto del enlace en el panel: con teléfono muestra el número (y la etiqueta si existe). */
+function panelContactLinkCaption(link) {
+  if (link.icon === "phone") {
+    const h = (link.href ?? "").trim();
+    const n = h.toLowerCase().startsWith("tel:") ? h.slice(4).trim() : "";
+    const lab = (link.label ?? "").trim();
+    if (lab && n) return `${lab} · ${n}`;
+    if (n) return n;
+    return lab || "Teléfono";
+  }
+  return (link.label ?? "").trim() || "Enlace";
+}
+
+/** Marca del nodo central y del estado vacío (`public/images/branding/…`). */
+const VITERRA_MARK_MONO_PNG = "/images/branding/viterra-mark-mono-alpha.png";
 
 function degToRad(deg) {
   return (deg * Math.PI) / 180;
 }
-function nodeCenter(angleDeg) {
-  // x = centerX + RADIUS * cos((angle - 90) * PI / 180)
+function nodeCenter(angleDeg, orbitR = RADIUS, gc = CENTER) {
   const a = degToRad(angleDeg - 90);
   return {
-    x: CENTER + RADIUS * Math.cos(a),
-    y: CENTER + RADIUS * Math.sin(a),
+    x: gc + orbitR * Math.cos(a),
+    y: gc + orbitR * Math.sin(a),
   };
 }
 
-function nodeEdge(angleDeg) {
+function nodeEdge(angleDeg, orbitR = RADIUS, gc = CENTER) {
   const a = degToRad(angleDeg - 90);
-  const d = RADIUS - NODE_R;
+  const d = orbitR - NODE_R;
   return {
-    x: CENTER + d * Math.cos(a),
-    y: CENTER + d * Math.sin(a),
+    x: gc + d * Math.cos(a),
+    y: gc + d * Math.sin(a),
   };
 }
 
-function nodeEdgeByRadius(angleDeg, nodeRadius) {
+function nodeEdgeByRadius(angleDeg, nodeRadius, orbitR = RADIUS, gc = CENTER) {
   const a = degToRad(angleDeg - 90);
-  const d = RADIUS - nodeRadius;
+  const d = orbitR - nodeRadius;
   return {
-    x: CENTER + d * Math.cos(a),
-    y: CENTER + d * Math.sin(a),
+    x: gc + d * Math.cos(a),
+    y: gc + d * Math.sin(a),
   };
 }
 
-function buildOrbitArc(fromAngle, toAngle, directionHint = null) {
-  const from = nodeCenter(fromAngle);
-  const to = nodeCenter(toAngle);
+function buildOrbitArc(fromAngle, toAngle, directionHint = null, orbitR = RADIUS, gc = CENTER) {
+  const from = nodeCenter(fromAngle, orbitR, gc);
+  const to = nodeCenter(toAngle, orbitR, gc);
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -205,25 +130,68 @@ function buildOrbitArc(fromAngle, toAngle, directionHint = null) {
 }
 
 export function ServicesSection() {
+  const inPreview = usePreviewCanvas();
+  const { content } = useSiteContent();
+  const mergedSvc = useMemo(() => mergeSiteSection("services", content.services), [content.services]);
+  const SERVICES = useMemo(
+    () =>
+      mergedSvc.cards.map((c, i) => ({
+        id: i + 1,
+        index: String(i + 1).padStart(2, "0"),
+        tag: (c.tag ?? "").trim(),
+        name: c.title,
+        description: c.description,
+        benefits: Array.isArray(c.bullets) && c.bullets.length > 0 ? [...c.bullets] : [""],
+        icon: serviceIconForKey(c.iconKey),
+        slug: c.slug,
+        linkLabel: (c.linkLabel ?? "").trim() || "Conocer más",
+        ctaLink: resolveServiceCardPrimaryHref(c),
+        contactLinks: Array.isArray(c.contactLinks) ? c.contactLinks : [],
+      })),
+    [mergedSvc.cards],
+  );
+  const ANGLES = useMemo(() => serviceOrbitAnglesDeg(SERVICES.length), [SERVICES.length]);
+
+  /** Radio y lienzo dinámicos: más nodos → órbita más grande y scroll horizontal si hace falta. */
+  const orbitLayout = useMemo(() => {
+    const n = Math.max(SERVICES.length, 1);
+    const MIN_CHORD = 88;
+    let orbitR = RADIUS;
+    if (n > 1) {
+      orbitR = Math.min(252, Math.max(RADIUS, MIN_CHORD / (2 * Math.sin(Math.PI / n))));
+    }
+    const labelPad = 96;
+    const halfExtent = Math.ceil(orbitR + NODE_R + labelPad);
+    const canvas = Math.max(CONTAINER, halfExtent * 2);
+    const gc = canvas / 2;
+    return { orbitR, canvas, gc };
+  }, [SERVICES.length]);
+
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1280));
   const [activeIndex, setActiveIndex] = useState(0);
+  const visualEditor = useVisualSiteEditorOptional();
+  const editorCardIndex = useMemo(() => {
+    if (!visualEditor?.enabled || !visualEditor.activeBlockId) return null;
+    const m = /^services-card-(\d+)$/.exec(visualEditor.activeBlockId);
+    return m ? Number(m[1]) : null;
+  }, [visualEditor?.enabled, visualEditor?.activeBlockId]);
   const [swappedIndex, setSwappedIndex] = useState(null); // nodo de servicio que intercambia lugar con Viterra
   const [clickFx, setClickFx] = useState({ key: 0, x: CENTER, y: CENTER });
   const [returnPathAnim, setReturnPathAnim] = useState(null);
   const prevSwappedRef = useRef(null);
   const navDirectionRef = useRef(null);
+  const isCompactLayout = inPreview || viewportWidth < 1024;
   const active = activeIndex !== null ? SERVICES[activeIndex] : null;
   const ActiveCenterIcon = active?.icon;
   const isSwapped = swappedIndex !== null;
   const graphTargetIndex = activeIndex;
-  const viterraPos = isSwapped ? nodeCenter(ANGLES[swappedIndex] ?? 270) : { x: CENTER, y: CENTER };
-  const isCompactLayout = viewportWidth < 1024;
   const graphScale = useMemo(() => {
     if (!isCompactLayout) return 1;
-    const safeWidth = Math.max(300, viewportWidth - 48);
-    return Math.max(0.62, Math.min(1, safeWidth / CONTAINER));
-  }, [isCompactLayout, viewportWidth]);
-  const graphShellSize = CONTAINER * graphScale;
+    const basis = inPreview ? Math.min(viewportWidth, 560) : viewportWidth;
+    const safeWidth = Math.max(300, basis - 48);
+    return Math.max(0.62, Math.min(1, safeWidth / orbitLayout.canvas));
+  }, [isCompactLayout, viewportWidth, inPreview, orbitLayout.canvas]);
+  const graphShellSize = orbitLayout.canvas * graphScale;
 
   const activeId = active?.id ?? "none";
 
@@ -236,6 +204,20 @@ export function ServicesSection() {
   }, []);
 
   useEffect(() => {
+    const n = SERVICES.length;
+    if (n <= 0) return;
+    setActiveIndex((i) => Math.min(Math.max(0, i ?? 0), n - 1));
+  }, [SERVICES.length]);
+
+  useEffect(() => {
+    if (editorCardIndex === null || !Number.isFinite(editorCardIndex)) return;
+    const n = SERVICES.length;
+    if (n <= 0) return;
+    const clamped = Math.min(Math.max(0, editorCardIndex), n - 1);
+    setActiveIndex((cur) => (cur === clamped ? cur : clamped));
+  }, [editorCardIndex, SERVICES.length]);
+
+  useEffect(() => {
     if (swappedIndex === null) {
       prevSwappedRef.current = null;
       setReturnPathAnim(null);
@@ -246,7 +228,7 @@ export function ServicesSection() {
     if (prevIdx !== null && prevIdx !== swappedIndex) {
       const fromAngle = ANGLES[prevIdx] ?? 270;
       const toAngle = ANGLES[swappedIndex] ?? 270;
-      const arcPoints = buildOrbitArc(fromAngle, toAngle, navDirectionRef.current);
+      const arcPoints = buildOrbitArc(fromAngle, toAngle, navDirectionRef.current, orbitLayout.orbitR, orbitLayout.gc);
       setReturnPathAnim({
         points: arcPoints,
         key: Date.now(),
@@ -257,14 +239,15 @@ export function ServicesSection() {
 
     navDirectionRef.current = null;
     prevSwappedRef.current = swappedIndex;
-  }, [swappedIndex]);
+  }, [swappedIndex, ANGLES, orbitLayout.orbitR, orbitLayout.gc]);
 
   const shiftService = (direction) => {
     navDirectionRef.current = direction;
     const base = activeIndex ?? 0;
     const nextIndex = (base + direction + SERVICES.length) % SERVICES.length;
     setActiveIndex(nextIndex);
-    const p = nodeCenter(ANGLES[nextIndex] ?? 270);
+    visualEditor?.setActiveBlockId?.(`services-card-${nextIndex}`);
+    const p = nodeCenter(ANGLES[nextIndex] ?? 270, orbitLayout.orbitR, orbitLayout.gc);
     setClickFx({ key: Date.now(), x: p.x, y: p.y });
   };
 
@@ -278,7 +261,8 @@ export function ServicesSection() {
     navDirectionRef.current = cwSteps <= ccwSteps ? 1 : -1;
 
     setActiveIndex(targetIndex);
-    const p = nodeCenter(ANGLES[targetIndex] ?? 270);
+    visualEditor?.setActiveBlockId?.(`services-card-${targetIndex}`);
+    const p = nodeCenter(ANGLES[targetIndex] ?? 270, orbitLayout.orbitR, orbitLayout.gc);
     setClickFx({ key: Date.now(), x: p.x, y: p.y });
   };
 
@@ -286,7 +270,9 @@ export function ServicesSection() {
     <section
       style={{
         height: "auto",
-        minHeight: "calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px)",
+        minHeight: inPreview
+          ? "min(720px, calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px))"
+          : "calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px)",
         width: "100%",
         background: "#FFFFFF",
         marginTop: 0,
@@ -303,9 +289,11 @@ export function ServicesSection() {
       <div
         className="services-grid grid"
         style={{
-          gridTemplateColumns: "50% 50%",
+          gridTemplateColumns: inPreview ? "1fr" : "50% 50%",
           height: "auto",
-          minHeight: "calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px)",
+          minHeight: inPreview
+            ? "min(720px, calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px))"
+            : "calc(100dvh - var(--viterra-sticky-header-offset, 72px) - 24px)",
         }}
       >
         {/* COLUMN A */}
@@ -314,7 +302,8 @@ export function ServicesSection() {
             background: "#FFFFFF",
             borderRight: "none",
             position: "relative",
-            overflow: "hidden",
+            overflowX: "auto",
+            overflowY: "hidden",
             padding: 0,
             display: "flex",
             flexDirection: "column",
@@ -348,16 +337,19 @@ export function ServicesSection() {
               alignItems: "center",
               justifyContent: "center",
               minHeight: isCompactLayout ? Math.max(320, graphShellSize + 26) : undefined,
-            padding: isCompactLayout ? "24px 8px 14px 8px" : "20px 8px 12px 8px",
+              padding: isCompactLayout ? "24px 8px 14px 8px" : "20px 8px 12px 8px",
+              overflowX: "auto",
+              overflowY: "hidden",
+              WebkitOverflowScrolling: "touch",
             }}
           >
             <div
               style={{
                 position: "relative",
-                width: CONTAINER,
-                height: CONTAINER,
-                minWidth: CONTAINER,
-                minHeight: CONTAINER,
+                width: orbitLayout.canvas,
+                height: orbitLayout.canvas,
+                minWidth: orbitLayout.canvas,
+                minHeight: orbitLayout.canvas,
                 overflow: "visible",
                 transform: `scale(${graphScale})`,
                 transformOrigin: "center center",
@@ -366,19 +358,19 @@ export function ServicesSection() {
               <svg
                 aria-hidden
                 style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}
-                viewBox={`0 0 ${CONTAINER} ${CONTAINER}`}
+                viewBox={`0 0 ${orbitLayout.canvas} ${orbitLayout.canvas}`}
               >
                 <defs>
                   {SERVICES.map((_, i) => {
                     const angle = ANGLES[i] ?? 270;
-                    const nc = nodeCenter(angle);
+                    const nc = nodeCenter(angle, orbitLayout.orbitR, orbitLayout.gc);
                     return (
                       <g key={`grad-${i}`}>
                         <linearGradient
                           id={`lineInactiveGrad-${i}`}
                           gradientUnits="userSpaceOnUse"
-                          x1={CENTER}
-                          y1={CENTER}
+                          x1={orbitLayout.gc}
+                          y1={orbitLayout.gc}
                           x2={nc.x}
                           y2={nc.y}
                         >
@@ -388,8 +380,8 @@ export function ServicesSection() {
                         <linearGradient
                           id={`lineActiveGrad-${i}`}
                           gradientUnits="userSpaceOnUse"
-                          x1={CENTER}
-                          y1={CENTER}
+                          x1={orbitLayout.gc}
+                          y1={orbitLayout.gc}
                           x2={nc.x}
                           y2={nc.y}
                         >
@@ -404,9 +396,9 @@ export function ServicesSection() {
                 {graphTargetIndex !== null ? (() => {
                   const e =
                     isSwapped && graphTargetIndex === swappedIndex
-                      ? nodeEdgeByRadius(ANGLES[graphTargetIndex] ?? 270, RETURN_NODE_DIAM / 2)
-                      : nodeEdge(ANGLES[graphTargetIndex] ?? 270);
-                  const activeD = `M ${CENTER} ${CENTER} L ${e.x} ${e.y}`;
+                      ? nodeEdgeByRadius(ANGLES[graphTargetIndex] ?? 270, RETURN_NODE_DIAM / 2, orbitLayout.orbitR, orbitLayout.gc)
+                      : nodeEdge(ANGLES[graphTargetIndex] ?? 270, orbitLayout.orbitR, orbitLayout.gc);
+                  const activeD = `M ${orbitLayout.gc} ${orbitLayout.gc} L ${e.x} ${e.y}`;
                   return (
                     <path id="activePath" d={activeD} fill="none" stroke="none" strokeWidth={0} pointerEvents="none" />
                   );
@@ -414,14 +406,14 @@ export function ServicesSection() {
 
                 {SERVICES.map((_, idx) => {
                   const angle = ANGLES[idx] ?? 270;
-                  const edge = nodeEdge(angle);
+                  const edge = nodeEdge(angle, orbitLayout.orbitR, orbitLayout.gc);
                   const isActive = graphTargetIndex !== null && idx === graphTargetIndex;
                   const gradId = isActive ? `lineActiveGrad-${idx}` : `lineInactiveGrad-${idx}`;
                   return (
                     <motion.line
                       key={`l-${idx}`}
-                      x1={CENTER}
-                      y1={CENTER}
+                      x1={orbitLayout.gc}
+                      y1={orbitLayout.gc}
                       x2={edge.x}
                       y2={edge.y}
                       stroke={`url(#${gradId})`}
@@ -451,7 +443,7 @@ export function ServicesSection() {
                   if (isSwapped) {
                     setSwappedIndex(null);
                     setActiveIndex(null);
-                    setClickFx({ key: Date.now(), x: CENTER, y: CENTER });
+                    setClickFx({ key: Date.now(), x: orbitLayout.gc, y: orbitLayout.gc });
                     return;
                   }
                   if (!isSwapped) {
@@ -461,8 +453,8 @@ export function ServicesSection() {
                 aria-label="Viterra nodo central"
                 style={{
                   position: "absolute",
-                  left: CENTER - 44,
-                  top: CENTER - 44,
+                  left: orbitLayout.gc - 44,
+                  top: orbitLayout.gc - 44,
                   width: 88,
                   height: 88,
                   borderRadius: "50%",
@@ -557,13 +549,15 @@ export function ServicesSection() {
                 >
                   {!isSwapped ? (
                     <img
-                      src="/images/branding/viterra-mark-mono-alpha.png"
+                      src={VITERRA_MARK_MONO_PNG}
                       alt=""
+                      width={1024}
+                      height={264}
+                      decoding="async"
                       style={{
                         width: 62,
                         height: 62,
                         objectFit: "contain",
-                        filter: "brightness(0) invert(1)",
                       }}
                     />
                   ) : (
@@ -575,11 +569,19 @@ export function ServicesSection() {
               {/* Service nodes */}
               {SERVICES.map((s, i) => {
                 const angle = ANGLES[i] ?? 270;
-                const p = nodeCenter(angle);
+                const p = nodeCenter(angle, orbitLayout.orbitR, orbitLayout.gc);
                 const isReturnNode = false;
                 const nodeSize = NODE_DIAM;
                 const isActive = graphTargetIndex !== null && i === graphTargetIndex;
                 const isArrivalTarget = graphTargetIndex !== null && i === graphTargetIndex;
+                const tipDx = p.x - orbitLayout.gc;
+                const tipDy = p.y - orbitLayout.gc;
+                const tipLen = Math.hypot(tipDx, tipDy) || 1;
+                const tipUx = tipDx / tipLen;
+                const tipUy = tipDy / tipLen;
+                const tipDist = 62;
+                const editorNodeSelected =
+                  visualEditor?.enabled && visualEditor.activeBlockId === `services-card-${i}`;
 
                 return (
                   <motion.div
@@ -595,7 +597,7 @@ export function ServicesSection() {
                         isReturnNode && returnPathAnim
                           ? returnPathAnim.points[0].y - nodeSize / 2
                           : p.y - nodeSize / 2,
-                      zIndex: 4,
+                      zIndex: editorNodeSelected ? 8 : 4,
                     }}
                     animate={
                       isReturnNode && returnPathAnim
@@ -614,85 +616,111 @@ export function ServicesSection() {
                       if (isReturnNode && returnPathAnim) setReturnPathAnim(null);
                     }}
                   >
-                    <motion.button
-                      type="button"
-                      className={`ne-snode${isActive ? " ne-snode--active" : ""}${isArrivalTarget ? " ne-snode--arrival-pulse" : ""}`}
-                      onClick={() => {
-                        setActiveIndex(i);
-                        setSwappedIndex(null);
-                        setClickFx({ key: Date.now(), x: p.x, y: p.y });
-                      }}
-                      aria-label={`Servicio ${s.index}`}
-                      initial={{ opacity: 0, scale: 0.6 }}
-                      whileHover={
-                        isActive
-                          ? {}
-                          : {
-                              scale: 1.08,
-                              backgroundColor: "rgba(185,28,28,0.1)",
-                              borderColor: "rgba(185,28,28,0.5)",
-                              boxShadow: "0 0 14px rgba(185,28,28,0.2)",
-                            }
-                      }
-                      animate={{
-                        opacity: 1,
-                        scale: isActive ? [1, 1.1, 1] : 1,
-                        backgroundColor: isActive ? "#B91C1C" : "rgba(15,23,42,0.08)",
-                        borderColor: isActive ? "#B91C1C" : "rgba(15,23,42,0.28)",
-                        boxShadow: isActive
-                          ? "0 0 0 3px rgba(185,28,28,0.14), 0 0 16px rgba(185,28,28,0.28)"
-                          : "0 0 0 0 rgba(0,0,0,0)",
-                      }}
-                      transition={{
-                        opacity: { delay: i * 0.1, duration: 0.4, ease: "easeOut" },
-                        scale: isActive
-                          ? { duration: 0.35, ease: "easeOut" }
-                          : { delay: i * 0.1, duration: 0.4, ease: "easeOut" },
-                        backgroundColor: { duration: 0.2, ease: "easeOut" },
-                        borderColor: { duration: 0.2, ease: "easeOut" },
-                        boxShadow: { duration: 0.25, ease: "easeOut" },
-                      }}
-                      style={{
-                        position: "relative",
-                        width: nodeSize,
-                        height: nodeSize,
-                        borderRadius: 8,
-                        border: "1px solid rgba(15,23,42,0.28)",
-                        display: "grid",
-                        placeItems: "center",
-                        cursor: "pointer",
-                        backdropFilter: "blur(4px)",
-                        WebkitBackdropFilter: "blur(4px)",
-                      }}
+                    <PreviewSectionChrome
+                      blockId={`services-card-${i}`}
+                      label={`Tarjeta ${i + 1}`}
+                      compact
                     >
-                      {isActive ? (
-                        <span
-                          className="ne-snode-pulse"
-                          aria-hidden
-                          style={{
-                            position: "absolute",
-                            top: -3,
-                            right: -3,
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: "#ffffff",
-                            border: "1.5px solid #B91C1C",
-                            pointerEvents: "none",
-                          }}
-                        />
-                      ) : null}
-                      <s.icon
-                        className="ne-snode-icon"
-                        size={18}
+                      <div
                         style={{
-                          color: isActive ? "#ffffff" : "rgba(15,23,42,0.68)",
-                          transition: "color 0.2s ease",
+                          position: "relative",
+                          width: nodeSize,
+                          height: nodeSize,
                         }}
-                      />
-                    </motion.button>
+                      >
+                        <motion.button
+                          type="button"
+                          className={`ne-snode${isActive ? " ne-snode--active" : ""}${isArrivalTarget ? " ne-snode--arrival-pulse" : ""}`}
+                          onClick={() => {
+                            setActiveIndex(i);
+                            visualEditor?.setActiveBlockId?.(`services-card-${i}`);
+                            setSwappedIndex(null);
+                            setClickFx({ key: Date.now(), x: p.x, y: p.y });
+                          }}
+                          aria-label={`Servicio ${s.index}`}
+                          initial={{ opacity: 0, scale: 0.6 }}
+                          whileHover={
+                            isActive
+                              ? {}
+                              : {
+                                  scale: 1.08,
+                                  backgroundColor: "rgba(185,28,28,0.1)",
+                                  borderColor: "rgba(185,28,28,0.5)",
+                                  boxShadow: "0 0 14px rgba(185,28,28,0.2)",
+                                }
+                          }
+                          animate={{
+                            opacity: 1,
+                            scale: isActive ? [1, 1.1, 1] : 1,
+                            backgroundColor: isActive ? "#B91C1C" : "rgba(15,23,42,0.08)",
+                            borderColor: isActive ? "#B91C1C" : "rgba(15,23,42,0.28)",
+                            boxShadow: isActive
+                              ? "0 0 0 3px rgba(185,28,28,0.14), 0 0 16px rgba(185,28,28,0.28)"
+                              : "0 0 0 0 rgba(0,0,0,0)",
+                          }}
+                          transition={{
+                            opacity: { delay: i * 0.1, duration: 0.4, ease: "easeOut" },
+                            scale: isActive
+                              ? { duration: 0.35, ease: "easeOut" }
+                              : { delay: i * 0.1, duration: 0.4, ease: "easeOut" },
+                            backgroundColor: { duration: 0.2, ease: "easeOut" },
+                            borderColor: { duration: 0.2, ease: "easeOut" },
+                            boxShadow: { duration: 0.25, ease: "easeOut" },
+                          }}
+                          style={{
+                            position: "relative",
+                            width: nodeSize,
+                            height: nodeSize,
+                            borderRadius: 8,
+                            border: "1px solid rgba(15,23,42,0.28)",
+                            display: "grid",
+                            placeItems: "center",
+                            cursor: "pointer",
+                            backdropFilter: "blur(4px)",
+                            WebkitBackdropFilter: "blur(4px)",
+                          }}
+                        >
+                          {isActive ? (
+                            <span
+                              className="ne-snode-pulse"
+                              aria-hidden
+                              style={{
+                                position: "absolute",
+                                top: -3,
+                                right: -3,
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                background: "#ffffff",
+                                border: "1.5px solid #B91C1C",
+                                pointerEvents: "none",
+                              }}
+                            />
+                          ) : null}
+                          <PreviewFieldPulse
+                            blockId={`services-card-${i}`}
+                            fieldKey={`services-card-${i}-icon`}
+                            className="inline-flex"
+                          >
+                            <s.icon
+                              className="ne-snode-icon"
+                              size={18}
+                              style={{
+                                color: isActive ? "#ffffff" : "rgba(15,23,42,0.68)",
+                                transition: "color 0.2s ease",
+                              }}
+                            />
+                          </PreviewFieldPulse>
+                        </motion.button>
 
-                    <div className="ne-tip">{s.name}</div>
+                        <div
+                          className="ne-tip"
+                          style={{ transform: `translate(-50%, -50%) translate(${tipUx * tipDist}px, ${tipUy * tipDist}px)` }}
+                        >
+                          {s.name}
+                        </div>
+                      </div>
+                    </PreviewSectionChrome>
                   </motion.div>
                 );
               })}
@@ -832,9 +860,10 @@ export function ServicesSection() {
             }
             .ne-tip {
               position: absolute;
-              bottom: calc(100% + 10px);
-              left: 50%;
-              transform: translate(-50%, 4px);
+              left: 24px;
+              top: 24px;
+              right: auto;
+              bottom: auto;
               background: rgba(255,255,255,0.96);
               border: 1px solid rgba(15,23,42,0.24);
               color: rgba(15,23,42,0.92);
@@ -842,26 +871,22 @@ export function ServicesSection() {
               font-family: inherit;
               font-weight: 600;
               letter-spacing: 0.04em;
-              padding: 5px 10px;
+              padding: 6px 10px;
               border-radius: 4px;
-              white-space: nowrap;
+              text-align: center;
+              line-height: 1.25;
+              max-width: min(168px, 42vw);
+              white-space: normal;
+              overflow-wrap: anywhere;
+              word-break: break-word;
               pointer-events: none;
               z-index: 50;
               opacity: 0;
-              transition: opacity 0.15s ease, transform 0.15s ease;
-            }
-            .ne-tip::after {
-              content: "";
-              position: absolute;
-              bottom: -8px;
-              left: 50%;
-              transform: translateX(-50%);
-              border: 4px solid transparent;
-              border-top-color: rgba(255,255,255,0.96);
+              transition: opacity 0.15s ease;
+              box-shadow: 0 4px 14px rgba(15,23,42,0.08);
             }
             .ne-nodewrap:hover .ne-tip {
               opacity: 1;
-              transform: translate(-50%, 0);
             }
           `}</style>
         </aside>
@@ -907,7 +932,13 @@ export function ServicesSection() {
                   borderBottom: "2px solid rgba(230,48,48,0.9)",
                 }}
               >
-                {active.name}
+                <PreviewFieldPulse
+                  blockId={`services-card-${activeIndex}`}
+                  fieldKey={`services-card-${activeIndex}-title`}
+                  className="block"
+                >
+                  {active.name}
+                </PreviewFieldPulse>
               </h3>
 
               <div style={{ width: 52, height: 2, background: "linear-gradient(90deg, #FB7185, rgba(251,113,133,0.25))", marginBottom: 24 }} />
@@ -923,9 +954,20 @@ export function ServicesSection() {
                   marginBottom: 28,
                 }}
               >
-                {active.description}
+                <PreviewFieldPulse
+                  blockId={`services-card-${activeIndex}`}
+                  fieldKey={`services-card-${activeIndex}-description`}
+                  className="block"
+                >
+                  {active.description}
+                </PreviewFieldPulse>
               </p>
 
+              <PreviewFieldPulse
+                blockId={`services-card-${activeIndex}`}
+                fieldKey={`services-card-${activeIndex}-bullets`}
+                className="block w-full"
+              >
               <div style={{ marginBottom: 28, display: "grid", gap: 10, position: "relative" }}>
                 {active.benefits.map((b, idx) => (
                   <div
@@ -975,6 +1017,7 @@ export function ServicesSection() {
                   </div>
                 ))}
               </div>
+              </PreviewFieldPulse>
 
               <div
                 style={{
@@ -986,59 +1029,41 @@ export function ServicesSection() {
                   flexWrap: "wrap",
                 }}
               >
-                <a
-                  href={CONTACT_LINKS.whatsapp}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    color: "rgba(248,250,252,0.86)",
-                    textDecoration: "none",
-                    fontFamily: FONT_UI,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  <MessageCircle size={14} color="#F8FAFC" />
-                  WhatsApp
-                </a>
-                <a
-                  href={CONTACT_LINKS.email}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    color: "rgba(248,250,252,0.86)",
-                    textDecoration: "none",
-                    fontFamily: FONT_UI,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  <Mail size={14} color="#F8FAFC" />
-                  Correo
-                </a>
-                <a
-                  href={CONTACT_LINKS.phone}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    color: "rgba(248,250,252,0.86)",
-                    textDecoration: "none",
-                    fontFamily: FONT_UI,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  <Phone size={14} color="#F8FAFC" />
-                  Llamada
-                </a>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16 }}>
+                  {active.contactLinks.map((link, li) => {
+                    const Icon = servicePanelContactIcon(link.icon);
+                    const href = (link.href ?? "").trim();
+                    if (!href) return null;
+                    const openExternal = /^https?:\/\//i.test(href);
+                    return (
+                      <PreviewFieldPulse
+                        key={`${active.id}-cl-${li}`}
+                        blockId={`services-card-${activeIndex}`}
+                        fieldKey={`services-card-${activeIndex}-contact-${li}`}
+                        className="inline-flex"
+                      >
+                        <a
+                          href={href}
+                          {...(openExternal ? { target: "_blank", rel: "noreferrer" } : {})}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 7,
+                            color: "rgba(248,250,252,0.86)",
+                            textDecoration: "none",
+                            fontFamily: FONT_UI,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            letterSpacing: "0.02em",
+                          }}
+                        >
+                          <Icon size={14} color="#F8FAFC" />
+                          {panelContactLinkCaption(link)}
+                        </a>
+                      </PreviewFieldPulse>
+                    );
+                  })}
+                </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
                   <button
@@ -1084,25 +1109,45 @@ export function ServicesSection() {
               </div>
 
               <div style={{ marginTop: "auto", paddingTop: 4 }}>
-                <Link
-                  to={active.ctaLink}
-                  style={{
-                    fontFamily: FONT_UI,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: "0.03em",
-                    background: "transparent",
-                    color: "rgba(248,250,252,0.8)",
-                    border: "none",
-                    padding: 0,
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                  }}
-                  className="ne-cta"
+                {active.ctaLink ? (
+                <PreviewFieldPulse
+                  blockId={`services-card-${activeIndex}`}
+                  fieldKey={`services-card-${activeIndex}-slug`}
+                  className="inline-flex"
                 >
-                  Conocer más sobre este servicio
-                </Link>
+                  <PreviewFieldPulse
+                    blockId={`services-card-${activeIndex}`}
+                    fieldKey={`services-card-${activeIndex}-primary`}
+                    className="inline-flex"
+                  >
+                    <PreviewFieldPulse
+                      blockId={`services-card-${activeIndex}`}
+                      fieldKey={`services-card-${activeIndex}-linkLabel`}
+                      className="inline-flex"
+                    >
+                      <Link
+                        to={active.ctaLink}
+                        style={{
+                          fontFamily: FONT_UI,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          letterSpacing: "0.03em",
+                          background: "transparent",
+                          color: "rgba(248,250,252,0.8)",
+                          border: "none",
+                          padding: 0,
+                          textDecoration: "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                        }}
+                        className="ne-cta"
+                      >
+                        {active.linkLabel}
+                      </Link>
+                    </PreviewFieldPulse>
+                  </PreviewFieldPulse>
+                </PreviewFieldPulse>
+                ) : null}
               </div>
               </motion.div>
             ) : (
@@ -1194,8 +1239,11 @@ export function ServicesSection() {
                 />
                 <img
                   className="ne-empty-logo"
-                  src="/images/branding/viterra-mark-red-alpha.png"
+                  src={VITERRA_MARK_MONO_PNG}
                   alt=""
+                  width={1024}
+                  height={264}
+                  decoding="async"
                   style={{
                     width: 220,
                     height: 220,
@@ -1258,6 +1306,11 @@ export function ServicesSection() {
               }
             }
 
+            @media (prefers-reduced-motion: reduce) {
+              .ne-empty-logo {
+                animation: none !important;
+              }
+            }
             @keyframes neEmptyGlowPulse {
               0%, 100% { opacity: 0.78; transform: scale(1); }
               50% { opacity: 1; transform: scale(1.05); }

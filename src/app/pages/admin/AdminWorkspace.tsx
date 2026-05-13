@@ -381,6 +381,10 @@ export function AdminWorkspace() {
   const isAdmin = user?.role === "admin";
   const isAdvisor = user?.role === "asesor";
   const canAccessCompanyModule = !isAdvisor;
+  const canEditSite = useMemo(
+    () => !isAdvisor && (isAdmin || (user?.permissions?.includes("edit_site") ?? false)),
+    [isAdvisor, isAdmin, user],
+  );
   // Inventario (propiedades/desarrollos) solo editable por administradores.
   const canManageInventory = user?.role === "admin";
 
@@ -725,6 +729,14 @@ export function AdminWorkspace() {
     if (activeTab !== "company") return;
     navigate(buildAdminHref("dashboard"), { replace: true });
   }, [isAdvisor, activeTab, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (canEditSite) return;
+    if (activeTab === "sitio" || (activeTab === "company" && companySubtab === "site")) {
+      navigate(buildAdminHref("dashboard"), { replace: true });
+    }
+  }, [user, canEditSite, activeTab, companySubtab, navigate]);
 
   useEffect(() => {
     if (!activePipelineGroupId) return;
@@ -2077,6 +2089,17 @@ export function AdminWorkspace() {
         keywords: ["actividades", "timeline", "historial", "cambios", "precio", "inventario"],
         action: () => goTab("activities"),
       },
+      ...(canEditSite
+        ? [
+            {
+              id: "sitio-editor",
+              title: "Sitio web · Editor",
+              description: "Editor visual del contenido público",
+              keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
+              action: () => goTab("sitio"),
+            },
+          ]
+        : []),
       ...(canAccessCompanyModule
         ? (isGroupLeader
         ? [
@@ -2098,15 +2121,6 @@ export function AdminWorkspace() {
               keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
               action: () => {
                 goTab("company", "users");
-              },
-            },
-            {
-              id: "company-site",
-              title: "Mi empresa · Editar sitio",
-              description: "Editor visual del sitio web",
-              keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
-              action: () => {
-                goTab("company", "site");
               },
             },
             {
@@ -2172,7 +2186,7 @@ export function AdminWorkspace() {
         action: () => navigate("/contacto"),
       },
     ],
-    [navigate, goTab, canAccessClients, isGroupLeader, canAccessCompanyModule]
+    [navigate, goTab, canAccessClients, isGroupLeader, canAccessCompanyModule, canEditSite]
   );
 
   const headerSearchValue = adminHeaderQuery;
@@ -2342,6 +2356,18 @@ export function AdminWorkspace() {
                   <History className="h-4 w-4" strokeWidth={activeTab === "activities" ? 2 : 1.75} />
                   Actividades
                 </button>
+                {canEditSite && (
+                  <button
+                    type="button"
+                    onClick={() => goTab("sitio")}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                      activeTab === "sitio" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Globe2 className="h-4 w-4" strokeWidth={activeTab === "sitio" ? 2 : 1.75} />
+                    Sitio web
+                  </button>
+                )}
                 {canAccessCompanyModule && (
                   <button
                     type="button"
@@ -2407,7 +2433,12 @@ export function AdminWorkspace() {
         </div>
       </aside>
 
-      <div className="transform-none px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8">
+      <div
+        className={cn(
+          "transform-none px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8",
+          activeTab === "sitio" && canEditSite && "pb-2 pt-2 sm:pb-2 sm:pt-2 lg:pb-2"
+        )}
+      >
         {activeTab === "dashboard" && (
           <header
             className="relative z-20 mb-6 overflow-visible rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
@@ -2580,6 +2611,7 @@ export function AdminWorkspace() {
               { id: "properties", label: "Propiedades", icon: Home },
               { id: "developments", label: "Desarrollos", icon: Building2 },
               { id: "activities", label: "Actividades", icon: History },
+              ...(canEditSite ? [{ id: "sitio", label: "Sitio web", icon: Globe2 }] : []),
               ...(canAccessCompanyModule
                 ? [{ id: "company", label: isGroupLeader ? "Pipeline de ventas" : "Mi empresa", icon: Briefcase }]
                 : []),
@@ -3268,6 +3300,16 @@ export function AdminWorkspace() {
           />
         )}
 
+        {activeTab === "sitio" && canEditSite && (
+          <div className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-2 shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03] sm:p-2.5 md:p-3 lg:h-[calc(100dvh-0.5rem)] lg:max-h-[calc(100dvh-0.5rem)]">
+            <Suspense fallback={adminModuleFallback()}>
+              <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+                <AdminSiteEditor />
+              </div>
+            </Suspense>
+          </div>
+        )}
+
         {/* Properties Tab */}
         {activeTab === "properties" &&
           (catalogPropertiesLoading ? (
@@ -3916,7 +3958,7 @@ export function AdminWorkspace() {
               </div>
             </div>
 
-            {!isGroupLeader && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
+            {!isGroupLeader && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
               {(
                 [
                   {
@@ -3924,12 +3966,6 @@ export function AdminWorkspace() {
                     title: "Equipo y accesos",
                     desc: "Usuarios del CRM, roles y permisos.",
                     icon: Users,
-                  },
-                  {
-                    id: "site" as const,
-                    title: "Sitio web",
-                    desc: "Contenido y bloques del sitio público.",
-                    icon: Globe2,
                   },
                   {
                     id: "leadStages" as const,
@@ -4017,10 +4053,12 @@ export function AdminWorkspace() {
                   />
                 </div>
               )}
-              {companySubtab === "site" && (
-                <div className="p-5 md:p-8">
+              {companySubtab === "site" && canEditSite && (
+                <div className="flex h-[calc(100dvh-1.25rem)] max-h-[calc(100dvh-1.25rem)] min-h-0 w-full flex-col overflow-hidden p-2 sm:p-2.5 md:p-3 lg:h-[calc(100dvh-0.75rem)] lg:max-h-[calc(100dvh-0.75rem)]">
                   <Suspense fallback={adminModuleFallback()}>
-                    <AdminSiteEditor />
+                    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+                      <AdminSiteEditor />
+                    </div>
                   </Suspense>
                 </div>
               )}

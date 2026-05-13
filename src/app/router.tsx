@@ -29,6 +29,10 @@ export const router = createBrowserRouter([
         lazy: lazyPage(() => import("./pages/SalePage"), "SalePage"),
       },
       {
+        path: "/servicios/d/:slug",
+        lazy: lazyPage(() => import("./pages/ServiceDetailPage"), "ServiceDetailPage"),
+      },
+      {
         path: "/servicios",
         lazy: lazyPage(() => import("./pages/ServicesPage"), "ServicesPage"),
       },
@@ -74,6 +78,10 @@ export const router = createBrowserRouter([
         Component: AdminLayout,
         children: [
           { index: true, element: <Navigate to="/admin/dashboard" replace /> },
+          {
+            path: "site-preview-frame",
+            lazy: lazyPage(() => import("./pages/admin/SitePreviewFramePage"), "SitePreviewFramePage"),
+          },
           {
             path: "*",
             lazy: lazyPage(() => import("./pages/admin/AdminWorkspace"), "AdminWorkspace"),

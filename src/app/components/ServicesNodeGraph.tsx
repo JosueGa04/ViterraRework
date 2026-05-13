@@ -3,18 +3,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  Home,
-  Building2,
-  BarChart3,
-  FileCheck2,
-  Scale,
-  Settings2,
-  ArrowRight,
-  CheckCircle2,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { serviceIconForKey, serviceOrbitAnglesDeg } from "../../lib/serviceIcons";
+import { resolveServiceCardPrimaryHref } from "../../lib/serviceCardPrimaryHref";
 import type { ServiceCardContent } from "../../data/siteContent";
+import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +27,6 @@ const CY = 260;
 
 // Hexágono perfecto (viewBox units ~ px)
 const RADIUS = 140;
-const HEX_ANGLES_DEG = [90, 30, 330, 270, 210, 150] as const;
 
 // Movimiento mínimo opcional (solo respiración)
 const WANDER_AMP = 6;
@@ -48,9 +40,9 @@ function degToRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
 
-function hexPointBySlot(slot: number) {
-  const deg = HEX_ANGLES_DEG[Math.max(0, Math.min(HEX_ANGLES_DEG.length - 1, slot))]!;
-  // Fórmula solicitada: cos((deg - 90)...), sin((deg - 90)...)
+function pointOnCircle(index: number, nodeCount: number) {
+  const angles = serviceOrbitAnglesDeg(Math.max(nodeCount, 1));
+  const deg = angles[index % angles.length] ?? 270;
   const a = degToRad(deg - 90);
   return {
     x: CX + RADIUS * Math.cos(a),
@@ -66,55 +58,9 @@ function wanderOffset(i: number, tSec: number) {
   return { ox, oy };
 }
 
-function normalizeTitle(s: string) {
-  return s
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-type ServiceSlotKey =
-  | "renta de propiedades"
-  | "venta de propiedades"
-  | "desarrollos inmobiliarios"
-  | "asesoria legal"
-  | "avaluos y valuacion"
-  | "administracion de propiedades";
-
-const SERVICE_SLOT_BY_TITLE: Record<ServiceSlotKey, number> = {
-  // Orden solicitado (horario desde arriba)
-  "renta de propiedades": 0, // top
-  "venta de propiedades": 1, // top-right
-  "desarrollos inmobiliarios": 2, // bottom-right
-  "asesoria legal": 3, // bottom
-  "avaluos y valuacion": 4, // bottom-left
-  "administracion de propiedades": 5, // top-left
-};
-
-function slotForCardTitle(title: string): number | null {
-  const t = normalizeTitle(title);
-  const keys = Object.keys(SERVICE_SLOT_BY_TITLE) as ServiceSlotKey[];
-  for (const k of keys) {
-    if (t.includes(k)) return SERVICE_SLOT_BY_TITLE[k];
-  }
-  return null;
-}
-
-function iconForCardTitle(title: string): LucideIcon {
-  const t = normalizeTitle(title);
-  if (t.includes("renta de propiedades")) return Home;
-  if (t.includes("venta de propiedades")) return Building2;
-  if (t.includes("desarrollos inmobiliarios")) return BarChart3;
-  if (t.includes("avaluos y valuacion")) return FileCheck2;
-  if (t.includes("asesoria legal")) return Scale;
-  if (t.includes("administracion de propiedades")) return Settings2;
-  return Home;
-}
-
 function layoutNode(i: number, cards: ServiceCardContent[], tSec: number, reduceMotion: boolean) {
-  const slot = slotForCardTitle(cards[i]?.title ?? "");
-  const base = slot != null ? hexPointBySlot(slot) : hexPointBySlot(i % 6);
+  const nc = Math.max(cards.length, 1);
+  const base = pointOnCircle(i, nc);
   if (reduceMotion) return { x: base.x, y: base.y };
   const { ox, oy } = wanderOffset(i, tSec);
   return { x: base.x + ox, y: base.y + oy };
@@ -160,6 +106,7 @@ type ServicesNodeGraphProps = {
 };
 
 export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProps) {
+  const inPreview = usePreviewCanvas();
   const n = Math.max(cards.length, 1);
   const uid = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
@@ -241,14 +188,14 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
   }, [cards.length, selectedIndex]);
 
   const activeCard = openIndex != null ? cards[openIndex] : null;
-  const ActiveIcon = openIndex != null ? iconForCardTitle(cards[openIndex]?.title ?? "") : Home;
+  const ActiveIcon = openIndex != null ? serviceIconForKey(cards[openIndex]?.iconKey ?? "building2") : serviceIconForKey("building2");
   const highlighted = hovered ?? selectedIndex;
   const highlightedCard = cards[highlighted] ?? cards[0] ?? null;
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
       {/* Tablet+Mobile: pestañas horizontales (lista) */}
-      <div className="lg:hidden">
+      <div className={cn(inPreview ? "mb-6 block overflow-x-auto" : "mb-6 lg:hidden overflow-x-auto")}>
         <div className="mb-6 overflow-x-auto">
           <div className="flex w-max items-center gap-6 px-2">
             {cards.map((card, i) => {
@@ -295,9 +242,14 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
         </div>
       </div>
 
-      <div className="grid items-start gap-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-[25%_40%_35%]">
+      <div
+        className={cn(
+          "grid items-start gap-10",
+          inPreview ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-[25%_40%_35%]"
+        )}
+      >
         {/* Desktop: lista vertical */}
-        <div className="hidden lg:block w-[200px]">
+        <div className={cn("w-[200px]", inPreview ? "hidden" : "hidden lg:block")}>
           <div>
             {cards.map((card, i) => {
               const isActive = selectedIndex === i;
@@ -352,7 +304,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
         </div>
 
         {/* Columna central: grafo */}
-        <div className="hidden md:block">
+        <div className={cn(inPreview ? "block" : "hidden md:block")}>
           <div
             className="relative mx-auto min-h-[520px] w-full max-w-[860px] overflow-hidden bg-transparent p-1 sm:p-3 flex items-center justify-center"
             role="group"
@@ -487,7 +439,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
 
             {cards.map((card, i) => {
               const { x, y } = smoothedLayouts[i]!;
-              const Icon = iconForCardTitle(card.title);
+              const Icon = serviceIconForKey(card.iconKey);
               const lit = selectedIndex === i;
               const isHovered = hovered === i;
               const depth = nodeDepth(y);
@@ -581,7 +533,10 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
               animate={reduceMotion ? undefined : { opacity: 1, x: 0 }}
               exit={reduceMotion ? undefined : { opacity: 0, x: -16 }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-              className="relative overflow-hidden bg-[#0A0F1E]/88 px-12 py-9"
+              className={cn(
+                "relative overflow-hidden bg-[#0A0F1E]/88 px-12 py-9",
+                inPreview && "px-6 py-7"
+              )}
             >
               {/* Separador vertical: gradiente (transparent → rojo → transparent) */}
               <div
@@ -630,26 +585,46 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
                   {highlightedCard.description}
                 </p>
                 <ul className="mt-6 grid gap-3">
-                  {(highlightedCard.bullets ?? []).slice(0, 3).map((b) => (
+                  {(highlightedCard.bullets ?? []).map((b) => (
                     <li key={b} className="font-heading flex items-start gap-3 text-sm text-white/78">
                       <span className="mt-1.5 h-2 w-2 shrink-0 bg-primary" aria-hidden />
                       <span className="leading-relaxed">{b}</span>
                     </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  onClick={() => setOpenIndex(highlighted)}
-                  className="mt-8 inline-flex w-full items-center justify-center gap-2 bg-primary px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-primary"
-                  style={{
-                    fontFamily: "\"Poppins\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
-                    borderRadius: 0,
-                    borderLeft: "3px solid #991B1B",
-                    padding: "16px 32px",
-                  }}
-                >
-                  Ver detalle completo <span aria-hidden>→</span>
-                </button>
+                {(() => {
+                  const href = resolveServiceCardPrimaryHref(highlightedCard);
+                  return href ? (
+                  <Link
+                    to={href}
+                    className="mt-8 inline-flex w-full items-center justify-center gap-2 bg-primary px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-primary"
+                    style={{
+                      fontFamily: "\"Poppins\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+                      borderRadius: 0,
+                      borderLeft: "3px solid #991B1B",
+                      padding: "16px 32px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {(highlightedCard.linkLabel && highlightedCard.linkLabel.trim()) || "Continuar"}{" "}
+                    <span aria-hidden>→</span>
+                  </Link>
+                  ) : (
+                  <button
+                    type="button"
+                    onClick={() => setOpenIndex(highlighted)}
+                    className="mt-8 inline-flex w-full items-center justify-center gap-2 bg-primary px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-primary"
+                    style={{
+                      fontFamily: "\"Poppins\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+                      borderRadius: 0,
+                      borderLeft: "3px solid #991B1B",
+                      padding: "16px 32px",
+                    }}
+                  >
+                    Ver detalle completo <span aria-hidden>→</span>
+                  </button>
+                  );
+                })()}
               </div>
             </motion.aside>
           ) : null}
@@ -692,16 +667,19 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
                     </li>
                   ))}
                 </ul>
-                {activeCard.linkTo && activeCard.linkLabel ? (
+                {(() => {
+                  const href = resolveServiceCardPrimaryHref(activeCard);
+                  return href ? (
                   <Link
-                    to={activeCard.linkTo}
+                    to={href}
                     onClick={() => setOpenIndex(null)}
                     className="font-heading inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-3.5 text-sm font-medium text-white transition-colors hover:bg-brand-burgundy sm:w-auto sm:min-w-[12rem]"
                   >
-                    {activeCard.linkLabel}
+                    {(activeCard.linkLabel && activeCard.linkLabel.trim()) || "Conocer más"}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
-                ) : null}
+                  ) : null;
+                })()}
               </div>
             </>
           ) : null}

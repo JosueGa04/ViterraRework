@@ -2,6 +2,10 @@ import { Link, useLocation } from "react-router";
 import { Menu, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
+import { useSitePreviewVirtualPath } from "../../contexts/SitePreviewVirtualPathContext";
+import { useSitePreviewSuppressHeader } from "../../contexts/SitePreviewSuppressHeaderContext";
+import { useVisualSiteEditorOptional } from "../../contexts/VisualSiteEditorContext";
+import { PreviewSectionChrome } from "./admin/siteEditor/PreviewSectionChrome";
 import { SocialNavIcons } from "./SocialNavIcons";
 import { cn } from "./ui/utils";
 import { VITERRA_NAV_ITEMS, isActiveNavPath } from "../config/siteNav";
@@ -138,17 +142,22 @@ function ViterraMarkLeftScrolled({
 
 export function Header() {
   const inPreviewCanvas = usePreviewCanvas();
+  const sitePreviewPath = useSitePreviewVirtualPath();
+  const suppressSitePreviewHeader = useSitePreviewSuppressHeader();
+  const visualSiteEditor = useVisualSiteEditorOptional();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollP, setScrollP] = useState(0);
   const location = useLocation();
-  const isHome = location.pathname === "/";
-  const isRentPage = location.pathname === "/renta";
-  const isSalePage = location.pathname === "/venta";
-  const isDevelopmentsPage = location.pathname === "/desarrollos";
-  const isPropertiesSection = location.pathname.startsWith("/propiedades");
-  const isServicesPage = location.pathname === "/servicios";
-  const isContactPage = location.pathname === "/contacto";
-  const isAboutPage = location.pathname === "/nosotros";
+  /** En el iframe del editor la URL real es `/admin/...`; la ruta simulada viene del contexto. */
+  const routePath = sitePreviewPath ?? location.pathname;
+  const isHome = routePath === "/";
+  const isRentPage = routePath === "/renta";
+  const isSalePage = routePath === "/venta";
+  const isDevelopmentsPage = routePath === "/desarrollos";
+  const isPropertiesSection = routePath.startsWith("/propiedades");
+  const isServicesPage = routePath === "/servicios";
+  const isContactPage = routePath === "/contacto";
+  const isAboutPage = routePath === "/nosotros";
   /** Solo propiedades: lista/mapa sin hero “arriba del todo” como renta/venta — mantener barra compacta. Desarrollos tiene hero como el resto: usar scroll como `p`. */
   const lockHeaderInMode2 = isPropertiesSection;
   const useOverlayHeader =
@@ -177,7 +186,9 @@ export function Header() {
 
   useEffect(() => {
     readScroll();
-  }, [location.pathname, readScroll]);
+  }, [location.pathname, sitePreviewPath, readScroll]);
+
+  if (suppressSitePreviewHeader) return null;
 
   const p = lockHeaderInMode2 ? 1 : scrollP;
 
@@ -249,6 +260,13 @@ export function Header() {
         borderBottom: `1px solid rgba(255,255,255,${borderAlpha})`,
       }}
     >
+      {visualSiteEditor?.enabled ? (
+        <div className="absolute left-0 top-0 z-[70] overflow-visible">
+          <PreviewSectionChrome blockId="header-social" label="Redes del encabezado" compact>
+            <span className="sr-only">Ancla de edición: redes del encabezado</span>
+          </PreviewSectionChrome>
+        </div>
+      ) : null}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
           className={cn("relative overflow-x-visible transition-none", inPreviewCanvas ? "hidden" : "hidden lg:flex lg:justify-center")}
@@ -328,7 +346,7 @@ export function Header() {
           >
             <div className="flex min-w-0 flex-1 items-center justify-center" style={{ gap: `${navGap}px` }}>
               {VITERRA_NAV_ITEMS.map(([to, label]) => {
-                const active = isActiveNavPath(location.pathname, to);
+                const active = isActiveNavPath(routePath, to);
                 return (
                   <Link
                     key={`c-${to}`}
@@ -363,43 +381,53 @@ export function Header() {
             <span className="h-px w-7 shrink-0 bg-[#C8102E] sm:w-8" aria-hidden />
           </Link>
           <div className="absolute left-1/2 z-[52] flex min-w-0 -translate-x-1/2 flex-col items-center justify-center gap-1 overflow-visible sm:relative sm:left-auto sm:translate-x-0 sm:justify-self-center sm:gap-1.5">
-            <Link
-              to="/"
-              className="flex shrink-0 items-center justify-center overflow-visible rounded-sm"
-              onClick={() => setIsMenuOpen(false)}
-              aria-label="Viterra Grupo Inmobiliario — Inicio"
+            {/*
+              Misma anchura que la caja del logo: así la fila de redes comparte el mismo marco horizontal
+              que la marca y `justify-center` alinea el grupo de iconos con la V (evita que `w-full` herede
+              un ancho distinto del de la columna en grid / flex).
+            */}
+            <div
+              className="inline-flex flex-col items-center gap-1"
+              style={{ width: markBoxWMobile, maxWidth: "100%" }}
             >
-              <span
-                className="relative shrink-0 overflow-hidden rounded-sm"
-                style={{ width: markBoxWMobile, height: markBoxHMobile }}
+              <Link
+                to="/"
+                className="flex w-full shrink-0 items-center justify-center overflow-visible rounded-sm"
+                onClick={() => setIsMenuOpen(false)}
+                aria-label="Viterra Grupo Inmobiliario — Inicio"
               >
                 <span
-                  className="absolute inset-0 flex items-end justify-center overflow-hidden transition-opacity duration-200 ease-out"
-                  style={{ opacity: 1 - compactLeftMark, pointerEvents: compactLeftMark > 0.92 ? "none" : "auto" }}
+                  className="relative shrink-0 overflow-hidden rounded-sm"
+                  style={{ width: markBoxWMobile, height: markBoxHMobile }}
                 >
-                  <ViterraMarkLeftHero
-                    boxW={markBoxWMobile}
-                    boxH={markBoxHMobile}
-                    scale={MOBILE_HEADER_MARK_SCALE}
-                    enableTransformTransition={false}
-                  />
+                  <span
+                    className="absolute inset-0 flex items-end justify-center overflow-hidden transition-opacity duration-200 ease-out"
+                    style={{ opacity: 1 - compactLeftMark, pointerEvents: compactLeftMark > 0.92 ? "none" : "auto" }}
+                  >
+                    <ViterraMarkLeftHero
+                      boxW={markBoxWMobile}
+                      boxH={markBoxHMobile}
+                      scale={MOBILE_HEADER_MARK_SCALE}
+                      enableTransformTransition={false}
+                    />
+                  </span>
+                  <span
+                    className="absolute inset-0 flex items-end justify-center overflow-hidden transition-opacity duration-200 ease-out"
+                    style={{ opacity: compactLeftMark, pointerEvents: compactLeftMark < 0.08 ? "none" : "auto" }}
+                  >
+                    <ViterraMarkLeftScrolled
+                      boxW={markBoxWMobile}
+                      boxH={markBoxHMobile}
+                      scale={MOBILE_HEADER_MARK_SCALE}
+                      enableTransformTransition={false}
+                    />
+                  </span>
                 </span>
-                <span
-                  className="absolute inset-0 flex items-end justify-center overflow-hidden transition-opacity duration-200 ease-out"
-                  style={{ opacity: compactLeftMark, pointerEvents: compactLeftMark < 0.08 ? "none" : "auto" }}
-                >
-                  <ViterraMarkLeftScrolled
-                    boxW={markBoxWMobile}
-                    boxH={markBoxHMobile}
-                    scale={MOBILE_HEADER_MARK_SCALE}
-                    enableTransformTransition={false}
-                  />
-                </span>
-              </span>
-            </Link>
-            <span className="hidden shrink-0 sm:inline-flex">
-              <SocialNavIcons iconSize="xs" />
-            </span>
+              </Link>
+              <div className="mt-0.5 flex w-full shrink-0 justify-center">
+                <SocialNavIcons iconSize="xs" />
+              </div>
+            </div>
           </div>
           <div className="relative col-start-2 z-[56] flex items-center justify-end justify-self-end sm:col-start-3">
             <button
@@ -429,7 +457,7 @@ export function Header() {
         >
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-5 sm:px-6 sm:py-6">
             {VITERRA_NAV_ITEMS.map(([to, label]) => {
-              const active = isActiveNavPath(location.pathname, to);
+              const active = isActiveNavPath(routePath, to);
               return (
                 <Link
                   key={to}

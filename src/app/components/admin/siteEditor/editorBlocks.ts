@@ -2,6 +2,19 @@ import type { SiteContent } from "../../../../data/siteContent";
 
 export type SiteKey = keyof SiteContent;
 
+/** Bloques del editor de la página Servicios en función del número de tarjetas. */
+export function getServicesEditorPageBlocks(cardCount: number): { id: string; label: string }[] {
+  const n = Math.max(0, Math.floor(cardCount));
+  return [
+    { id: "services-hero", label: "Cabecera" },
+    ...Array.from({ length: n }, (_, i) => ({
+      id: `services-card-${i}`,
+      label: `Tarjeta ${i + 1}`,
+    })),
+    { id: "services-cta", label: "Llamado a la acción" },
+  ];
+}
+
 /** Bloques alineados con `sectionId` en formularios y `PreviewSectionChrome` en páginas */
 export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]> = {
   home: [
@@ -20,14 +33,7 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
     { id: "contact-social", label: "Redes y enlaces" },
     { id: "contact-closing", label: "Cierre" },
   ],
-  services: [
-    { id: "services-hero", label: "Cabecera" },
-    ...Array.from({ length: 6 }, (_, i) => ({
-      id: `services-card-${i}`,
-      label: `Tarjeta ${i + 1}`,
-    })),
-    { id: "services-cta", label: "Llamado a la acción" },
-  ],
+  services: getServicesEditorPageBlocks(6),
   about: [
     { id: "about-hero", label: "Cabecera" },
     { id: "about-story", label: "Historia" },
@@ -41,4 +47,7 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
     { id: "dev-hero", label: "Cabecera" },
     { id: "dev-featured", label: "Proyectos destacados (títulos)" },
   ],
+  rent: [{ id: "rent-hero", label: "Cabecera" }],
+  sale: [{ id: "sale-hero", label: "Cabecera" }],
+  header: [{ id: "header-social", label: "Redes del encabezado" }],
 };

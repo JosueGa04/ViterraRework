@@ -7,7 +7,10 @@ import { Link } from "react-router";
 import { useDevelopmentsCatalogInfinite } from "../hooks/useDevelopmentsCatalog";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
 import { cn } from "../components/ui/utils";
@@ -16,7 +19,6 @@ import {
   viterraHeroCenteredStackClass,
   viterraHeroCenteredInnerClass,
   viterraHeroMainClass,
-  viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 import { displayDeliveryDate } from "../data/developments";
@@ -65,7 +67,7 @@ export function DevelopmentsPage() {
   const reduceMotion = useReducedMotion();
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
-  const page = content.developments;
+  const page = mergeSiteSection("developments", content.developments);
   const {
     developments,
     initialLoading,
@@ -125,29 +127,21 @@ export function DevelopmentsPage() {
     <div className="viterra-page min-h-screen flex flex-col bg-white" >
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
+
       {/* Hero Section */}
       <PreviewSectionChrome blockId="dev-hero" label="Cabecera">
       <section className={viterraHeroSectionClass}>
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <motion.img
-            src="https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436"
-            alt=""
-            className="h-full w-full object-cover"
-            decoding="async"
-            fetchPriority="high"
-            initial={false}
-            animate={
-              reduceMotion
-                ? { scale: 1.05 }
-                : { scale: [1.05, 1.07, 1.05] }
-            }
-            transition={
-              reduceMotion
-                ? { duration: 0 }
-                : { duration: 22, repeat: Infinity, ease: "easeInOut" }
-            }
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
+          <PreviewFieldPulse blockId="dev-hero" fieldKey="dev-hero-bg" layout="cover" className="h-full w-full">
+            <HeroBackdropMedia
+              src={page.heroImage ?? ""}
+              fallbackSrc="https://images.adsttc.com/media/images/5ef2/f7ce/b357/6589/8c00/019a/large_jpg/847A0737.jpg?1592981436"
+              reduceMotion={!!reduceMotion}
+              imageProps={{ decoding: "async", fetchPriority: "high" }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
+          </PreviewFieldPulse>
         </div>
 
         <div className={viterraHeroCenteredStackClass}>
@@ -158,15 +152,25 @@ export function DevelopmentsPage() {
             animate="visible"
           >
             <ViterraHeroTopClusterAnimated
-              kicker="Viterra · Desarrollos"
+              kicker={
+                <PreviewFieldPulse blockId="dev-hero" fieldKey="dev-hero-kicker" className="inline-block">
+                  {page.heroKicker}
+                </PreviewFieldPulse>
+              }
               itemVariants={heroItemVariants}
               reduceMotion={!!reduceMotion}
             />
             <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
-              <h1 className={viterraHeroTitleClass}>{page.heroTitle}</h1>
+              <h1 className={pl.heroTitleClass()}>
+                <PreviewFieldPulse blockId="dev-hero" fieldKey="dev-hero-title" className="block">
+                  {page.heroTitle}
+                </PreviewFieldPulse>
+              </h1>
             </motion.div>
             <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
-              {page.heroSubtitle}
+              <PreviewFieldPulse blockId="dev-hero" fieldKey="dev-hero-subtitle" className="block w-full">
+                {page.heroSubtitle}
+              </PreviewFieldPulse>
             </motion.p>
           </motion.div>
         </div>
@@ -389,7 +393,7 @@ export function DevelopmentsPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className={cn("flex flex-col gap-4", !pl.preview && "sm:flex-row sm:items-center sm:justify-between")}>
                       <div>
                         <p className="font-heading mb-1 text-xs uppercase tracking-[0.05em] text-brand-navy/60">Desde</p>
                         <p className="font-heading text-lg font-semibold text-brand-navy">
@@ -462,7 +466,7 @@ export function DevelopmentsPage() {
               nuestros desarrollos exclusivos.
             </p>
 
-            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+            <div className={cn("flex flex-col justify-center gap-4", !pl.preview && "sm:flex-row")}>
               <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
                 <Link
                   to="/contacto"
@@ -484,6 +488,8 @@ export function DevelopmentsPage() {
           </div>
         </Reveal>
       </section>
+
+      </main>
 
       <Footer />
     </div>

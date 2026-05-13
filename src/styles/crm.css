@@ -15,6 +15,15 @@ body.admin-crm-montserrat * {
   font-family: var(--font-heading), system-ui, sans-serif;
 }
 
+/**
+ * Lienzo «VISTA PREVIA» del editor de sitio: el `*` de arriba asigna Poppins a cada nodo,
+ * incluidos los `<span>` de resalte de campo; eso bloquea la herencia del hero (Cormorant en el `h1`).
+ * Solo restauramos herencia en esos envoltorios para igualar el sitio público (p. ej. localhost).
+ */
+body.admin-crm-montserrat .viterra-preview-canvas [data-viterra-editor-field] {
+  font-family: inherit;
+}
+
 .viterra-crm .crm-hero-title {
   font-family: var(--font-heading), system-ui, sans-serif;
 }

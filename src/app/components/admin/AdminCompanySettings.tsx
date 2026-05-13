@@ -32,7 +32,7 @@ import {
 } from "../ui/select";
 
 export type CompanyNavigateSpec =
-  | { type: "tab"; tab: "dashboard" | "leads" | "properties" | "developments" | "agenda" | "company" | "messages" }
+  | { type: "tab"; tab: "dashboard" | "leads" | "properties" | "developments" | "agenda" | "company" | "messages" | "sitio" }
   | { type: "company"; sub: "users" | "site" | "leadStages" | "settings" };
 
 interface Props {
@@ -68,19 +68,28 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
     return total;
   }, [settings]);
 
+  const isAdvisor = user?.role === "asesor";
+  const isAdmin = user?.role === "admin";
+  const canEditSite = Boolean(
+    user && !isAdvisor && (isAdmin || user.permissions.includes("edit_site")),
+  );
+
   const quickLinks: Array<{
     label: string;
     spec: CompanyNavigateSpec;
     icon: ComponentType<{ className?: string; strokeWidth?: number }>;
-  }> = [
-    { label: "Leads", spec: { type: "tab", tab: "leads" }, icon: Users },
-    { label: "Propiedades", spec: { type: "tab", tab: "properties" }, icon: Home },
-    { label: "Desarrollos", spec: { type: "tab", tab: "developments" }, icon: Globe2 },
-    { label: "Agenda", spec: { type: "tab", tab: "agenda" }, icon: Calendar },
-    { label: "Usuarios", spec: { type: "company", sub: "users" }, icon: Shield },
-    { label: "Sitio web", spec: { type: "company", sub: "site" }, icon: Globe2 },
-    { label: "Pipeline", spec: { type: "company", sub: "leadStages" }, icon: LayoutGrid },
-  ];
+  }> = useMemo(
+    () => [
+      { label: "Leads", spec: { type: "tab", tab: "leads" }, icon: Users },
+      { label: "Propiedades", spec: { type: "tab", tab: "properties" }, icon: Home },
+      { label: "Desarrollos", spec: { type: "tab", tab: "developments" }, icon: Globe2 },
+      { label: "Agenda", spec: { type: "tab", tab: "agenda" }, icon: Calendar },
+      { label: "Usuarios", spec: { type: "company", sub: "users" }, icon: Shield },
+      ...(canEditSite ? ([{ label: "Sitio web", spec: { type: "tab", tab: "sitio" } as const, icon: Globe2 }] as const) : []),
+      { label: "Pipeline", spec: { type: "company", sub: "leadStages" }, icon: LayoutGrid },
+    ],
+    [canEditSite],
+  );
 
   return (
     <div className="flex flex-col gap-8 p-5 md:p-8">

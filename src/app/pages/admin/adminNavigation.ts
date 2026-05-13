@@ -12,6 +12,7 @@ export type AdminTab =
   | "properties"
   | "developments"
   | "activities"
+  | "sitio"
   | "company"
   | "messages"
   | "profile";
@@ -28,6 +29,7 @@ const TAB_SEGMENT: Record<AdminTab, string> = {
   properties: "properties",
   developments: "developments",
   activities: "activities",
+  sitio: "sitio",
   company: "company",
   messages: "messages",
   profile: "profile",
@@ -56,6 +58,7 @@ const SEGMENT_TO_TAB: Record<string, AdminTab> = {
   properties: "properties",
   developments: "developments",
   activities: "activities",
+  sitio: "sitio",
   company: "company",
   messages: "messages",
   profile: "profile",

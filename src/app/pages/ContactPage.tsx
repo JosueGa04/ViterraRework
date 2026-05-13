@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
@@ -8,34 +8,58 @@ import {
   Phone,
   Mail,
   Clock,
+  Building2,
   Send,
   ChevronDown,
   Facebook,
   Instagram,
   Linkedin,
-  Twitter,
+  Globe,
   Youtube,
   ArrowRight,
   MessageCircle,
 } from "lucide-react";
-import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
+import { usePreviewCanvas, usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
+import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
 import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSectionChrome";
+import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
+import { XLogoIcon } from "../components/social/XLogoIcon";
 import { cn } from "../components/ui/utils";
-import { SOCIAL_LINKS, type SocialNetworkId } from "../config/socialLinks";
-import type { SiteContent } from "../../data/siteContent";
+import {
+  CONTACT_SOCIAL_LABELS,
+  DEFAULT_SITE_CONTENT,
+  type ContactInfoIcon,
+  type ContactSocialPlatform,
+  type SiteContent,
+} from "../../data/siteContent";
 import {
   viterraHeroSectionClass,
   viterraHeroCenteredStackClass,
   viterraHeroCenteredInnerClass,
   viterraHeroMainClass,
-  viterraHeroTitleClass,
   viterraHeroSubtitleClass,
 } from "../config/heroLayout";
 
 type ContactContent = SiteContent["contact"];
+
+const CONTACT_ICON_COMPONENT: Record<
+  ContactInfoIcon,
+  typeof MapPin
+> = {
+  map: MapPin,
+  phone: Phone,
+  mail: Mail,
+  clock: Clock,
+  building: Building2,
+  message: MessageCircle,
+};
+
+function firstBodyByIcon(items: ContactContent["infoItems"], icon: ContactInfoIcon): string {
+  return items.find((i) => i.icon === icon)?.body ?? "";
+}
 
 function firstLine(text: string) {
   return text.split("\n")[0]?.trim() ?? "";
@@ -52,26 +76,47 @@ function mailHref(emailLines: string) {
   return line.includes("@") ? `mailto:${line}` : "#";
 }
 
-const iconBySocialId: Record<SocialNetworkId, typeof Facebook> = {
-  facebook: Facebook,
-  instagram: Instagram,
-  x: Twitter,
-  linkedin: Linkedin,
-  youtube: Youtube,
-};
+function normalizeExternalHref(raw: string): string {
+  const t = raw.trim();
+  if (!t || t === "#") return t || "#";
+  if (/^https?:\/\//i.test(t) || t.startsWith("/") || t.startsWith("#") || t.startsWith("mailto:") || t.startsWith("tel:"))
+    return t;
+  return `https://${t}`;
+}
 
-function socialHref(id: SocialNetworkId, social: ContactContent["social"]): string {
-  if (id === "facebook" && social.facebook) return social.facebook;
-  if (id === "instagram" && social.instagram) return social.instagram;
-  if (id === "x" && social.twitter) return social.twitter;
-  if (id === "linkedin" && social.linkedin) return social.linkedin;
-  if (id === "youtube" && social.youtube) return social.youtube;
-  return SOCIAL_LINKS.find((l) => l.id === id)?.href ?? "#";
+function ContactSocialGlyph({
+  platform,
+  className,
+}: {
+  platform: ContactSocialPlatform;
+  className?: string;
+}) {
+  const strokeIcon = cn("h-5 w-5", className);
+  switch (platform) {
+    case "x":
+      return <XLogoIcon className={cn("h-[1.15rem] w-[1.15rem]", className)} />;
+    case "facebook":
+      return <Facebook className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "instagram":
+      return <Instagram className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "linkedin":
+      return <Linkedin className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "youtube":
+      return <Youtube className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "whatsapp":
+      return <MessageCircle className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+    case "tiktok":
+    case "threads":
+    case "website":
+    default:
+      return <Globe className={strokeIcon} strokeWidth={1.5} aria-hidden />;
+  }
 }
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
+  const preview = usePreviewCanvas();
   return (
-    <div className="text-center lg:text-left">
+    <div className={cn("text-center", !preview && "lg:text-left")}>
       <p
         className={cn(
           "text-[10px] uppercase tracking-[0.32em] font-normal",
@@ -80,7 +125,13 @@ function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?
       >
         {children}
       </p>
-      <span className={cn("mt-4 block h-px w-10 bg-primary", tone === "light" ? "mx-auto lg:mx-0" : "mx-auto lg:mx-0")} aria-hidden />
+      <span
+        className={cn(
+          "mt-4 block h-px w-10 bg-primary",
+          preview ? "mx-auto" : "mx-auto lg:mx-0"
+        )}
+        aria-hidden
+      />
     </div>
   );
 }
@@ -132,6 +183,8 @@ export function ContactPage() {
   const pl = usePreviewLayout();
   const { content } = useSiteContent();
   const c = content.contact;
+  /** Enlaces fijos (no editables): profundos bajo redes, CTA asesores y destinos de botones de cierre. */
+  const contactFixed = DEFAULT_SITE_CONTENT.contact;
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -221,10 +274,10 @@ export function ContactPage() {
 
         const popupContent = `
           <div style="font-family: Poppins, sans-serif; padding: 8px;">
-            <h3 style="font-weight: 600; font-size: 16px; color: #141c2e; margin: 0 0 8px 0;">
+            <h3 data-viterra-editor-field="contact-visit-mapPopupTitle" style="font-weight: 600; font-size: 16px; color: #141c2e; margin: 0 0 8px 0;">
               ${escapeHtml(c.mapPopupTitle)}
             </h3>
-            <p style="font-size: 14px; color: #64748B; margin: 0 0 8px 0; white-space: pre-line;">
+            <p data-viterra-editor-field="contact-visit-mapPopupAddress" style="font-size: 14px; color: #64748B; margin: 0 0 8px 0; white-space: pre-line;">
               ${mapAddrSafe}
             </p>
             <a
@@ -298,12 +351,22 @@ export function ContactPage() {
     },
   } as const;
 
-  const visitRows: { num: string; title: string; body: string; Icon: typeof MapPin }[] = [
-    { num: "01", title: c.addressTitle, body: c.addressLines, Icon: MapPin },
-    { num: "02", title: c.phoneTitle, body: c.phoneLines, Icon: Phone },
-    { num: "03", title: c.emailTitle, body: c.emailLines, Icon: Mail },
-    { num: "04", title: c.hoursTitle, body: c.hoursLines, Icon: Clock },
-  ];
+  const visitRows = useMemo(
+    () =>
+      c.infoItems.map((item, i) => ({
+        num: String(i + 1).padStart(2, "0"),
+        title: item.title,
+        body: item.body,
+        Icon: CONTACT_ICON_COMPONENT[item.icon] ?? MessageCircle,
+      })),
+    [c.infoItems]
+  );
+
+  const phoneBody = firstBodyByIcon(c.infoItems, "phone");
+  const mailBody = firstBodyByIcon(c.infoItems, "mail");
+  const mapSnippet = firstLine(firstBodyByIcon(c.infoItems, "map"));
+  const telLink = telHref(phoneBody);
+  const emailLink = mailHref(mailBody);
 
   const inputUnderline =
     "w-full border-0 border-b border-brand-navy/30 bg-transparent px-1 py-3 text-sm text-brand-navy outline-none transition-colors focus:border-primary focus:ring-0 rounded-none";
@@ -312,20 +375,29 @@ export function ContactPage() {
     <div className="viterra-page flex min-h-screen flex-col bg-white">
       <Header />
 
+      <main className="flex min-h-0 flex-1 flex-col">
       <PreviewSectionChrome blockId="contact-hero" label="Cabecera">
         <section className={viterraHeroSectionClass}>
           <div className="absolute inset-0 z-0 overflow-hidden">
-            <motion.img
-              src="https://blog.grupoguia.mx/hubfs/DJI_20241206140245_0034_D.jpg"
-              alt=""
-              className="h-full w-full object-cover"
-              initial={false}
-              animate={reduceMotion ? { scale: 1.05 } : { scale: [1.05, 1.07, 1.05] }}
-              transition={reduceMotion ? { duration: 0 } : { duration: 22, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
+            <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-bg" layout="cover" className="h-full w-full">
+              <HeroBackdropMedia
+                src={c.heroImage ?? ""}
+                fallbackSrc={contactFixed.heroImage}
+                reduceMotion={!!reduceMotion}
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/78 via-black/48 to-black/60" />
+            </PreviewFieldPulse>
           </div>
-          <div className={viterraHeroCenteredStackClass}>
+          <div
+            className={cn(
+              "block w-full",
+              viterraHeroCenteredStackClass,
+              (c.heroSectionDensity ?? "default") === "compact" &&
+                "!py-4 md:!py-6 !pb-[clamp(5rem,12vh,9rem)] md:!pb-[clamp(5.5rem,14vh,10rem)]",
+              (c.heroSectionDensity ?? "default") === "airy" &&
+                "!py-10 md:!py-14 !pb-[clamp(9rem,22vh,15rem)] md:!pb-[clamp(10rem,24vh,17rem)]"
+            )}
+          >
             <motion.div
               className={viterraHeroCenteredInnerClass}
               variants={heroContainerVariants}
@@ -333,15 +405,25 @@ export function ContactPage() {
               animate="visible"
             >
               <ViterraHeroTopClusterAnimated
-                kicker="Viterra · Contacto"
+                kicker={
+                  <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-kicker" className="inline-block">
+                    {c.heroKicker}
+                  </PreviewFieldPulse>
+                }
                 itemVariants={heroItemVariants}
                 reduceMotion={!!reduceMotion}
               />
               <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
-                <h1 className={viterraHeroTitleClass}>{c.heroTitle}</h1>
+                <h1 className={pl.heroTitleClass()}>
+                  <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-title" className="inline-block">
+                    {c.heroTitle}
+                  </PreviewFieldPulse>
+                </h1>
               </motion.div>
               <motion.p variants={heroItemVariants} className={viterraHeroSubtitleClass}>
-                {c.heroSubtitle}
+                <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-subtitle" className="block">
+                  {c.heroSubtitle}
+                </PreviewFieldPulse>
               </motion.p>
             </motion.div>
           </div>
@@ -354,17 +436,29 @@ export function ContactPage() {
             <Reveal y={22}>
               <div className={cn("grid gap-12 lg:gap-16", pl.gridCols("grid-cols-1 lg:grid-cols-12"))}>
                 <div className={pl.colSpan("lg:col-span-5")}>
-                  <SectionKicker>{c.visitKicker}</SectionKicker>
+                  <SectionKicker>
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-kicker" className="inline-block">
+                      {c.visitKicker}
+                    </PreviewFieldPulse>
+                  </SectionKicker>
                   <h2 className="font-heading mt-8 text-3xl font-light leading-[1.12] tracking-tight text-brand-navy md:text-4xl lg:text-[2.65rem]">
-                    {c.visitTitle}
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-title" className="inline-block">
+                      {c.visitTitle}
+                    </PreviewFieldPulse>
                   </h2>
                   <p className="font-heading mt-6 max-w-md text-[15px] font-light leading-relaxed text-brand-navy/72 md:text-base">
-                    {c.visitIntro}
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-intro" className="block">
+                      {c.visitIntro}
+                    </PreviewFieldPulse>
                   </p>
-                  <p className="font-heading mt-8 text-xs uppercase tracking-[0.1em] text-brand-navy/50">{c.infoTitle}</p>
+                  <p className="font-heading mt-8 text-xs uppercase tracking-[0.1em] text-brand-navy/50">
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-infoTitle" className="inline-block">
+                      {c.infoTitle}
+                    </PreviewFieldPulse>
+                  </p>
 
                   <div className="mt-6 divide-y divide-brand-navy/12">
-                    {visitRows.map((row) => (
+                    {visitRows.map((row, idx) => (
                       <div key={row.num} className="py-4 first:pt-0">
                         <div className="flex gap-5">
                           <span className="font-heading shrink-0 text-[11px] tabular-nums tracking-[0.32em] text-brand-navy/45">
@@ -372,13 +466,27 @@ export function ContactPage() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="mb-2 flex items-center gap-2">
-                              <row.Icon className="h-4 w-4 shrink-0 text-brand-navy/55" strokeWidth={1.5} aria-hidden />
+                              <PreviewFieldPulse
+                                blockId="contact-visit"
+                                fieldKey={`contact-visit-info-${idx}-icon`}
+                                className="inline-flex shrink-0"
+                              >
+                                <row.Icon className="h-4 w-4 shrink-0 text-brand-navy/55" strokeWidth={1.5} aria-hidden />
+                              </PreviewFieldPulse>
                               <h3 className="font-heading text-xs font-semibold uppercase tracking-[0.14em] text-brand-navy">
-                                {row.title}
+                                <PreviewFieldPulse
+                                  blockId="contact-visit"
+                                  fieldKey={`contact-visit-info-${idx}-title`}
+                                  className="inline"
+                                >
+                                  {row.title}
+                                </PreviewFieldPulse>
                               </h3>
                             </div>
                             <p className="font-heading whitespace-pre-line text-sm font-light leading-relaxed text-brand-navy/78">
-                              {row.body}
+                              <PreviewFieldPulse blockId="contact-visit" fieldKey={`contact-visit-info-${idx}-body`} className="block">
+                                {row.body}
+                              </PreviewFieldPulse>
                             </p>
                           </div>
                         </div>
@@ -396,26 +504,48 @@ export function ContactPage() {
                       {c.quickWhatsappLabel}
                       <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
                     </a>
-                    <span className="hidden text-brand-navy/20 sm:inline" aria-hidden>
-                      |
-                    </span>
-                    <a href={telHref(c.phoneLines)} className="inline-flex border-b border-brand-navy/35 pb-1 transition-colors hover:border-primary hover:text-brand-burgundy">
-                      Llamar
-                    </a>
-                    <span className="hidden text-brand-navy/20 sm:inline" aria-hidden>
-                      |
-                    </span>
-                    <a href={mailHref(c.emailLines)} className="inline-flex border-b border-brand-navy/35 pb-1 transition-colors hover:border-primary hover:text-brand-burgundy">
-                      Correo
-                    </a>
+                    {telLink !== "#" ? (
+                      <>
+                        <span className="hidden text-brand-navy/20 sm:inline" aria-hidden>
+                          |
+                        </span>
+                        <a
+                          href={telLink}
+                          className="inline-flex border-b border-brand-navy/35 pb-1 transition-colors hover:border-primary hover:text-brand-burgundy"
+                        >
+                          Llamar
+                        </a>
+                      </>
+                    ) : null}
+                    {emailLink !== "#" ? (
+                      <>
+                        <span className="hidden text-brand-navy/20 sm:inline" aria-hidden>
+                          |
+                        </span>
+                        <a
+                          href={emailLink}
+                          className="inline-flex border-b border-brand-navy/35 pb-1 transition-colors hover:border-primary hover:text-brand-burgundy"
+                        >
+                          Correo
+                        </a>
+                      </>
+                    ) : null}
                   </div>
                 </div>
 
                 <div className={cn("relative min-h-[min(560px,72svh)]", pl.colSpan("lg:col-span-7"))}>
                   <div className="pointer-events-none absolute right-4 top-4 z-[1000] max-w-[min(100%,280px)] rounded-lg border border-white/40 bg-white/90 p-4 shadow-lg backdrop-blur-md">
-                    <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-brand-navy/50">{c.mapSectionKicker}</p>
-                    <p className="mt-2 font-heading text-sm font-semibold leading-snug text-brand-navy">{c.mapSectionTitle}</p>
-                    <p className="mt-2 text-xs leading-relaxed text-brand-navy/70">{firstLine(c.addressLines)}</p>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-brand-navy/50">
+                      <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionKicker" className="inline-block">
+                        {c.mapSectionKicker}
+                      </PreviewFieldPulse>
+                    </p>
+                    <p className="mt-2 font-heading text-sm font-semibold leading-snug text-brand-navy">
+                      <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionTitle" className="inline-block">
+                        {c.mapSectionTitle}
+                      </PreviewFieldPulse>
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-brand-navy/70">{mapSnippet}</p>
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${c.mapLat},${c.mapLng}`}
                       target="_blank"
@@ -439,14 +569,42 @@ export function ContactPage() {
             .custom-popup .leaflet-popup-close-button { color: #64748B; font-size: 20px; padding: 4px 8px; }
             .custom-popup .leaflet-popup-close-button:hover { color: #0F172A; }
           `}</style>
-                  <motion.div
-                    ref={mapRef}
-                    className="h-[min(420px,52svh)] min-h-[240px] w-full overflow-hidden rounded-lg border border-brand-navy/12 shadow-[0_20px_50px_-24px_rgba(8,12,22,0.35)] sm:h-[min(480px,60svh)] md:h-[min(560px,72svh)]"
-                    initial={reduceMotion ? false : { opacity: 0 }}
-                    whileInView={reduceMotion ? undefined : { opacity: 1 }}
-                    viewport={{ once: true, amount: 0.2 }}
-                    transition={{ duration: 0.45 }}
-                  />
+                  <PreviewFieldPulse
+                    blockId="contact-visit"
+                    fieldKey="contact-visit-mapLat"
+                    layout="cover"
+                    className="absolute inset-0 z-0 min-h-0"
+                  >
+                    <PreviewFieldPulse
+                      blockId="contact-visit"
+                      fieldKey="contact-visit-mapLng"
+                      layout="cover"
+                      className="absolute inset-0 h-full w-full min-h-0"
+                    >
+                      <motion.div
+                        ref={mapRef}
+                        className="h-[min(420px,52svh)] min-h-[240px] w-full overflow-hidden rounded-lg border border-brand-navy/12 shadow-[0_20px_50px_-24px_rgba(8,12,22,0.35)] sm:h-[min(480px,60svh)] md:h-[min(560px,72svh)]"
+                        initial={reduceMotion ? false : { opacity: 0 }}
+                        whileInView={reduceMotion ? undefined : { opacity: 1 }}
+                        viewport={{ once: true, amount: 0.2 }}
+                        transition={{ duration: 0.45 }}
+                      />
+                    </PreviewFieldPulse>
+                  </PreviewFieldPulse>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+      </PreviewSectionChrome>
+
+      <PreviewSectionChrome blockId="contact-whatsapp" label="WhatsApp (CTA rápido)">
+        <section className="border-t border-brand-navy/10 bg-white py-8 md:py-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <Reveal y={18}>
+              <div className={cn("grid gap-8", pl.gridCols("grid-cols-1 lg:grid-cols-12"))}>
+                <div className={cn("hidden lg:block", pl.colSpan("lg:col-span-5"))} aria-hidden />
+                <div className={pl.colSpan("lg:col-span-7")}>
                   <motion.a
                     href={c.quickWhatsappHref}
                     target="_blank"
@@ -456,21 +614,41 @@ export function ContactPage() {
                     viewport={{ once: true, amount: 0.3 }}
                     transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                     whileHover={reduceMotion ? undefined : { y: -2 }}
-                    className="mt-6 flex flex-col gap-5 rounded-lg border border-brand-navy bg-brand-navy px-6 py-6 text-white shadow-[0_18px_40px_-22px_rgba(8,12,22,0.55)] transition-shadow hover:shadow-[0_22px_44px_-22px_rgba(8,12,22,0.7)] sm:flex-row sm:items-center sm:justify-between sm:px-8"
+                    className={cn(
+                      "relative flex flex-col gap-5 rounded-lg border border-brand-navy bg-brand-navy px-6 py-6 text-white shadow-[0_18px_40px_-22px_rgba(8,12,22,0.55)] transition-shadow hover:shadow-[0_22px_44px_-22px_rgba(8,12,22,0.7)]",
+                      !pl.preview && "sm:flex-row sm:items-center sm:justify-between sm:px-8"
+                    )}
                   >
-                    <div className="flex min-w-0 items-start gap-4">
+                    <PreviewFieldPulse
+                      blockId="contact-whatsapp"
+                      fieldKey="contact-whatsapp-href"
+                      className="pointer-events-none absolute bottom-3 right-3 z-[2] inline-flex h-1 w-1 overflow-hidden p-0 opacity-0"
+                    >
+                      <span aria-hidden className="select-none">.</span>
+                    </PreviewFieldPulse>
+                    <div className="relative z-[1] flex min-w-0 items-start gap-4">
                       <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/[0.06] text-white">
                         <MessageCircle className="h-5 w-5" strokeWidth={1.5} aria-hidden />
                       </span>
                       <div className="min-w-0">
                         <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/55">Atención inmediata</p>
-                        <h3 className="font-heading mt-1 text-xl font-light tracking-tight text-white md:text-2xl">{c.quickTitle}</h3>
-                        <p className="mt-2 max-w-md text-sm font-light leading-relaxed text-white/75">{c.quickSubtitle}</p>
+                        <h3 className="font-heading mt-1 text-xl font-light tracking-tight text-white md:text-2xl">
+                          <PreviewFieldPulse blockId="contact-whatsapp" fieldKey="contact-whatsapp-title" className="inline-block">
+                            {c.quickTitle}
+                          </PreviewFieldPulse>
+                        </h3>
+                        <p className="mt-2 max-w-md text-sm font-light leading-relaxed text-white/75">
+                          <PreviewFieldPulse blockId="contact-whatsapp" fieldKey="contact-whatsapp-subtitle" className="block">
+                            {c.quickSubtitle}
+                          </PreviewFieldPulse>
+                        </p>
                       </div>
                     </div>
-                    <span className="inline-flex shrink-0 items-center gap-2 self-start border border-white/55 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] transition-colors hover:bg-white hover:text-brand-navy sm:self-center">
-                      {c.quickWhatsappLabel}
-                      <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+                    <span className="relative z-[1] inline-flex shrink-0 items-center gap-2 self-start border border-white/55 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] transition-colors hover:bg-white hover:text-brand-navy sm:self-center">
+                      <PreviewFieldPulse blockId="contact-whatsapp" fieldKey="contact-whatsapp-label" className="inline-flex items-center gap-2">
+                        {c.quickWhatsappLabel}
+                        <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+                      </PreviewFieldPulse>
                     </span>
                   </motion.a>
                 </div>
@@ -485,9 +663,15 @@ export function ContactPage() {
           <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
             <Reveal y={24}>
               <div className="text-center">
-                <SectionKicker>{c.formKicker}</SectionKicker>
+                <SectionKicker>
+                  <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-kicker" className="inline-block">
+                    {c.formKicker}
+                  </PreviewFieldPulse>
+                </SectionKicker>
                 <h2 className="font-heading mx-auto mt-8 max-w-2xl text-3xl font-light leading-tight tracking-tight text-brand-navy md:text-4xl lg:text-[2.65rem]">
-                  {c.formTitle}
+                  <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-title" className="inline-block">
+                    {c.formTitle}
+                  </PreviewFieldPulse>
                 </h2>
               </div>
             </Reveal>
@@ -501,8 +685,16 @@ export function ContactPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <p className="font-heading text-sm font-semibold text-brand-navy">{c.successTitle}</p>
-                    <p className="mt-1 font-heading text-sm font-light text-brand-navy/70">{c.successSubtitle}</p>
+                    <p className="font-heading text-sm font-semibold text-brand-navy">
+                      <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-successTitle" className="inline-block">
+                        {c.successTitle}
+                      </PreviewFieldPulse>
+                    </p>
+                    <p className="mt-1 font-heading text-sm font-light text-brand-navy/70">
+                      <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-successSubtitle" className="block">
+                        {c.successSubtitle}
+                      </PreviewFieldPulse>
+                    </p>
                   </motion.div>
                 )}
 
@@ -625,8 +817,16 @@ export function ContactPage() {
         <section className="border-t border-brand-navy/10 bg-white py-16 md:py-24">
           <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
             <Reveal y={22} className="text-center">
-              <SectionKicker>{c.faqKicker}</SectionKicker>
-              <h2 className="font-heading mt-8 text-3xl font-light tracking-tight text-brand-navy md:text-4xl">{c.faqTitle}</h2>
+              <SectionKicker>
+                <PreviewFieldPulse blockId="contact-faq" fieldKey="contact-faq-kicker" className="inline-block">
+                  {c.faqKicker}
+                </PreviewFieldPulse>
+              </SectionKicker>
+              <h2 className="font-heading mt-8 text-3xl font-light tracking-tight text-brand-navy md:text-4xl">
+                <PreviewFieldPulse blockId="contact-faq" fieldKey="contact-faq-title" className="inline-block">
+                  {c.faqTitle}
+                </PreviewFieldPulse>
+              </h2>
             </Reveal>
             <div className="mt-12">
               {c.faq.map((item, i) => {
@@ -639,7 +839,11 @@ export function ContactPage() {
                       className="flex w-full items-start justify-between gap-4 border-b border-brand-navy/15 py-5 text-left transition-colors hover:bg-brand-canvas/40"
                       aria-expanded={open}
                     >
-                      <span className="font-heading text-base font-medium text-brand-navy md:text-lg">{item.question}</span>
+                      <span className="font-heading text-base font-medium text-brand-navy md:text-lg">
+                        <PreviewFieldPulse blockId="contact-faq" fieldKey={`contact-faq-${i}-question`} className="inline">
+                          {item.question}
+                        </PreviewFieldPulse>
+                      </span>
                       <ChevronDown
                         className={cn("mt-1 h-5 w-5 shrink-0 text-brand-navy/45 transition-transform", open && "rotate-180")}
                         strokeWidth={1.5}
@@ -648,7 +852,11 @@ export function ContactPage() {
                     </button>
                     {open ? (
                       <div className="border-b border-brand-navy/15 pb-6">
-                        <p className="font-heading max-w-2xl text-sm font-light leading-relaxed text-brand-navy/75">{item.answer}</p>
+                        <p className="font-heading max-w-2xl text-sm font-light leading-relaxed text-brand-navy/75">
+                          <PreviewFieldPulse blockId="contact-faq" fieldKey={`contact-faq-${i}-answer`} className="block">
+                            {item.answer}
+                          </PreviewFieldPulse>
+                        </p>
                       </div>
                     ) : null}
                   </Reveal>
@@ -663,29 +871,59 @@ export function ContactPage() {
         <section className="border-t border-brand-navy/10 bg-brand-navy py-16 text-white md:py-24">
           <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
             <Reveal y={22}>
-              <SectionKicker tone="light">{c.socialKicker}</SectionKicker>
-              <h2 className="font-heading mt-8 text-3xl font-light tracking-tight text-white md:text-4xl">{c.socialTitle}</h2>
+              <SectionKicker tone="light">
+                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-kicker" className="inline-block">
+                  {c.socialKicker}
+                </PreviewFieldPulse>
+              </SectionKicker>
+              <h2 className="font-heading mt-8 text-3xl font-light tracking-tight text-white md:text-4xl">
+                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-title" className="inline-block">
+                  {c.socialTitle}
+                </PreviewFieldPulse>
+              </h2>
               <p className="font-heading mx-auto mt-5 max-w-xl text-sm font-light leading-relaxed text-white/75 md:text-base">
-                {c.socialIntro}
+                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-intro" className="block">
+                  {c.socialIntro}
+                </PreviewFieldPulse>
               </p>
             </Reveal>
 
             <Reveal y={18} delay={0.08} className="mt-10">
               <ul className="flex flex-wrap items-center justify-center gap-2 sm:gap-3" role="list" aria-label="Redes sociales">
-                {SOCIAL_LINKS.map(({ id, label }) => {
-                  const Icon = iconBySocialId[id];
-                  const href = socialHref(id, c.social);
+                {c.socialLinks.map((item, i) => {
+                  if (!item.url.trim()) return null;
+                  const href = normalizeExternalHref(item.url);
+                  const label = CONTACT_SOCIAL_LABELS[item.platform];
+                  const isInternal = href.startsWith("/") && !href.startsWith("//");
+                  const isHttp = /^https?:\/\//i.test(href);
+                  const ringClass =
+                    "inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/20 text-white/90 transition-colors hover:border-primary hover:bg-white/[0.06] hover:text-white";
                   return (
-                    <li key={id}>
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={label}
-                        className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/20 text-white/90 transition-colors hover:border-primary hover:bg-white/[0.06] hover:text-white"
+                    <li key={`${item.platform}-${i}`}>
+                      <PreviewFieldPulse
+                        blockId="contact-social"
+                        fieldKey={`contact-social-${i}-platform`}
+                        className="inline-flex"
                       >
-                        <Icon className="h-5 w-5" strokeWidth={1.5} />
-                      </a>
+                        <PreviewFieldPulse blockId="contact-social" fieldKey={`contact-social-${i}-url`} className="inline-flex">
+                          {isInternal ? (
+                            <Link to={href} aria-label={label} title={label} className={ringClass}>
+                              <ContactSocialGlyph platform={item.platform} />
+                            </Link>
+                          ) : (
+                            <a
+                              href={href}
+                              target={isHttp ? "_blank" : undefined}
+                              rel={isHttp ? "noopener noreferrer" : undefined}
+                              aria-label={label}
+                              title={label}
+                              className={ringClass}
+                            >
+                              <ContactSocialGlyph platform={item.platform} />
+                            </a>
+                          )}
+                        </PreviewFieldPulse>
+                      </PreviewFieldPulse>
                     </li>
                   );
                 })}
@@ -695,30 +933,31 @@ export function ContactPage() {
             <Reveal y={16} delay={0.12} className="mt-12">
               <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] uppercase tracking-[0.16em] text-white/80">
                 <Link
-                  to={c.deepLinks.saleHref}
+                  to={contactFixed.deepLinks.saleHref}
                   className="border-b border-white/35 pb-1 transition-colors hover:border-primary hover:text-white"
                 >
-                  {c.deepLinks.saleLabel}
+                  {contactFixed.deepLinks.saleLabel}
                 </Link>
                 <span className="hidden text-white/25 sm:inline" aria-hidden>
                   |
                 </span>
                 <Link
-                  to={c.deepLinks.rentHref}
+                  to={contactFixed.deepLinks.rentHref}
                   className="border-b border-white/35 pb-1 transition-colors hover:border-primary hover:text-white"
                 >
-                  {c.deepLinks.rentLabel}
+                  {contactFixed.deepLinks.rentLabel}
                 </Link>
                 <span className="hidden text-white/25 sm:inline" aria-hidden>
                   |
                 </span>
                 <Link
-                  to={c.deepLinks.servicesHref}
+                  to={contactFixed.deepLinks.servicesHref}
                   className="border-b border-white/35 pb-1 transition-colors hover:border-primary hover:text-white"
                 >
-                  {c.deepLinks.servicesLabel}
+                  {contactFixed.deepLinks.servicesLabel}
                 </Link>
               </div>
+              <p className="mt-8 text-center text-[11px] font-light uppercase tracking-[0.18em] text-white/55">{contactFixed.advisorCta}</p>
             </Reveal>
 
           </div>
@@ -729,23 +968,39 @@ export function ContactPage() {
         <section className="border-t border-brand-navy/10 bg-brand-canvas py-24 md:py-32">
           <Reveal className="mx-auto max-w-3xl px-4 text-center sm:px-6" y={26}>
             <div>
-              <SectionKicker>{c.closingKicker}</SectionKicker>
+              <SectionKicker>
+                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-kicker" className="inline-block">
+                  {c.closingKicker}
+                </PreviewFieldPulse>
+              </SectionKicker>
               <h2 className="font-heading mt-8 text-3xl font-light leading-tight tracking-tight text-brand-navy md:text-4xl lg:text-[2.65rem]">
-                {c.closingTitle}
+                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-title" className="inline-block">
+                  {c.closingTitle}
+                </PreviewFieldPulse>
               </h2>
-              <p className="mx-auto mt-5 max-w-lg text-[15px] font-light leading-relaxed text-brand-navy/70 md:text-base">{c.closingSubtitle}</p>
+              <p className="mx-auto mt-5 max-w-lg text-[15px] font-light leading-relaxed text-brand-navy/70 md:text-base">
+                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-subtitle" className="block">
+                  {c.closingSubtitle}
+                </PreviewFieldPulse>
+              </p>
               <div className={cn("mt-12 flex flex-wrap justify-center gap-4", pl.preview ? "flex-col" : "flex-col sm:flex-row")}>
-                <ClosingLink href={c.closingBtnPrimaryHref} primary reduceMotion={!!reduceMotion}>
-                  {c.closingBtnPrimary}
+                <ClosingLink href={contactFixed.closingBtnPrimaryHref} primary reduceMotion={!!reduceMotion}>
+                  <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-btnPrimary" className="inline-flex items-center gap-2">
+                    {c.closingBtnPrimary}
+                  </PreviewFieldPulse>
                 </ClosingLink>
-                <ClosingLink href={c.closingBtnSecondaryHref} reduceMotion={!!reduceMotion}>
-                  {c.closingBtnSecondary}
+                <ClosingLink href={contactFixed.closingBtnSecondaryHref} reduceMotion={!!reduceMotion}>
+                  <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-btnSecondary" className="inline-flex shrink-0">
+                    {c.closingBtnSecondary}
+                  </PreviewFieldPulse>
                 </ClosingLink>
               </div>
             </div>
           </Reveal>
         </section>
       </PreviewSectionChrome>
+
+      </main>
 
       <Footer />
     </div>
