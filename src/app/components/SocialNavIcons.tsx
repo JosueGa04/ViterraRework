@@ -4,10 +4,9 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { useSitePreviewVirtualPath } from "../../contexts/SitePreviewVirtualPathContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import type { HeaderSocialIconId } from "../config/socialLinks";
-import { XLogoIcon } from "./social/XLogoIcon";
 import { cn } from "./ui/utils";
 
-const iconById: Partial<Record<Exclude<HeaderSocialIconId, "x">, typeof Facebook>> = {
+const iconById: Partial<Record<HeaderSocialIconId, typeof Facebook>> = {
   facebook: Facebook,
   instagram: Instagram,
   linkedin: Linkedin,
@@ -58,8 +57,7 @@ export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsPro
       )}
     >
       {links.map(({ id, label, href }) => {
-        const Lucide =
-          id === "x" ? null : (iconById[id as Exclude<HeaderSocialIconId, "x">] ?? LinkIcon);
+        const Lucide = iconById[id] ?? LinkIcon;
         return (
           <li key={id} className="shrink-0">
             <a
@@ -76,11 +74,7 @@ export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsPro
                 pad
               )}
             >
-              {id === "x" ? (
-                <XLogoIcon className={icon} />
-              ) : (
-                <Lucide className={icon} strokeWidth={1.5} aria-hidden />
-              )}
+              <Lucide className={icon} strokeWidth={1.5} aria-hidden />
             </a>
           </li>
         );

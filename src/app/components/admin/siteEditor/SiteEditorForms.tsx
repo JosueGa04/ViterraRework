@@ -35,7 +35,6 @@ const CONTACT_ICON_OPTIONS: { value: ContactInfoIcon; label: string }[] = [
 const CONTACT_SOCIAL_PLATFORM_OPTIONS: { value: ContactSocialPlatform; label: string }[] = [
   { value: "facebook", label: "Facebook" },
   { value: "instagram", label: "Instagram" },
-  { value: "x", label: "X" },
   { value: "linkedin", label: "LinkedIn" },
   { value: "youtube", label: "YouTube" },
   { value: "tiktok", label: "TikTok" },
@@ -152,15 +151,6 @@ export function HomeEditorForm({
 
       {s("home-selection") && (
       <EditorSection title="Selección de propiedades" sectionId="home-selection">
-        <ImageUploadField
-          label="Imagen de la sección"
-          storagePage="home"
-          fieldKey="selectionImage"
-          editorPreviewFieldKey="home-selection-image"
-          value={draft.selectionImage}
-          onChange={(v) => p({ selectionImage: v })}
-          hint="Fondo detrás del bloque de propiedades destacadas."
-        />
         <LabeledField label="Etiqueta" editorFieldKey="home-selection-kicker">
           <TextInput value={draft.selectionKicker} onChange={(v) => p({ selectionKicker: v })} />
         </LabeledField>

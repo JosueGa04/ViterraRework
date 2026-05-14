@@ -137,7 +137,6 @@ export type ContactDeepLinks = {
 export const CONTACT_SOCIAL_PLATFORMS = [
   "facebook",
   "instagram",
-  "x",
   "linkedin",
   "youtube",
   "tiktok",
@@ -157,7 +156,6 @@ export type ContactSocialLinkItem = {
 export const CONTACT_SOCIAL_LABELS: Record<ContactSocialPlatform, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
-  x: "X",
   linkedin: "LinkedIn",
   youtube: "YouTube",
   tiktok: "TikTok",
@@ -180,6 +178,7 @@ export interface SiteContent {
     searchKicker: string;
     searchTitle: string;
     searchSubtitle: string;
+    /** Reservado; la sección «Selección» usa fondo blanco fijo (no se muestra imagen). */
     selectionImage: string;
     selectionKicker: string;
     selectionTitle: string;
@@ -329,7 +328,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     searchKicker: "Búsqueda",
     searchTitle: "Encuentre su próxima propiedad",
     searchSubtitle: "Indique criterios o explore el catálogo completo.",
-    selectionImage: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=1920",
+    selectionImage: "",
     selectionKicker: "Selección",
     selectionTitle: "Lo último en propiedades de lujo",
     selectionSubtitle: "Estilo de vida y ubicaciones excepcionales, elegidas para usted.",
@@ -431,7 +430,6 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     socialLinks: [
       { platform: "facebook", url: "#" },
       { platform: "instagram", url: "#" },
-      { platform: "x", url: "#" },
       { platform: "linkedin", url: "#" },
       { platform: "youtube", url: "#" },
     ],

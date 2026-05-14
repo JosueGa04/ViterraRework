@@ -141,8 +141,10 @@ function normalizeSocialLinksArray(raw: unknown[]): ContactSocialLinkItem[] {
   const out: ContactSocialLinkItem[] = [];
   for (const row of raw) {
     if (!isPlainObject(row) || typeof row.url !== "string") continue;
+    const rawPlat = row.platform;
+    if (rawPlat === "x" || rawPlat === "twitter") continue;
     out.push({
-      platform: sanitizeContactSocialPlatform(row.platform),
+      platform: sanitizeContactSocialPlatform(rawPlat),
       url: row.url,
     });
   }
@@ -165,7 +167,6 @@ function socialLinksFromLegacy(raw: Record<string, unknown>, def: SiteContent["c
   };
   add("facebook", s.facebook);
   add("instagram", s.instagram);
-  add("x", s.twitter);
   add("linkedin", s.linkedin);
   add("youtube", s.youtube);
   return items.length > 0 ? items : def.socialLinks;
@@ -451,7 +452,7 @@ function normalizeServiceCardContactLinks(raw: unknown, fallbackRow: ServiceCard
   return out.length > 0 ? out.slice(0, 12) : [];
 }
 
-const HEADER_SOCIAL_IDS = new Set(HEADER_SOCIAL_PLATFORM_OPTIONS.map((o) => o.id));
+const HEADER_SOCIAL_IDS = new Set<string>(HEADER_SOCIAL_PLATFORM_OPTIONS.map((o) => o.id));
 
 function normalizeHeaderNavSocial(raw: unknown, def: HeaderNavSocialLink[]): HeaderNavSocialLink[] {
   if (!Array.isArray(raw)) {

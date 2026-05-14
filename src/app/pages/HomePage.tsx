@@ -313,13 +313,6 @@ export function HomePage() {
       {/* Selección — fondo blanco (sin imagen de fondo) */}
       <PreviewSectionChrome blockId="home-selection" label="Selección de propiedades">
       <section className="relative scroll-fade-exit-white bg-white py-20 md:py-28">
-        {h.selectionImage?.trim() ? (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[min(38vh,380px)] overflow-hidden" aria-hidden>
-            <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-image" layout="cover" className="h-full min-h-[12rem]">
-              <img src={h.selectionImage} alt="" className="h-full w-full object-cover opacity-[0.09]" />
-            </PreviewFieldPulse>
-          </div>
-        ) : null}
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal
             className={cn(
