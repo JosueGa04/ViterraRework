@@ -180,7 +180,6 @@ export interface SiteContent {
     searchKicker: string;
     searchTitle: string;
     searchSubtitle: string;
-    selectionImage: string;
     selectionKicker: string;
     selectionTitle: string;
     selectionSubtitle: string;
@@ -277,7 +276,7 @@ export interface SiteContent {
     valuesKicker: string;
     valuesTitle: string;
     valuesIntro: string;
-    values: { title: string; text: string }[];
+    values: { title: string; text: string; iconKey: ServiceIconKey }[];
     stats: { value: string; label: string }[];
     statsSectionTitle: string;
     timelineKicker: string;
@@ -329,7 +328,6 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     searchKicker: "Búsqueda",
     searchTitle: "Encuentre su próxima propiedad",
     searchSubtitle: "Indique criterios o explore el catálogo completo.",
-    selectionImage: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=1920",
     selectionKicker: "Selección",
     selectionTitle: "Lo último en propiedades de lujo",
     selectionSubtitle: "Estilo de vida y ubicaciones excepcionales, elegidas para usted.",
@@ -561,10 +559,10 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     valuesTitle: "Nuestros Valores",
     valuesIntro: "Los principios que guían cada decisión y acción en Viterra Inmobiliaria",
     values: [
-      { title: "Excelencia", text: "Nos esforzamos por la perfección en cada detalle de nuestro servicio." },
-      { title: "Integridad", text: "Actuamos con honestidad y transparencia en todas nuestras relaciones." },
-      { title: "Compromiso", text: "Dedicados al éxito y satisfacción de cada uno de nuestros clientes." },
-      { title: "Innovación", text: "Constantemente mejorando y adoptando nuevas tecnologías y métodos." },
+      { title: "Excelencia", text: "Nos esforzamos por la perfección en cada detalle de nuestro servicio.", iconKey: "sparkles" },
+      { title: "Integridad", text: "Actuamos con honestidad y transparencia en todas nuestras relaciones.", iconKey: "shieldCheck" },
+      { title: "Compromiso", text: "Dedicados al éxito y satisfacción de cada uno de nuestros clientes.", iconKey: "handshake" },
+      { title: "Innovación", text: "Constantemente mejorando y adoptando nuevas tecnologías y métodos.", iconKey: "settings2" },
     ],
     stats: [
       { value: "15+", label: "Años de Experiencia" },

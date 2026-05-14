@@ -209,20 +209,20 @@ export function ServicesNodeGraphTwoState({ cards, reduceMotion }: Props) {
                         <Icon className="h-[22px] w-[22px] text-white/85" strokeWidth={1.6} />
                       </motion.button>
                       <div
-                        className="pointer-events-none absolute left-0 top-0 flex max-w-[min(148px,36vw)] flex-col items-center text-center"
+                        className="pointer-events-none absolute left-0 top-0 flex w-max max-w-[min(200px,46vw)] min-w-[10.5rem] flex-col items-center gap-1 text-center"
                         style={{
                           transform: `translate(-50%, -50%) translate(${tipUx * labelRadialDist}px, ${tipUy * labelRadialDist}px)`,
                         }}
                       >
                         <span
-                          className={isHovered ? "text-white" : "text-white/50"}
+                          className={cn(
+                            "text-balance px-1 leading-snug",
+                            isHovered ? "text-white" : "text-white/50"
+                          )}
                           style={{
                             fontSize: 11,
                             fontFamily: "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, monospace",
-                            lineHeight: 1.35,
                             letterSpacing: "0.05em",
-                            overflowWrap: "anywhere",
-                            wordBreak: "break-word",
                           }}
                         >
                           {card.title}

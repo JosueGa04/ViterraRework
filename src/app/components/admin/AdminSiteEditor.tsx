@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Monitor, RotateCcw, AlertTriangle, Layers, Smartphone } from "lucide-react";
 import { useSiteContent } from "../../../contexts/SiteContentContext";
 import { VisualSiteEditorProvider } from "../../../contexts/VisualSiteEditorContext";
@@ -147,6 +147,12 @@ export function AdminSiteEditor() {
     return servicesPreviewSurface === "detail" ? serviceDedicatedSlugCandidate : null;
   }, [serviceDedicatedSlugCandidate, servicesPreviewSurface]);
 
+  /** Debe coincidir con `key` del iframe: al remontar, `iframeReady` debe ser false antes del pintado para evitar la carrera descrita abajo. */
+  const previewIframeMountKey = useMemo(
+    () => `${tab}-${previewFrame}-${serviceDetailPreviewSlug ?? "page"}`,
+    [tab, previewFrame, serviceDetailPreviewSlug],
+  );
+
   const mergedContentRef = useRef(mergedContent);
   mergedContentRef.current = mergedContent;
   const previewPathRef = useRef(previewPath);
@@ -253,9 +259,17 @@ export function AdminSiteEditor() {
     []
   );
 
-  useEffect(() => {
+  /**
+   * Antes: `useEffect` ponía `iframeReady` en false *después* del primer pintado con el iframe nuevo.
+   * En ese primer ciclo `iframeReady` seguía true, el efecto de sync programaba un `setTimeout(120)`,
+   * el siguiente render ponía `iframeReady` false, el cleanup cancelaba el timeout y el efecto ya no
+   * volvía a programar → el iframe quedaba en «Esperando datos…» hasta un clic (p. ej. pestaña de bloque).
+   * `useLayoutEffect` fuerza `iframeReady` false antes del pintado, así el efecto de sync no programa
+   * hasta `onLoad`, que vuelve a poner ready y dispara `postSyncToIframe`.
+   */
+  useLayoutEffect(() => {
     setIframeReady(false);
-  }, [tab, previewFrame]);
+  }, [previewIframeMountKey]);
 
   useEffect(() => {
     const el = previewScrollRef.current;
@@ -392,11 +406,12 @@ export function AdminSiteEditor() {
   );
 
   const persistControls = (
-    <div className="space-y-2">
-      <div className="min-h-[1.375rem] text-xs sm:text-sm" aria-live="polite">
+    <div className="space-y-1">
+      <div className="min-h-[1.125rem] text-[10px] leading-tight text-slate-600 sm:text-xs" aria-live="polite">
         {persistFooterLine ? (
           <span
             className={cn(
+              "line-clamp-2 break-words",
               syncState === "error" && "font-medium text-red-700",
               syncState === "syncing" && "text-slate-600",
               syncState === "synced" && "font-medium text-emerald-800",
@@ -411,29 +426,35 @@ export function AdminSiteEditor() {
           </span>
         )}
       </div>
-      <div className="grid w-full gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
         <button
           type="button"
           onClick={handleSaveSite}
           disabled={!isDirty || loading || syncState === "syncing"}
-          className="inline-flex h-11 items-center justify-center rounded-lg bg-brand-navy px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1e2a45] disabled:cursor-not-allowed disabled:opacity-50"
+          title="Guardar sitio: publica en el servidor los cambios de esta página."
+          aria-label="Guardar sitio"
+          className="inline-flex min-h-8 items-center justify-center rounded-md bg-brand-navy px-1.5 py-1.5 text-center text-[11px] font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#1e2a45] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9 sm:px-2 sm:text-xs"
         >
-          Guardar sitio
+          Guardar
         </button>
         <button
           type="button"
           onClick={handleResetSection}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          title="Restaurar esta sección a los textos e imágenes por defecto."
+          aria-label="Restaurar esta sección"
+          className="inline-flex min-h-8 items-center justify-center gap-0.5 rounded-md border border-slate-300 bg-white px-1 py-1.5 text-center text-[11px] font-medium leading-tight text-slate-700 hover:bg-slate-50 sm:min-h-9 sm:gap-1 sm:px-1.5 sm:text-xs"
         >
-          <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
-          Restaurar esta sección
+          <RotateCcw className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" strokeWidth={1.5} aria-hidden />
+          <span className="min-w-0">Sección</span>
         </button>
         <button
           type="button"
           onClick={() => void handleResetAll()}
-          className="inline-flex h-11 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-800 hover:bg-red-100"
+          title="Restaurar todo el sitio a los valores por defecto."
+          aria-label="Restaurar todo el sitio"
+          className="inline-flex min-h-8 items-center justify-center rounded-md border border-red-200 bg-red-50 px-1 py-1.5 text-center text-[11px] font-medium leading-tight text-red-800 hover:bg-red-100 sm:min-h-9 sm:px-1.5 sm:text-xs"
         >
-          Restaurar todo el sitio
+          Todo sitio
         </button>
       </div>
     </div>
@@ -590,7 +611,7 @@ export function AdminSiteEditor() {
             >
               {editorFormFields}
             </div>
-            <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 p-2 shadow-sm sm:p-2.5">
+            <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 px-1.5 py-1 shadow-sm sm:px-2 sm:py-1.5">
               {persistControls}
             </div>
           </div>
@@ -698,7 +719,7 @@ export function AdminSiteEditor() {
                     }}
                   >
                     <iframe
-                      key={`${tab}-${previewFrame}-${serviceDetailPreviewSlug ?? "page"}`}
+                      key={previewIframeMountKey}
                       ref={iframeRef}
                       title="Vista previa del sitio"
                       src="/admin/site-preview-frame"
@@ -708,6 +729,7 @@ export function AdminSiteEditor() {
                       onLoad={() => {
                         setIframeReady(true);
                         queueMicrotask(() => postSyncToIframe());
+                        window.setTimeout(() => postSyncToIframe(), 180);
                       }}
                     />
                   </div>

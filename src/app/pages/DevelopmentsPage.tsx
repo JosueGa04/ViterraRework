@@ -232,10 +232,14 @@ export function DevelopmentsPage() {
             <Reveal className="mb-8 sm:mb-12" y={20}>
               <div>
                 <p className="font-heading mb-2 text-xs uppercase tracking-[0.1em] text-brand-navy/65 sm:mb-3 sm:text-sm">
-                  {page.featuredKicker}
+                  <PreviewFieldPulse blockId="dev-featured" fieldKey="dev-featured-kicker" className="inline-block">
+                    {page.featuredKicker}
+                  </PreviewFieldPulse>
                 </p>
                 <h2 className="font-heading text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl md:text-4xl">
-                  {page.featuredTitle}
+                  <PreviewFieldPulse blockId="dev-featured" fieldKey="dev-featured-title" className="inline-block">
+                    {page.featuredTitle}
+                  </PreviewFieldPulse>
                 </h2>
               </div>
             </Reveal>

@@ -152,15 +152,6 @@ export function HomeEditorForm({
 
       {s("home-selection") && (
       <EditorSection title="Selección de propiedades" sectionId="home-selection">
-        <ImageUploadField
-          label="Imagen de la sección"
-          storagePage="home"
-          fieldKey="selectionImage"
-          editorPreviewFieldKey="home-selection-image"
-          value={draft.selectionImage}
-          onChange={(v) => p({ selectionImage: v })}
-          hint="Fondo detrás del bloque de propiedades destacadas."
-        />
         <LabeledField label="Etiqueta" editorFieldKey="home-selection-kicker">
           <TextInput value={draft.selectionKicker} onChange={(v) => p({ selectionKicker: v })} />
         </LabeledField>
@@ -1898,6 +1889,59 @@ export function AboutEditorForm({
   const p = (patch: Partial<A>) => onChange({ ...draft, ...patch });
   const s = (id: string) => pickSection(activeSectionId, id);
   const aboutSafe = mergeSiteSection("about", draft);
+  const addValue = () => {
+    const i = aboutSafe.values.length;
+    p({
+      values: [
+        ...aboutSafe.values,
+        {
+          title: `Nuevo valor ${i + 1}`,
+          text: "",
+          iconKey: SERVICE_ICON_KEYS[i % SERVICE_ICON_KEYS.length]!,
+        },
+      ],
+    });
+  };
+  const removeValue = (index: number) => {
+    if (aboutSafe.values.length <= 1) return;
+    p({ values: aboutSafe.values.filter((_, i) => i !== index) });
+  };
+  const addStat = () => {
+    p({
+      stats: [...aboutSafe.stats, { value: "0+", label: "Nueva cifra" }],
+    });
+  };
+  const removeStat = (index: number) => {
+    if (aboutSafe.stats.length <= 1) return;
+    p({ stats: aboutSafe.stats.filter((_, i) => i !== index) });
+  };
+  const addMilestone = () => {
+    const lastYear = aboutSafe.milestones[aboutSafe.milestones.length - 1]?.year ?? "";
+    const parsed = parseInt(lastYear, 10);
+    const nextYear = Number.isFinite(parsed) ? String(parsed + 1) : new Date().getFullYear().toString();
+    p({
+      milestones: [
+        ...aboutSafe.milestones,
+        { year: nextYear, title: "Nuevo hito", description: "" },
+      ],
+    });
+  };
+  const removeMilestone = (index: number) => {
+    if (aboutSafe.milestones.length <= 1) return;
+    p({ milestones: aboutSafe.milestones.filter((_, i) => i !== index) });
+  };
+  const addMember = () => {
+    p({
+      team: [
+        ...aboutSafe.team,
+        { name: "Nuevo miembro", role: "Cargo", initials: "NM" },
+      ],
+    });
+  };
+  const removeMember = (index: number) => {
+    if (aboutSafe.team.length <= 1) return;
+    p({ team: aboutSafe.team.filter((_, i) => i !== index) });
+  };
   return (
     <div className="space-y-6">
       {activeSectionId == null && (
@@ -1931,25 +1975,26 @@ export function AboutEditorForm({
 
       {s("about-story") && (
       <EditorSection title="Historia" sectionId="about-story">
-        <LabeledField label="Etiqueta">
+        <LabeledField label="Etiqueta" editorFieldKey="about-story-kicker">
           <TextInput value={draft.storyKicker} onChange={(v) => p({ storyKicker: v })} />
         </LabeledField>
-        <LabeledField label="Título">
+        <LabeledField label="Título" editorFieldKey="about-story-title">
           <TextInput value={draft.storyTitle} onChange={(v) => p({ storyTitle: v })} />
         </LabeledField>
-        <LabeledField label="Párrafo 1">
+        <LabeledField label="Párrafo 1" editorFieldKey="about-story-p1">
           <TextArea value={draft.storyP1} onChange={(v) => p({ storyP1: v })} rows={4} />
         </LabeledField>
-        <LabeledField label="Párrafo 2">
+        <LabeledField label="Párrafo 2" editorFieldKey="about-story-p2">
           <TextArea value={draft.storyP2} onChange={(v) => p({ storyP2: v })} rows={4} />
         </LabeledField>
-        <LabeledField label="Párrafo 3">
+        <LabeledField label="Párrafo 3" editorFieldKey="about-story-p3">
           <TextArea value={draft.storyP3} onChange={(v) => p({ storyP3: v })} rows={4} />
         </LabeledField>
         <ImageUploadField
           label="Imagen"
           storagePage="about"
           fieldKey="storyImage"
+          editorPreviewFieldKey="about-story-image"
           value={draft.storyImage}
           onChange={(v) => p({ storyImage: v })}
         />
@@ -1958,49 +2003,76 @@ export function AboutEditorForm({
 
       {s("about-mission") && (
       <EditorSection title="Misión y visión" sectionId="about-mission">
-        <LabeledField label="Misión — título">
+        <LabeledField label="Misión — título" editorFieldKey="about-mission-missionTitle">
           <TextInput value={draft.missionTitle} onChange={(v) => p({ missionTitle: v })} />
         </LabeledField>
-        <LabeledField label="Misión — texto">
+        <LabeledField label="Misión — texto" editorFieldKey="about-mission-missionText">
           <TextArea value={draft.missionText} onChange={(v) => p({ missionText: v })} rows={4} />
         </LabeledField>
-        <LabeledField label="Visión — título">
+        <LabeledField label="Visión — título" editorFieldKey="about-mission-visionTitle">
           <TextInput value={draft.visionTitle} onChange={(v) => p({ visionTitle: v })} />
         </LabeledField>
-        <LabeledField label="Visión — texto">
+        <LabeledField label="Visión — texto" editorFieldKey="about-mission-visionText">
           <TextArea value={draft.visionText} onChange={(v) => p({ visionText: v })} rows={4} />
         </LabeledField>
       </EditorSection>
       )}
 
       {s("about-values") && (
-      <EditorSection title="Valores (4 bloques)" sectionId="about-values">
-        <LabeledField label="Etiqueta pequeña">
+      <EditorSection title="Valores" sectionId="about-values">
+        <LabeledField label="Etiqueta pequeña" editorFieldKey="about-values-kicker">
           <TextInput value={draft.valuesKicker} onChange={(v) => p({ valuesKicker: v })} />
         </LabeledField>
-        <LabeledField label="Título">
+        <LabeledField label="Título" editorFieldKey="about-values-title">
           <TextInput value={draft.valuesTitle} onChange={(v) => p({ valuesTitle: v })} />
         </LabeledField>
-        <LabeledField label="Introducción">
+        <LabeledField label="Introducción" editorFieldKey="about-values-intro">
           <TextArea value={draft.valuesIntro} onChange={(v) => p({ valuesIntro: v })} rows={2} />
         </LabeledField>
-        {draft.values.map((val, i) => (
-          <div key={i} className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="mb-2 text-xs font-semibold text-slate-500">Valor {i + 1}</p>
-            <LabeledField label="Título">
+        {aboutSafe.values.map((val, i) => (
+          <div key={i} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-500">Valor {i + 1}</p>
+              <button
+                type="button"
+                disabled={aboutSafe.values.length <= 1}
+                onClick={() => removeValue(i)}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Eliminar
+              </button>
+            </div>
+            <LabeledField label="Icono" editorFieldKey={`about-values-${i}-icon`}>
+              <select
+                value={val.iconKey}
+                onChange={(e) => {
+                  const iconKey = e.target.value as (typeof SERVICE_ICON_KEYS)[number];
+                  const values = aboutSafe.values.map((x, j) => (j === i ? { ...x, iconKey } : x));
+                  p({ values });
+                }}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              >
+                {SERVICE_ICON_KEYS.map((k) => (
+                  <option key={k} value={k}>
+                    {SERVICE_ICON_LABELS[k]}
+                  </option>
+                ))}
+              </select>
+            </LabeledField>
+            <LabeledField label="Título" editorFieldKey={`about-values-${i}-title`}>
               <TextInput
                 value={val.title}
                 onChange={(v) => {
-                  const values = draft.values.map((x, j) => (j === i ? { ...x, title: v } : x));
+                  const values = aboutSafe.values.map((x, j) => (j === i ? { ...x, title: v } : x));
                   p({ values });
                 }}
               />
             </LabeledField>
-            <LabeledField label="Texto">
+            <LabeledField label="Texto" editorFieldKey={`about-values-${i}-text`}>
               <TextArea
                 value={val.text}
                 onChange={(v) => {
-                  const values = draft.values.map((x, j) => (j === i ? { ...x, text: v } : x));
+                  const values = aboutSafe.values.map((x, j) => (j === i ? { ...x, text: v } : x));
                   p({ values });
                 }}
                 rows={2}
@@ -2008,73 +2080,110 @@ export function AboutEditorForm({
             </LabeledField>
           </div>
         ))}
+        <button
+          type="button"
+          onClick={addValue}
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+        >
+          Añadir valor
+        </button>
       </EditorSection>
       )}
 
       {s("about-stats") && (
-      <EditorSection title="Cifras (4 estadísticas)" sectionId="about-stats">
-        {draft.stats.map((st, i) => (
-          <div key={i} className="grid gap-3 sm:grid-cols-2">
-            <LabeledField label={`Cifra ${i + 1}`}>
-              <TextInput
-                value={st.value}
-                onChange={(v) => {
-                  const stats = draft.stats.map((x, j) => (j === i ? { ...x, value: v } : x));
-                  p({ stats });
-                }}
-              />
-            </LabeledField>
-            <LabeledField label={`Etiqueta ${i + 1}`}>
-              <TextInput
-                value={st.label}
-                onChange={(v) => {
-                  const stats = draft.stats.map((x, j) => (j === i ? { ...x, label: v } : x));
-                  p({ stats });
-                }}
-              />
-            </LabeledField>
+      <EditorSection title="Cifras" sectionId="about-stats">
+        {aboutSafe.stats.map((st, i) => (
+          <div key={i} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-500">Cifra {i + 1}</p>
+              <button
+                type="button"
+                disabled={aboutSafe.stats.length <= 1}
+                onClick={() => removeStat(i)}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Eliminar
+              </button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LabeledField label="Cifra" hint='Ej.: "15+", "1,200+", "$2M"' editorFieldKey={`about-stats-${i}-value`}>
+                <TextInput
+                  value={st.value}
+                  onChange={(v) => {
+                    const stats = aboutSafe.stats.map((x, j) => (j === i ? { ...x, value: v } : x));
+                    p({ stats });
+                  }}
+                />
+              </LabeledField>
+              <LabeledField label="Etiqueta" editorFieldKey={`about-stats-${i}-label`}>
+                <TextInput
+                  value={st.label}
+                  onChange={(v) => {
+                    const stats = aboutSafe.stats.map((x, j) => (j === i ? { ...x, label: v } : x));
+                    p({ stats });
+                  }}
+                />
+              </LabeledField>
+            </div>
           </div>
         ))}
+        <button
+          type="button"
+          onClick={addStat}
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+        >
+          Añadir cifra
+        </button>
       </EditorSection>
       )}
 
       {s("about-timeline") && (
       <EditorSection title="Línea de tiempo" sectionId="about-timeline">
-        <LabeledField label="Etiqueta">
+        <LabeledField label="Etiqueta" editorFieldKey="about-timeline-kicker">
           <TextInput value={draft.timelineKicker} onChange={(v) => p({ timelineKicker: v })} />
         </LabeledField>
-        <LabeledField label="Título">
+        <LabeledField label="Título" editorFieldKey="about-timeline-title">
           <TextInput value={draft.timelineTitle} onChange={(v) => p({ timelineTitle: v })} />
         </LabeledField>
-        <LabeledField label="Introducción">
+        <LabeledField label="Introducción" editorFieldKey="about-timeline-intro">
           <TextArea value={draft.timelineIntro} onChange={(v) => p({ timelineIntro: v })} rows={2} />
         </LabeledField>
-        {draft.milestones.map((m, i) => (
-          <div key={i} className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="mb-2 text-xs font-semibold text-slate-500">Hito {i + 1}</p>
-            <LabeledField label="Año">
+        {aboutSafe.milestones.map((m, i) => (
+          <div key={i} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-500">Hito {i + 1}</p>
+              <button
+                type="button"
+                disabled={aboutSafe.milestones.length <= 1}
+                onClick={() => removeMilestone(i)}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Eliminar
+              </button>
+            </div>
+            <LabeledField label="Año" editorFieldKey={`about-timeline-${i}-year`}>
               <TextInput
                 value={m.year}
                 onChange={(v) => {
-                  const milestones = draft.milestones.map((x, j) => (j === i ? { ...x, year: v } : x));
+                  const milestones = aboutSafe.milestones.map((x, j) => (j === i ? { ...x, year: v } : x));
                   p({ milestones });
                 }}
               />
             </LabeledField>
-            <LabeledField label="Título">
+            <LabeledField label="Título" editorFieldKey={`about-timeline-${i}-title`}>
               <TextInput
                 value={m.title}
                 onChange={(v) => {
-                  const milestones = draft.milestones.map((x, j) => (j === i ? { ...x, title: v } : x));
+                  const milestones = aboutSafe.milestones.map((x, j) => (j === i ? { ...x, title: v } : x));
                   p({ milestones });
                 }}
               />
             </LabeledField>
-            <LabeledField label="Descripción">
+            <LabeledField label="Descripción" editorFieldKey={`about-timeline-${i}-description`}>
               <TextArea
                 value={m.description}
                 onChange={(v) => {
-                  const milestones = draft.milestones.map((x, j) => (j === i ? { ...x, description: v } : x));
+                  const milestones = aboutSafe.milestones.map((x, j) => (j === i ? { ...x, description: v } : x));
                   p({ milestones });
                 }}
                 rows={3}
@@ -2082,46 +2191,63 @@ export function AboutEditorForm({
             </LabeledField>
           </div>
         ))}
+        <button
+          type="button"
+          onClick={addMilestone}
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+        >
+          Añadir hito
+        </button>
       </EditorSection>
       )}
 
       {s("about-team") && (
       <EditorSection title="Equipo" sectionId="about-team">
-        <LabeledField label="Etiqueta">
+        <LabeledField label="Etiqueta" editorFieldKey="about-team-kicker">
           <TextInput value={draft.teamKicker} onChange={(v) => p({ teamKicker: v })} />
         </LabeledField>
-        <LabeledField label="Título">
+        <LabeledField label="Título" editorFieldKey="about-team-title">
           <TextInput value={draft.teamTitle} onChange={(v) => p({ teamTitle: v })} />
         </LabeledField>
-        <LabeledField label="Introducción">
+        <LabeledField label="Introducción" editorFieldKey="about-team-intro">
           <TextArea value={draft.teamIntro} onChange={(v) => p({ teamIntro: v })} rows={2} />
         </LabeledField>
-        {draft.team.map((member, i) => (
-          <div key={i} className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="mb-2 text-xs font-semibold text-slate-500">Persona {i + 1}</p>
-            <LabeledField label="Nombre">
+        {aboutSafe.team.map((member, i) => (
+          <div key={i} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-500">Persona {i + 1}</p>
+              <button
+                type="button"
+                disabled={aboutSafe.team.length <= 1}
+                onClick={() => removeMember(i)}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Eliminar
+              </button>
+            </div>
+            <LabeledField label="Nombre" editorFieldKey={`about-team-${i}-name`}>
               <TextInput
                 value={member.name}
                 onChange={(v) => {
-                  const team = draft.team.map((x, j) => (j === i ? { ...x, name: v } : x));
+                  const team = aboutSafe.team.map((x, j) => (j === i ? { ...x, name: v } : x));
                   p({ team });
                 }}
               />
             </LabeledField>
-            <LabeledField label="Cargo">
+            <LabeledField label="Cargo" editorFieldKey={`about-team-${i}-role`}>
               <TextInput
                 value={member.role}
                 onChange={(v) => {
-                  const team = draft.team.map((x, j) => (j === i ? { ...x, role: v } : x));
+                  const team = aboutSafe.team.map((x, j) => (j === i ? { ...x, role: v } : x));
                   p({ team });
                 }}
               />
             </LabeledField>
-            <LabeledField label="Iniciales (2 letras)">
+            <LabeledField label="Iniciales (2 letras)" editorFieldKey={`about-team-${i}-initials`}>
               <TextInput
                 value={member.initials}
                 onChange={(v) => {
-                  const team = draft.team.map((x, j) => (j === i ? { ...x, initials: v } : x));
+                  const team = aboutSafe.team.map((x, j) => (j === i ? { ...x, initials: v } : x));
                   p({ team });
                 }}
               />
@@ -2130,9 +2256,10 @@ export function AboutEditorForm({
               label="Foto (cuadrada)"
               storagePage="about"
               fieldKey={`team-${i}-photo`}
+              editorPreviewFieldKey={`about-team-${i}-image`}
               value={member.image ?? ""}
               onChange={(v) => {
-                const team = draft.team.map((x, j) =>
+                const team = aboutSafe.team.map((x, j) =>
                   j === i ? { ...x, image: v.trim() || undefined } : x
                 );
                 p({ team });
@@ -2141,6 +2268,13 @@ export function AboutEditorForm({
             />
           </div>
         ))}
+        <button
+          type="button"
+          onClick={addMember}
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+        >
+          Añadir miembro
+        </button>
       </EditorSection>
       )}
     </div>
@@ -2193,10 +2327,10 @@ export function DevelopmentsEditorForm({
 
       {s("dev-featured") && (
       <EditorSection title="Sección proyectos destacados (títulos)" sectionId="dev-featured">
-        <LabeledField label="Etiqueta pequeña">
+        <LabeledField label="Etiqueta pequeña" editorFieldKey="dev-featured-kicker">
           <TextInput value={draft.featuredKicker} onChange={(v) => p({ featuredKicker: v })} />
         </LabeledField>
-        <LabeledField label="Título">
+        <LabeledField label="Título" editorFieldKey="dev-featured-title">
           <TextInput value={draft.featuredTitle} onChange={(v) => p({ featuredTitle: v })} />
         </LabeledField>
       </EditorSection>
