@@ -241,14 +241,16 @@ export function HomePage() {
       <section
         id="busqueda"
         className={cn(
-          "relative flex flex-col justify-center overflow-hidden border-b border-brand-navy/20",
+          "relative flex flex-col overflow-hidden border-b border-brand-navy/20",
           "min-h-0 scroll-mt-[var(--viterra-sticky-header-offset)]",
           pl.preview
-            ? "h-auto max-h-none py-10 sm:py-12"
+            ? "h-auto max-h-none justify-center py-10 sm:py-12"
             : cn(
-                "h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
-                "max-h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
-                "py-5 md:py-6"
+                "justify-start py-8 sm:py-10 md:py-12",
+                "max-lg:h-auto max-lg:max-h-none",
+                "lg:h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
+                "lg:max-h-[calc(100dvh-var(--viterra-sticky-header-offset))]",
+                "lg:justify-center"
               )
         )}
       >
@@ -273,7 +275,9 @@ export function HomePage() {
         <div
           className={cn(
             "relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-col overflow-x-visible px-4 sm:px-6 lg:px-8",
-            pl.preview ? "flex-none py-1" : "flex-1 justify-center py-1"
+            pl.preview
+              ? "flex-none py-1"
+              : "max-lg:flex-none max-lg:py-0 lg:flex-1 lg:justify-center lg:py-1"
           )}
         >
           <Reveal className={cn("mb-3 shrink-0", pl.preview ? "mb-8 sm:mb-10" : "md:mb-4")} y={28}>
@@ -295,15 +299,20 @@ export function HomePage() {
               </p>
             </div>
           </Reveal>
-          <Reveal delay={0.06} y={16} className={pl.preview ? "mt-4 sm:mt-6" : undefined}>
+          <Reveal delay={0.06} y={16} className={pl.preview ? "mt-4 sm:mt-6" : "mt-2 max-lg:mt-4"}>
             <motion.div
               initial={reduceMotion ? false : { opacity: 0.92, y: 8 }}
               whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="mx-auto max-w-4xl"
+              className="mx-auto w-full max-w-xl sm:max-w-2xl lg:max-w-4xl"
             >
-              <SearchBar onSearch={handleSearch} variant="ambient" catalogPriceSlices={catalogPriceSlices} />
+              <SearchBar
+                onSearch={handleSearch}
+                variant="ambient"
+                catalogPriceSlices={catalogPriceSlices}
+                className="max-lg:rounded-2xl max-lg:border max-lg:border-white/10 max-lg:bg-black/35 max-lg:p-4 max-lg:backdrop-blur-md sm:max-lg:p-5"
+              />
             </motion.div>
           </Reveal>
         </div>

@@ -96,6 +96,8 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
   const previewCanvas = usePreviewCanvas();
   const isAmbient = variant === "ambient";
   const isPremium = variant === "premium";
+  /** Home búsqueda: menos aire en móvil dentro del panel. */
+  const compactAmbient = isAmbient && !previewCanvas;
   const manualToggleId = useId();
   const manualRegionId = `${manualToggleId}-region`;
 
@@ -193,7 +195,8 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
 
   /** Pista gruesa redondeada + rango relleno + thumbs grandes (mejor arrastre y contraste). */
   const sliderLook = cn(
-    "w-full cursor-grab touch-pan-x py-4 active:cursor-grabbing",
+    "w-full cursor-grab touch-pan-x active:cursor-grabbing",
+    compactAmbient ? "py-3 sm:py-4" : "py-4",
     "[&_[data-slot=slider-track]]:relative [&_[data-slot=slider-track]]:mx-1.5 [&_[data-slot=slider-track]]:h-px [&_[data-slot=slider-track]]:rounded-full [&_[data-slot=slider-track]]:shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]",
     "[&_[data-slot=slider-range]]:rounded-full [&_[data-slot=slider-range]]:shadow-[0_1px_3px_rgba(0,0,0,0.15)]",
     "[&_[data-slot=slider-thumb]]:box-border [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:min-h-4 [&_[data-slot=slider-thumb]]:min-w-4 [&_[data-slot=slider-thumb]]:shrink-0 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:border-white [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-thumb]]:shadow-[0_2px_8px_rgba(0,0,0,0.24)] [&_[data-slot=slider-thumb]]:outline-none [&_[data-slot=slider-thumb]]:transition-[transform,box-shadow] [&_[data-slot=slider-thumb]]:duration-150 [&_[data-slot=slider-thumb]]:ease-out [&_[data-slot=slider-thumb]]:hover:scale-110 [&_[data-slot=slider-thumb]]:hover:shadow-[0_3px_12px_rgba(0,0,0,0.3)] [&_[data-slot=slider-thumb]]:focus-visible:ring-2 [&_[data-slot=slider-thumb]]:focus-visible:ring-primary/40 [&_[data-slot=slider-thumb]]:focus-visible:ring-offset-2 [&_[data-slot=slider-thumb]]:focus-visible:ring-offset-transparent [&_[data-slot=slider-thumb]]:active:scale-105",
@@ -206,9 +209,9 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
   return (
     <div
       className={cn(
-        "border-t pt-4",
-        previewCanvas ? "mt-3 pt-3" : "mt-4",
-        isAmbient && "border-white/10",
+        "border-t",
+        compactAmbient ? "mt-3 border-white/10 pt-3 sm:mt-4 sm:pt-4" : previewCanvas ? "mt-3 border-white/10 pt-3" : "mt-4 pt-4",
+        !compactAmbient && isAmbient && "border-white/10",
         isPremium && "border-brand-navy/10",
         !isPremium && !isAmbient && "border-slate-200"
       )}
@@ -216,11 +219,15 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
       <div
         className={cn(
           cardClass,
-          previewCanvas ? "px-3 py-2.5 sm:px-4 sm:py-3" : "px-4 py-3 sm:px-5 sm:py-4"
+          previewCanvas
+            ? "px-3 py-2.5 sm:px-4 sm:py-3"
+            : compactAmbient
+              ? "px-3 py-2.5 sm:px-4 sm:py-3.5"
+              : "px-4 py-3 sm:px-5 sm:py-4"
         )}
       >
-        <div className="mb-2">
-          <h3 className={cn(titleClass, "text-[15px] sm:text-base font-semibold")}>
+        <div className={cn(compactAmbient ? "mb-1.5" : "mb-2")}>
+          <h3 className={cn(titleClass, "text-left text-[15px] font-semibold sm:text-base")}>
             Rango de precios{" "}
             <span className="uppercase tracking-wider">| MXN</span>
           </h3>
@@ -252,7 +259,8 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
 
         <p
           className={cn(
-            "mt-2 text-center text-[12px] tabular-nums leading-snug sm:text-[13px]",
+            "mt-2 text-[12px] tabular-nums leading-snug sm:text-[13px]",
+            compactAmbient ? "text-left" : "text-center",
             isAmbient ? "text-white/90" : "text-slate-800"
           )}
           aria-live="polite"
@@ -262,7 +270,7 @@ export const SearchBarCatalogPriceRange = forwardRef<SearchBarCatalogPriceRangeH
           <span className="font-semibold">{formatMxnLong(local[1])}</span>
         </p>
 
-        <div className="mt-3 flex justify-center">
+        <div className={cn("mt-3 flex", compactAmbient ? "justify-start" : "justify-center")}>
           <button
             type="button"
             id={manualToggleId}

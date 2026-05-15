@@ -73,6 +73,8 @@ export function SearchBar({
 
   const isPremium = variant === "premium";
   const isAmbient = variant === "ambient";
+  /** Home / hero: mejor ritmo en móvil y tablet sin depender del ancho del preview canvas. */
+  const compactAmbient = isAmbient && !previewCanvas;
 
   const { effectiveCatalogPrices, showPriceOperationToggle } = useMemo(() => {
     if (catalogPriceSlices) {
@@ -163,9 +165,10 @@ export function SearchBar({
   };
 
   const labelClass = cn(
-    "block mb-2 text-left uppercase tracking-[0.16em]",
+    "block text-left uppercase tracking-[0.16em]",
     isAmbient && "text-[10px] font-medium text-white/75",
-    isAmbient && (previewCanvas ? "mb-4 sm:mb-4" : "mb-3"),
+    isAmbient && (previewCanvas ? "mb-4 sm:mb-4" : "mb-1.5 sm:mb-2 lg:mb-3"),
+    !isAmbient && "mb-2",
     isPremium && !isAmbient && "text-[10px] text-brand-navy/60 font-medium",
     !isPremium && !isAmbient && "text-sm font-medium text-slate-700"
   );
@@ -220,21 +223,23 @@ export function SearchBar({
     >
       <div
         className={cn(
-          "grid grid-cols-1 gap-4 sm:gap-4",
+          "grid w-full grid-cols-1",
+          compactAmbient ? "gap-y-2.5 sm:gap-y-3" : "gap-4 sm:gap-4",
           !previewCanvas && mainGridWide,
-          isAmbient &&
-            (previewCanvas ? "gap-y-6 sm:gap-y-7" : "gap-y-5 lg:gap-y-0")
+          previewCanvas && isAmbient && "gap-y-6 sm:gap-y-7",
+          compactAmbient && "lg:gap-y-0"
         )}
       >
         {showPriceOperationToggle ? (
-          <div className="min-w-0">
+          <div className="min-w-0 w-full">
             <label className={labelClass}>Operación</label>
             <div
               role="group"
               aria-label="Venta o alquiler"
               className={cn(
                 "flex w-full rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]",
-                !previewCanvas && "max-w-md",
+                !previewCanvas && !compactAmbient && "max-w-md",
+                compactAmbient && "max-w-none",
                 isAmbient
                   ? "border-white/25 bg-black/35 backdrop-blur-sm"
                   : "border-slate-200 bg-slate-100/90"
@@ -276,7 +281,7 @@ export function SearchBar({
           </div>
         ) : null}
 
-        <div className={cn("min-w-0", !previewCanvas && "lg:min-w-[12rem]")}>
+        <div className={cn("min-w-0 w-full", !previewCanvas && "lg:min-w-[12rem]")}>
           <label className={labelClass}>Ubicación o palabra clave</label>
           <input
             type="text"
@@ -287,7 +292,7 @@ export function SearchBar({
           />
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 w-full">
           <label className={labelClass}>Tipo</label>
           <select
             value={filters.type}
@@ -308,7 +313,7 @@ export function SearchBar({
         </div>
 
         {showStatusFilter ? (
-          <div className="min-w-0">
+          <div className="min-w-0 w-full">
             <label className={labelClass}>Estado</label>
             <select
               value={filters.status}
@@ -328,11 +333,12 @@ export function SearchBar({
 
         <div
           className={cn(
-            "flex min-w-0 flex-col",
-            isAmbient && previewCanvas ? "gap-4" : "gap-2"
+            "flex min-w-0 w-full flex-col",
+            isAmbient && previewCanvas ? "gap-4" : "gap-2",
+            compactAmbient && "max-lg:mt-0.5"
           )}
         >
-          <label className={cn(labelClass, "text-transparent")} aria-hidden="true">
+          <label className={cn(labelClass, "text-transparent", compactAmbient && "max-lg:hidden")} aria-hidden="true">
             Buscar
           </label>
           <button type="submit" className={cn(btnClass, "lg:w-full min-w-0")}>
@@ -342,11 +348,11 @@ export function SearchBar({
         </div>
       </div>
 
-      <div className={cn(isAmbient && previewCanvas ? "mt-7 sm:mt-8" : "mt-5")}>
+      <div className={cn(isAmbient && previewCanvas ? "mt-7 sm:mt-8" : compactAmbient ? "mt-4 sm:mt-5" : "mt-5")}>
         <div
           className={cn(
             "flex",
-            previewCanvas ? "justify-center" : "justify-center sm:justify-start"
+            previewCanvas ? "justify-center" : compactAmbient ? "justify-start" : "justify-center sm:justify-start"
           )}
         >
           <button
@@ -375,7 +381,7 @@ export function SearchBar({
             role="region"
             aria-labelledby={advancedToggleId}
             className={cn(
-              "mt-4 grid grid-cols-1 gap-4",
+              "mt-3 grid grid-cols-1 gap-3 sm:gap-4",
               !previewCanvas && "sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-5"
             )}
           >
@@ -458,11 +464,17 @@ export function SearchBar({
       {showMapZoneLink && (
         <div
           className={cn(
-            "mt-4 flex justify-center",
-            showCatalogPriceRange ? "pt-1" : "border-t pt-5 mt-5",
-            !showCatalogPriceRange && isAmbient && "border-white/15",
-            !showCatalogPriceRange && isPremium && !isAmbient && "border-brand-navy/10",
-            !showCatalogPriceRange && !isPremium && !isAmbient && "border-slate-200"
+            "flex",
+            compactAmbient ? "justify-start" : "justify-center",
+            showCatalogPriceRange
+              ? "mt-3 pt-1 sm:mt-4"
+              : cn(
+                  "mt-4 border-t pt-4 sm:mt-5 sm:pt-5",
+                  compactAmbient && "mt-3 pt-3 sm:mt-4 sm:pt-4",
+                  !showCatalogPriceRange && isAmbient && "border-white/15",
+                  !showCatalogPriceRange && isPremium && !isAmbient && "border-brand-navy/10",
+                  !showCatalogPriceRange && !isPremium && !isAmbient && "border-slate-200"
+                )
           )}
         >
           <Link
