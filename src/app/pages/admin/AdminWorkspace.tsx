@@ -182,6 +182,7 @@ import {
 } from "../../lib/supabaseSalesPipeline";
 import { foldSearchText } from "../../lib/searchText";
 import { buildAdminHref, parseAdminPath, type AdminTab, type CompanySubtab } from "./adminNavigation";
+import { PdfDownloadDropdown } from "../../components/pdf/PdfDownloadDropdown";
 import {
   AdminActivitiesSkeleton,
   AdminChartsRowSkeleton,
@@ -3917,14 +3918,7 @@ export function AdminWorkspace() {
                         >
                           <Link2 className="h-4 w-4" strokeWidth={1.5} />
                         </button>
-                        <button
-                          type="button"
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                          title="Exportar información (próximamente)"
-                          aria-label="Exportar información"
-                        >
-                          <Download className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
+                        <PdfDownloadDropdown data={property} type="property" />
                         <button
                           type="button"
                           onClick={() => navigate(`/propiedades/${property.id}`)}
@@ -4079,6 +4073,7 @@ export function AdminWorkspace() {
                               >
                                 <Link2 className="h-4 w-4" strokeWidth={1.5} />
                               </button>
+                              <PdfDownloadDropdown data={property} type="property" />
                               <button
                                 type="button"
                                 onClick={() => navigate(`/propiedades/${property.id}`)}
