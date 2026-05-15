@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Development } from "../../data/developments";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
+import { PdfDownloadDropdown } from "../pdf/PdfDownloadDropdown";
 import {
   Dialog,
   DialogClose,
@@ -538,6 +539,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                         >
                           <Link2 className="h-4 w-4" strokeWidth={1.5} />
                         </button>
+                        <PdfDownloadDropdown data={development} type="development" />
                         <a
                           href={`/desarrollos/${development.id}`}
                           target="_blank"
@@ -675,14 +677,7 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                   >
                     <Link2 className="h-4 w-4" strokeWidth={1.5} />
                   </button>
-                  <button
-                    type="button"
-                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                    title="Exportar información (próximamente)"
-                    aria-label="Exportar información"
-                  >
-                    <Download className="h-4 w-4" strokeWidth={1.5} />
-                  </button>
+                  <PdfDownloadDropdown data={development} type="development" />
                   {!readOnly && (
                     <>
                       <button
@@ -796,16 +791,11 @@ export function AdminDevelopmentsManager({ developments, onSave, onDelete }: Pro
                       >
                         <Link2 className="h-4 w-4" strokeWidth={1.5} />
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
-                        title="Exportar información (próximamente)"
-                        aria-label="Exportar información"
-                      >
-                        <Download className="h-4 w-4" strokeWidth={1.5} />
-                      </Button>
+                      <PdfDownloadDropdown 
+                        data={(editing || form) as any} 
+                        type="development" 
+                        className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 w-9 shrink-0 border border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
+                      />
                     </div>
                     <DialogClose asChild>
                       <Button
