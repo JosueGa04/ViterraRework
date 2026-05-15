@@ -319,16 +319,9 @@ export function HomePage() {
       </section>
       </PreviewSectionChrome>
 
-      {/* Selección — fondo blanco (sin imagen de fondo) */}
+      {/* Selección — fondo blanco sólido (sin imagen de fondo) */}
       <PreviewSectionChrome blockId="home-selection" label="Selección de propiedades">
       <section className="relative scroll-fade-exit-white bg-white py-20 md:py-28">
-        {h.selectionImage?.trim() ? (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[min(38vh,380px)] overflow-hidden" aria-hidden>
-            <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-image" layout="cover" className="h-full min-h-[12rem]">
-              <img src={h.selectionImage} alt="" className="h-full w-full object-cover opacity-[0.09]" />
-            </PreviewFieldPulse>
-          </div>
-        ) : null}
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal
             className={cn(
@@ -394,33 +387,35 @@ export function HomePage() {
             ) : (
               <div className="space-y-5 md:space-y-6">
                 {activeFeaturedProperty && (
-                  <div
-                    key={activeFeaturedProperty.id}
-                    className="relative mx-auto h-[360px] w-full max-w-5xl sm:h-[390px] md:h-[420px]"
-                  >
-                    <div className="h-full [&>article]:h-full">
-                      <PropertyCard property={activeFeaturedProperty} variant="editorial" />
+                  <div className="mx-auto flex w-full max-w-5xl items-center justify-center gap-0.5 sm:gap-1 md:gap-2">
+                    {featuredProperties.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={goFeaturedPrev}
+                        className="z-10 shrink-0 rounded-full p-1 text-brand-navy/55 transition-colors hover:bg-slate-100 hover:text-primary sm:p-1.5"
+                        aria-label="Propiedad destacada anterior"
+                      >
+                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} />
+                      </button>
+                    ) : null}
+                    <div
+                      key={activeFeaturedProperty.id}
+                      className="relative min-h-[360px] w-full min-w-0 flex-1 sm:h-[390px] md:h-[420px]"
+                    >
+                      <div className="h-full [&>article]:h-full">
+                        <PropertyCard property={activeFeaturedProperty} variant="editorial" />
+                      </div>
                     </div>
-                    {featuredProperties.length > 1 && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={goFeaturedPrev}
-                          className="absolute left-2 top-1/2 z-20 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/55 bg-black/45 text-white transition hover:bg-black/65 sm:left-3 sm:h-10 sm:w-10"
-                          aria-label="Propiedad destacada anterior"
-                        >
-                          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={goFeaturedNext}
-                          className="absolute right-2 top-1/2 z-20 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/55 bg-black/45 text-white transition hover:bg-black/65 sm:right-3 sm:h-10 sm:w-10"
-                          aria-label="Siguiente propiedad destacada"
-                        >
-                          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2} />
-                        </button>
-                      </>
-                    )}
+                    {featuredProperties.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={goFeaturedNext}
+                        className="z-10 shrink-0 rounded-full p-1 text-brand-navy/55 transition-colors hover:bg-slate-100 hover:text-primary sm:p-1.5"
+                        aria-label="Siguiente propiedad destacada"
+                      >
+                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} />
+                      </button>
+                    ) : null}
                   </div>
                 )}
 

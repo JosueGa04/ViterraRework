@@ -18,6 +18,7 @@ import {
   Bath,
   Square,
   Activity,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   GripVertical,
@@ -240,6 +241,19 @@ function adminModuleFallback(className?: string) {
   );
 }
 
+const ADMIN_SIDEBAR_EXPANDED_KEY = "viterra-admin-sidebar-expanded";
+/** Debe coincidir con `lg:w-[14.5rem]` del aside para anclar el asa en la unión con el contenido. */
+const ADMIN_SIDEBAR_LG_WIDTH = "14.5rem";
+
+function readStoredAdminSidebarExpanded(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(ADMIN_SIDEBAR_EXPANDED_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
 export function AdminWorkspace() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -336,7 +350,16 @@ export function AdminWorkspace() {
   const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
+  const [adminSidebarExpanded, setAdminSidebarExpanded] = useState(readStoredAdminSidebarExpanded);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ADMIN_SIDEBAR_EXPANDED_KEY, adminSidebarExpanded ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [adminSidebarExpanded]);
   /** Ámbito del texto de búsqueda en leads (admin, líder y asesor comparten la misma lógica). */
   const [leadSearchNameScope, setLeadSearchNameScope] = useState<"all" | "client" | "advisor">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -2244,7 +2267,35 @@ export function AdminWorkspace() {
 
   return (
     <div className="viterra-page viterra-crm min-h-screen bg-gradient-to-b from-[#f7f5f2] via-slate-50 to-slate-100">
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[14.5rem] lg:flex-col lg:border-r lg:border-brand-gold/20 lg:bg-brand-navy lg:text-white">
+      {!adminSidebarExpanded ? (
+        <button
+          type="button"
+          onClick={() => setAdminSidebarExpanded(true)}
+          title="Mostrar menú lateral"
+          aria-label="Mostrar menú lateral"
+          className="fixed left-0 top-1/2 z-[60] hidden h-7 w-[22px] -translate-y-1/2 items-center justify-center rounded-r-md border border-slate-400/30 border-l-0 bg-white/30 pl-px text-brand-navy shadow-sm backdrop-blur-sm transition hover:bg-white/45 hover:shadow active:scale-[0.96] lg:flex"
+        >
+          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdminSidebarExpanded(false)}
+          title="Ocultar menú lateral"
+          aria-label="Ocultar menú lateral"
+          style={{ left: ADMIN_SIDEBAR_LG_WIDTH }}
+          className="fixed top-1/2 z-[60] hidden h-7 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/35 bg-slate-950/40 px-0 text-white shadow-sm backdrop-blur-sm transition hover:border-brand-gold/45 hover:bg-slate-950/55 hover:shadow active:scale-[0.96] lg:flex"
+        >
+          <ChevronLeft className="h-3.5 w-3.5 drop-shadow-sm" strokeWidth={2.25} aria-hidden />
+        </button>
+      )}
+      <aside
+        className={cn(
+          "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[14.5rem] lg:flex-col lg:border-r lg:border-brand-gold/20 lg:bg-brand-navy lg:text-white lg:transition-transform lg:duration-200 lg:ease-out",
+          !adminSidebarExpanded && "lg:pointer-events-none lg:-translate-x-full"
+        )}
+        aria-hidden={!adminSidebarExpanded}
+      >
         <div className="border-b border-white/15 px-5 py-5">
           <Link
             to="/"
@@ -2254,7 +2305,7 @@ export function AdminWorkspace() {
             <span className="font-heading block font-light leading-tight tracking-[0.22em] text-white sm:text-lg">
               VITERRA
             </span>
-            <span className="relative my-2 block h-px w-[11rem] overflow-hidden rounded-full" aria-hidden>
+            <span className="relative my-2 block h-px max-w-[11rem] overflow-hidden rounded-full" aria-hidden>
               <span className="absolute inset-0 bg-white/50" />
               <span className="absolute inset-0 origin-left bg-[#C8102E]" style={{ transform: "scaleX(0.55)" }} />
             </span>
@@ -2436,7 +2487,8 @@ export function AdminWorkspace() {
 
       <div
         className={cn(
-          "transform-none px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pl-[16.5rem] lg:pr-8",
+          "transform-none px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pr-8 lg:transition-[padding] lg:duration-200 lg:ease-out",
+          adminSidebarExpanded ? "lg:pl-[16.5rem]" : "lg:pl-4",
           activeTab === "sitio" && canEditSite && "pb-2 pt-2 sm:pb-2 sm:pt-2 lg:pb-2"
         )}
       >

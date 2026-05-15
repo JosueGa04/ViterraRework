@@ -141,8 +141,10 @@ function normalizeSocialLinksArray(raw: unknown[]): ContactSocialLinkItem[] {
   const out: ContactSocialLinkItem[] = [];
   for (const row of raw) {
     if (!isPlainObject(row) || typeof row.url !== "string") continue;
+    const rawPlat = row.platform;
+    if (rawPlat === "x" || rawPlat === "twitter") continue;
     out.push({
-      platform: sanitizeContactSocialPlatform(row.platform),
+      platform: sanitizeContactSocialPlatform(rawPlat),
       url: row.url,
     });
   }
@@ -165,7 +167,6 @@ function socialLinksFromLegacy(raw: Record<string, unknown>, def: SiteContent["c
   };
   add("facebook", s.facebook);
   add("instagram", s.instagram);
-  add("x", s.twitter);
   add("linkedin", s.linkedin);
   add("youtube", s.youtube);
   return items.length > 0 ? items : def.socialLinks;
@@ -451,7 +452,7 @@ function normalizeServiceCardContactLinks(raw: unknown, fallbackRow: ServiceCard
   return out.length > 0 ? out.slice(0, 12) : [];
 }
 
-const HEADER_SOCIAL_IDS = new Set(HEADER_SOCIAL_PLATFORM_OPTIONS.map((o) => o.id));
+const HEADER_SOCIAL_IDS = new Set<string>(HEADER_SOCIAL_PLATFORM_OPTIONS.map((o) => o.id));
 
 function normalizeHeaderNavSocial(raw: unknown, def: HeaderNavSocialLink[]): HeaderNavSocialLink[] {
   if (!Array.isArray(raw)) {
@@ -584,7 +585,9 @@ export function mergeSiteSection<K extends keyof SiteContent>(key: K, section: u
   }
 
   if (key === "home") {
-    const hm = merged as SiteContent["home"];
+    const raw = merged as unknown as Record<string, unknown>;
+    const { selectionImage: _legacySelectionImage, ...homeWithoutLegacy } = raw;
+    const hm = homeWithoutLegacy as SiteContent["home"];
     const pos = sanitizeHomeExperienceMediaPosition(hm.experienceMediaPosition);
     if (pos === undefined) {
       const { experienceMediaPosition: _drop, ...rest } = hm;
@@ -599,6 +602,66 @@ export function mergeSiteSection<K extends keyof SiteContent>(key: K, section: u
     const navSocial = normalizeHeaderNavSocial(mergedRecord.navSocial, def.navSocial);
     const h = merged as SiteContent["header"];
     return { ...def, ...h, navSocial } as SiteContent[K];
+  }
+
+  if (key === "about") {
+    const ab = merged as SiteContent["about"];
+    const mergedRecord = merged as unknown as Record<string, unknown>;
+
+    const defValues = DEFAULT_SITE_CONTENT.about.values;
+    const rawValues = mergedRecord.values;
+    // Si el JSON guardado tiene `values`, respeta su longitud (incluido 0); si no, usa los valores por defecto.
+    const sourceValues = Array.isArray(rawValues) ? rawValues : defValues;
+    const values = sourceValues.map((row, i) => {
+      const r = isPlainObject(row) ? row : {};
+      const fallback = defValues[i] ?? defValues[i % defValues.length] ?? defValues[0];
+      return {
+        title: typeof r.title === "string" ? r.title : fallback?.title ?? "",
+        text: typeof r.text === "string" ? r.text : fallback?.text ?? "",
+        iconKey: sanitizeServiceIconKey(r.iconKey, i),
+      };
+    });
+
+    const defStats = DEFAULT_SITE_CONTENT.about.stats;
+    const rawStats = mergedRecord.stats;
+    const sourceStats = Array.isArray(rawStats) ? rawStats : defStats;
+    const stats = sourceStats.map((row, i) => {
+      const r = isPlainObject(row) ? row : {};
+      const fallback = defStats[i] ?? defStats[i % defStats.length] ?? defStats[0];
+      return {
+        value: typeof r.value === "string" ? r.value : fallback?.value ?? "",
+        label: typeof r.label === "string" ? r.label : fallback?.label ?? "",
+      };
+    });
+
+    const defMilestones = DEFAULT_SITE_CONTENT.about.milestones;
+    const rawMilestones = mergedRecord.milestones;
+    const sourceMilestones = Array.isArray(rawMilestones) ? rawMilestones : defMilestones;
+    const milestones = sourceMilestones.map((row, i) => {
+      const r = isPlainObject(row) ? row : {};
+      const fallback = defMilestones[i] ?? defMilestones[i % defMilestones.length] ?? defMilestones[0];
+      return {
+        year: typeof r.year === "string" ? r.year : fallback?.year ?? "",
+        title: typeof r.title === "string" ? r.title : fallback?.title ?? "",
+        description:
+          typeof r.description === "string" ? r.description : fallback?.description ?? "",
+      };
+    });
+
+    const defTeam = DEFAULT_SITE_CONTENT.about.team;
+    const rawTeam = mergedRecord.team;
+    const sourceTeam = Array.isArray(rawTeam) ? rawTeam : defTeam;
+    const team = sourceTeam.map((row, i) => {
+      const r = isPlainObject(row) ? row : {};
+      const fallback = defTeam[i] ?? defTeam[i % defTeam.length] ?? defTeam[0];
+      const name = typeof r.name === "string" ? r.name : fallback?.name ?? "";
+      const role = typeof r.role === "string" ? r.role : fallback?.role ?? "";
+      const initials = typeof r.initials === "string" ? r.initials : fallback?.initials ?? "";
+      const image = typeof r.image === "string" && r.image.trim() ? r.image : undefined;
+      return image !== undefined ? { name, role, initials, image } : { name, role, initials };
+    });
+
+    return { ...ab, values, stats, milestones, team } as SiteContent[K];
   }
 
   return merged;

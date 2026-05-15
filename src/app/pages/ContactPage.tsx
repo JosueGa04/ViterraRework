@@ -26,7 +26,6 @@ import { PreviewSectionChrome } from "../components/admin/siteEditor/PreviewSect
 import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { Reveal } from "../components/Reveal";
 import { ViterraHeroTopClusterAnimated } from "../components/ViterraHeroTopClusterAnimated";
-import { XLogoIcon } from "../components/social/XLogoIcon";
 import { cn } from "../components/ui/utils";
 import {
   CONTACT_SOCIAL_LABELS,
@@ -93,8 +92,6 @@ function ContactSocialGlyph({
 }) {
   const strokeIcon = cn("h-5 w-5", className);
   switch (platform) {
-    case "x":
-      return <XLogoIcon className={cn("h-[1.15rem] w-[1.15rem]", className)} />;
     case "facebook":
       return <Facebook className={strokeIcon} strokeWidth={1.5} aria-hidden />;
     case "instagram":

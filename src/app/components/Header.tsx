@@ -45,13 +45,13 @@ const MARK_MONO_SCALE_FACTOR = 0.88;
  * El asset es asimétrico: el centro de masa visual queda claramente a la izquierda del centro geométrico.
  * Ajustar entre ~0.15 y ~0.22 si se sustituye el PNG (sube si la V se ve aún corrida a la derecha).
  */
-const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.005;
+const MARK_LOGO_OPTICAL_CENTER_X_RATIO = 0.21;
 
 /**
  * Distancia en px desde el borde izquierdo del `<ul>` de redes (tamaño `md`: `p-2`, icono 17px, `sm:gap-2`)
- * hasta el centro horizontal del 3.er enlace (X). Recalcular si cambian paddings/gaps en `SocialNavIcons`.
+ * hasta el centro horizontal del 3.er icono. Recalcular si cambian paddings, gaps u orden en `SocialNavIcons`.
  */
-const MD_SOCIAL_UL_LEFT_TO_X_CENTER_PX = 98.5;
+const MD_SOCIAL_UL_LEFT_TO_THIRD_ICON_CENTER_PX = 98.5;
 
 /**
  * Caja fija + scale. La imagen ocupa el 100% del ancho de la caja para que `transform-origin: bottom center`
@@ -237,9 +237,9 @@ export function Header() {
   const markBoxHMobile = 26;
   const MOBILE_HEADER_MARK_SCALE = 0.92 * MARK_MONO_SCALE_FACTOR;
 
-  /** Centro del 3.er icono (X) bajo el centro óptico de la V: margen izq. del `<ul>` dentro de la caja `markBoxW`. */
+  /** Centro del 3.er icono bajo el centro óptico de la V: margen izq. del `<ul>` dentro de la caja `markBoxW`. */
   const desktopSocialMarginLeft =
-    markBoxW * MARK_LOGO_OPTICAL_CENTER_X_RATIO - MD_SOCIAL_UL_LEFT_TO_X_CENTER_PX;
+    markBoxW * MARK_LOGO_OPTICAL_CENTER_X_RATIO - MD_SOCIAL_UL_LEFT_TO_THIRD_ICON_CENTER_PX;
   const navLinkClass =
     "font-normal uppercase text-white/85 hover:text-white transition-colors shrink-0";
   /** Modo 1 (nav centrada, inicio de scroll): subrayado blanco. Modo 2 (nav partida): rojo corporativo. */

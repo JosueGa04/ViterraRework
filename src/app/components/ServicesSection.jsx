@@ -626,6 +626,7 @@ export function ServicesSection() {
                           position: "relative",
                           width: nodeSize,
                           height: nodeSize,
+                          overflow: "visible",
                         }}
                       >
                         <motion.button
@@ -860,8 +861,8 @@ export function ServicesSection() {
             }
             .ne-tip {
               position: absolute;
-              left: 24px;
-              top: 24px;
+              left: 50%;
+              top: 50%;
               right: auto;
               bottom: auto;
               background: rgba(255,255,255,0.96);
@@ -875,10 +876,11 @@ export function ServicesSection() {
               border-radius: 4px;
               text-align: center;
               line-height: 1.25;
-              max-width: min(168px, 42vw);
+              width: max-content;
+              max-width: min(200px, 46vw);
               white-space: normal;
-              overflow-wrap: anywhere;
-              word-break: break-word;
+              overflow-wrap: break-word;
+              word-break: normal;
               pointer-events: none;
               z-index: 50;
               opacity: 0;
