@@ -223,7 +223,7 @@ interface Props {
     role: UserRole;
     permissions: UserPermission[];
     profile: { phone: string; address: string; birthDate: string; workHistory: string[] };
-  }) => { ok: boolean; message?: string };
+  }) => Promise<{ ok: boolean; message?: string }>;
   onUpdateUser: (id: string, input: { name: string; email: string; profile: { phone: string; address: string; birthDate: string; workHistory: string[] } }) => void;
   onUpdatePassword: (id: string, password: string) => void;
   onUpdatePermissions: (id: string, role: UserRole, permissions: UserPermission[]) => void;
@@ -522,41 +522,51 @@ export function AdminUsersManager({
     el.scrollBy({ left: dir === "next" ? amount : -amount, behavior: "smooth" });
   }, []);
 
-  const submitCreate = (e: React.FormEvent) => {
+  const [creatingSubmitting, setCreatingSubmitting] = useState(false);
+
+  const submitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingSubmitting) return;
     setError("");
-    const result = onCreateUser({
-      name: createForm.name,
-      email: createForm.email,
-      password: createForm.password,
-      role: createForm.role,
-      permissions: createForm.permissions,
-      profile: {
-        phone: createForm.phone,
-        address: createForm.address,
-        birthDate: createForm.birthDate,
-        workHistory: createForm.workHistory
-          .split("\n")
-          .map((row) => row.trim())
-          .filter(Boolean),
-      },
-    });
-    if (!result.ok) {
-      setError(result.message || "No se pudo crear el usuario.");
-      return;
+    setCreatingSubmitting(true);
+    try {
+      const result = await onCreateUser({
+        name: createForm.name,
+        email: createForm.email,
+        password: createForm.password,
+        role: createForm.role,
+        permissions: createForm.permissions,
+        profile: {
+          phone: createForm.phone,
+          address: createForm.address,
+          birthDate: createForm.birthDate,
+          workHistory: createForm.workHistory
+            .split("\n")
+            .map((row) => row.trim())
+            .filter(Boolean),
+        },
+      });
+      if (!result.ok) {
+        setError(result.message || "No se pudo crear el usuario.");
+        toast.error(result.message || "No se pudo crear el usuario.");
+        return;
+      }
+      toast.success(`Usuario ${createForm.name} creado correctamente.`);
+      setCreatingOpen(false);
+      setCreateForm({
+        name: "",
+        email: "",
+        phone: "",
+        address: "",
+        birthDate: "",
+        workHistory: "",
+        password: "",
+        role: "asesor",
+        permissions: ["manage_leads", "manage_clients"],
+      });
+    } finally {
+      setCreatingSubmitting(false);
     }
-    setCreatingOpen(false);
-    setCreateForm({
-      name: "",
-      email: "",
-      phone: "",
-      address: "",
-      birthDate: "",
-      workHistory: "",
-      password: "",
-      role: "asesor",
-      permissions: ["manage_leads", "manage_clients"],
-    });
   };
 
   const isEditingUserDetail = canManageUsers && userDetailEditMode;
@@ -944,10 +954,21 @@ export function AdminUsersManager({
               </div>
               {error && <p className="text-sm text-red-700 md:col-span-2">{error}</p>}
               <div className="md:col-span-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setCreatingOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancelar</button>
-                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover">
+                <button
+                  type="button"
+                  onClick={() => setCreatingOpen(false)}
+                  disabled={creatingSubmitting}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingSubmitting}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                >
                   <Plus className="h-4 w-4" />
-                  Guardar usuario
+                  {creatingSubmitting ? "Creando…" : "Guardar usuario"}
                 </button>
               </div>
             </form>
