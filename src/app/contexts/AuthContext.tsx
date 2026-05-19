@@ -716,6 +716,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const deleteUser: AuthContextType["deleteUser"] = async (id, _actorName = "Admin") => {
+    if (user?.id === id) {
+      return { ok: false, message: "No puedes borrar tu propia cuenta." };
+    }
+    const target = users.find((u) => u.id === id);
+    if (!target) {
+      return { ok: false, message: "Usuario no encontrado." };
+    }
+
+    const client = getSupabaseClient();
+    if (client) {
+      const res = await client.from("tokko_users").delete().eq("id", id);
+      if (res.error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] No se pudo borrar en tokko_users:", res.error.message);
+        }
+        return {
+          ok: false,
+          message: "No se pudo eliminar el usuario en la base de datos (RLS o permisos).",
+        };
+      }
+    }
+
+    persistUsers(users.filter((item) => item.id !== id));
+    if (passwordByUserId[id]) {
+      const { [id]: _omit, ...rest } = passwordByUserId;
+      persistPasswords(rest);
+    }
+    return { ok: true };
+  };
+
   const refreshUser = useCallback(async () => {
     const client = getSupabaseClient();
     if (!client) return;
@@ -745,6 +776,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateUserPermissions,
       archiveUser,
       reactivateUser,
+      deleteUser,
       refreshUser,
     }),
     [user, users, authReady, refreshUser]

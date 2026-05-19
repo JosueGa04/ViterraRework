@@ -150,6 +150,8 @@ import { AdminDevelopmentsManager } from "../../components/admin/AdminDevelopmen
 import { AdminCompanySettings } from "../../components/admin/AdminCompanySettings";
 import { AdminUsersManager } from "../../components/admin/AdminUsersManager";
 import { AdminUserProfilePanel } from "../../components/admin/AdminUserProfilePanel";
+import { MessagesModule } from "../../components/admin/messages/MessagesModule";
+import { useDirectMessages } from "../../hooks/useDirectMessages";
 import { AdvisorDashboard } from "../../components/admin/AdvisorDashboard";
 import { GroupLeaderDashboard } from "../../components/admin/GroupLeaderDashboard";
 import { PipelineStageReorderRow } from "../../components/admin/PipelineStageReorderRow";
@@ -346,7 +348,23 @@ export function AdminWorkspace() {
     updateUserPermissions,
     archiveUser,
     reactivateUser,
+    deleteUser,
   } = useAuth();
+
+  const directMessages = useDirectMessages(user?.id);
+  const messagesUnreadTotal = directMessages.unreadTotal;
+  const goToMessagesWith = useCallback(
+    (peerId: string) => {
+      navigate(`${buildAdminHref("messages")}?with=${encodeURIComponent(peerId)}`);
+    },
+    [navigate],
+  );
+  const messagesInitialPeerId = useMemo(() => {
+    if (activeTab !== "messages") return null;
+    const params = new URLSearchParams(location.search);
+    return params.get("with");
+  }, [activeTab, location.search]);
+
   const [stageDraftLabel, setStageDraftLabel] = useState("");
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -2724,7 +2742,15 @@ export function AdminWorkspace() {
                   }`}
                 >
                   <MessageSquare className="h-4 w-4" strokeWidth={activeTab === "messages" ? 2 : 1.75} />
-                  Mensajes
+                  <span className="flex-1">Mensajes</span>
+                  {messagesUnreadTotal > 0 ? (
+                    <span
+                      className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white"
+                      aria-label={`${messagesUnreadTotal} mensajes sin leer`}
+                    >
+                      {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+                    </span>
+                  ) : null}
                 </button>
           </nav>
         </div>
@@ -2905,7 +2931,12 @@ export function AdminWorkspace() {
                 }`}
               >
                 <item.icon className="h-4 w-4" strokeWidth={1.75} />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.id === "messages" && messagesUnreadTotal > 0 ? (
+                  <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white">
+                    {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -4310,6 +4341,8 @@ export function AdminWorkspace() {
                     }
                     onArchive={(id) => archiveUser(id, user.name)}
                     onReactivate={(id) => reactivateUser(id, user.name)}
+                    onDelete={(id) => deleteUser(id, user.name)}
+                    onSendMessageNavigate={goToMessagesWith}
                     focusUser={usersPanelFocus}
                     onFocusUserConsumed={handleUsersPanelFocusConsumed}
                     onUserDetailClosed={handleUserDetailClosed}
@@ -4832,37 +4865,19 @@ export function AdminWorkspace() {
           ))}
 
         {/* Messages Tab */}
-        {activeTab === "messages" && (
-          <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-12 text-center shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] md:p-20">
-            <div className="mx-auto max-w-md">
-              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-                <MessageSquare className="h-8 w-8 text-slate-400" strokeWidth={1.5} />
-              </div>
-              <h3 className="font-heading mb-2 text-lg text-brand-navy" style={{ fontWeight: 600 }}>
-                Centro de Mensajes
-              </h3>
-              <p className="mb-8 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                Los envíos del formulario de contacto del sitio pueden revisarse en la página pública o por correo.
-              </p>
-              <div className="flex flex-col justify-center gap-3 sm:flex-row">
-                <Link
-                  to="/contacto"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:bg-brand-red-hover"
-                  style={{ fontWeight: 600 }}
-                >
-                  Ir al formulario de contacto
-                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                </Link>
-                <a
-                  href="mailto:contacto@viterra.com"
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-brand-navy transition-colors hover:bg-slate-50"
-                  style={{ fontWeight: 600 }}
-                >
-                  Abrir cliente de correo
-                </a>
-              </div>
-            </div>
-          </div>
+        {activeTab === "messages" && user && (
+          <MessagesModule
+            currentUser={user}
+            users={users}
+            initialPeerId={messagesInitialPeerId}
+            onPeerIdChange={(peerId) => {
+              if (!peerId) return;
+              const next = `${buildAdminHref("messages")}?with=${encodeURIComponent(peerId)}`;
+              if (`${location.pathname}${location.search}` !== next) {
+                navigate(next, { replace: true });
+              }
+            }}
+          />
         )}
 
         {activeTab === "profile" &&
@@ -4896,6 +4911,8 @@ export function AdminWorkspace() {
               }
               onArchive={(id) => archiveUser(id, user.name)}
               onReactivate={(id) => reactivateUser(id, user.name)}
+              onDelete={(id) => deleteUser(id, user.name)}
+              onSendMessageNavigate={goToMessagesWith}
             />
           ) : (
             <AdminUserProfilePanel
