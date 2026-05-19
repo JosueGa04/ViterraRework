@@ -13,15 +13,19 @@ import {
   Home,
   KeyRound,
   Mail,
+  MessageSquare,
   Phone,
   Plus,
   Search,
   Shield,
+  Trash2,
   UserPlus,
   UserCircle2,
   Users,
   Filter,
 } from "lucide-react";
+import { toast } from "sonner";
+import { SendMessageDialog } from "./messages/SendMessageDialog";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
 import { labelForLeadStatus, type CustomKanbanStage, type Lead } from "../../data/leads";
 import type { Development } from "../../data/developments";
@@ -225,6 +229,10 @@ interface Props {
   onUpdatePermissions: (id: string, role: UserRole, permissions: UserPermission[]) => void;
   onArchive: (id: string) => void;
   onReactivate: (id: string) => void;
+  /** Borrado permanente (limpia `tokko_users` y directorio local). */
+  onDelete?: (id: string) => Promise<{ ok: boolean; message?: string }>;
+  /** Tras enviar un mensaje desde el perfil, abre la pestaña Mensajes con el peer seleccionado. */
+  onSendMessageNavigate?: (peerId: string) => void;
   /** Abre el detalle de un usuario (p. ej. desde un lead); `nonce` fuerza reapertura si es el mismo id. */
   focusUser?: { id: string; nonce: number } | null;
   onFocusUserConsumed?: () => void;
@@ -259,6 +267,8 @@ export function AdminUsersManager({
   onUpdatePermissions,
   onArchive,
   onReactivate,
+  onDelete,
+  onSendMessageNavigate,
   focusUser,
   onFocusUserConsumed,
   onUserDetailClosed,
@@ -278,6 +288,9 @@ export function AdminUsersManager({
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [passwordModal, setPasswordModal] = useState<User | null>(null);
   const [archiveCandidate, setArchiveCandidate] = useState<User | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [sendMessageOpen, setSendMessageOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
   const [createForm, setCreateForm] = useState({
@@ -857,6 +870,17 @@ export function AdminUsersManager({
                           </button>
                         )
                       )}
+                      {canManageUsers && user.id !== currentUser.id && onDelete && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteCandidate(user)}
+                          className="rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-700"
+                          title="Borrar cuenta"
+                          aria-label={`Borrar cuenta de ${user.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -962,6 +986,58 @@ export function AdminUsersManager({
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!deleteCandidate} onOpenChange={(open) => !open && !deletingUser && setDeleteCandidate(null)}>
+        <DialogContent className="w-full max-w-md border-slate-200 bg-white p-6">
+          {deleteCandidate && (
+            <>
+              <DialogHeader className="text-left">
+                <DialogTitle className="text-lg font-semibold text-slate-900">Borrar cuenta permanentemente</DialogTitle>
+                <DialogDescription className="text-sm text-slate-600">
+                  Estás por borrar la cuenta de <span className="font-semibold text-slate-800">{deleteCandidate.name}</span> ({deleteCandidate.email}).
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4 space-y-2">
+                <div className="rounded-lg border border-red-200/70 bg-red-50 px-3 py-2.5 text-xs text-red-800">
+                  Esta acción no se puede deshacer. Se eliminará el usuario del directorio CRM y de la base de datos.
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  La cuenta de acceso (Supabase Auth) no se elimina desde aquí; si quieres revocar el login, hazlo también en el panel de Supabase.
+                </p>
+              </div>
+              <DialogFooter className="mt-5 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={deletingUser}
+                  onClick={() => setDeleteCandidate(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                  disabled={deletingUser || !onDelete}
+                  onClick={async () => {
+                    if (!onDelete) return;
+                    setDeletingUser(true);
+                    const result = await onDelete(deleteCandidate.id);
+                    setDeletingUser(false);
+                    if (!result.ok) {
+                      toast.error(result.message || "No se pudo borrar el usuario.");
+                      return;
+                    }
+                    toast.success(`Cuenta de ${deleteCandidate.name} borrada.`);
+                    setDeleteCandidate(null);
+                  }}
+                >
+                  {deletingUser ? "Borrando…" : "Borrar cuenta"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
       ) : null}
 
@@ -1035,6 +1111,18 @@ export function AdminUsersManager({
                       </div>
                     </div>
                     <div className="flex w-full shrink-0 flex-col gap-2 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-3">
+                      {selectedUser.id !== currentUser.id && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 w-fit shrink-0 border-primary/40 bg-primary/[0.06] px-4 text-primary hover:bg-primary/10 hover:text-primary"
+                          style={{ fontWeight: 600 }}
+                          onClick={() => setSendMessageOpen(true)}
+                        >
+                          <MessageSquare className="mr-1.5 h-4 w-4" strokeWidth={1.9} />
+                          Enviar mensaje
+                        </Button>
+                      )}
                       <DialogClose asChild>
                         <Button
                           type="button"
@@ -1535,6 +1623,19 @@ export function AdminUsersManager({
           )}
         </DialogContent>
       </Dialog>
+
+      <SendMessageDialog
+        open={sendMessageOpen}
+        onOpenChange={setSendMessageOpen}
+        sender={currentUser}
+        recipient={selectedUser}
+        onSent={(peerId) => {
+          if (onSendMessageNavigate) {
+            closeUserDetail();
+            onSendMessageNavigate(peerId);
+          }
+        }}
+      />
     </>
   );
 }

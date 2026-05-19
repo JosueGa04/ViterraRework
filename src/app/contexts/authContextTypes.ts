@@ -90,6 +90,8 @@ export interface AuthContextType {
   updateUserPermissions: (id: string, role: UserRole, permissions: UserPermission[], actorName?: string) => void;
   archiveUser: (id: string, actorName?: string) => void;
   reactivateUser: (id: string, actorName?: string) => void;
+  /** Borra permanentemente el usuario del directorio CRM local y de `tokko_users`. No elimina la sesión en Supabase Auth (requiere service role). */
+  deleteUser: (id: string, actorName?: string) => Promise<{ ok: boolean; message?: string }>;
   /** Vuelve a leer la sesión y la fila `tokko_users` (tras editar el perfil en CRM, etc.). */
   refreshUser: () => Promise<void>;
 }
