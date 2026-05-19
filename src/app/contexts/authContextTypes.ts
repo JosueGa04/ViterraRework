@@ -84,7 +84,7 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
-  createUser: (input: CreateUserInput, actorName?: string) => { ok: boolean; message?: string };
+  createUser: (input: CreateUserInput, actorName?: string) => Promise<{ ok: boolean; message?: string }>;
   updateUser: (id: string, input: UpdateUserInput, actorName?: string) => void;
   updateUserPassword: (id: string, newPassword: string, actorName?: string) => void;
   updateUserPermissions: (id: string, role: UserRole, permissions: UserPermission[], actorName?: string) => void;

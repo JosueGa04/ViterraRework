@@ -89,6 +89,91 @@ export async function updateTokkoUserProfile(
   return client.from("tokko_users").update(row).eq("id", userId);
 }
 
+export type ProvisionTokkoUserPayload = {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  permissions: string[];
+  phone?: string;
+  address?: string;
+  birthDate?: string;
+  workHistory?: string[];
+  picture?: string;
+};
+
+export type ProvisionTokkoUserResult = {
+  ok: boolean;
+  id?: string;
+  message?: string;
+};
+
+/**
+ * Crea cuenta `auth.users` + fila `tokko_users` mediante la Edge Function `admin-create-user`
+ * (requiere service role; la función valida que el caller sea admin).
+ */
+export async function provisionTokkoUser(
+  client: SupabaseClient,
+  payload: ProvisionTokkoUserPayload
+): Promise<ProvisionTokkoUserResult> {
+  const body = {
+    name: payload.name.trim(),
+    email: payload.email.trim().toLowerCase(),
+    password: payload.password,
+    role: payload.role,
+    permissions: payload.permissions,
+    phone: payload.phone ?? "",
+    address: payload.address ?? "",
+    birthDate: payload.birthDate ?? "",
+    workHistory: payload.workHistory ?? [],
+    picture: payload.picture ?? "",
+  };
+
+  const { data, error } = await client.functions.invoke<{
+    ok: boolean;
+    id?: string;
+    error?: string;
+  }>("admin-create-user", { body });
+
+  if (error) {
+    // En supabase-js v2, `FunctionsHttpError.context` es el `Response` original (no un wrapper).
+    const ctx = (error as unknown as { context?: unknown }).context;
+    const maybeResponse =
+      ctx && typeof ctx === "object" && "clone" in (ctx as object)
+        ? (ctx as Response)
+        : ctx && typeof ctx === "object" && "response" in (ctx as object)
+          ? ((ctx as { response?: Response }).response ?? null)
+          : null;
+
+    if (maybeResponse) {
+      try {
+        const parsed = (await maybeResponse.clone().json()) as { error?: string };
+        if (parsed?.error) return { ok: false, message: parsed.error };
+      } catch {
+        try {
+          const text = (await maybeResponse.clone().text()).trim();
+          if (text) return { ok: false, message: text };
+        } catch {
+          // ignorado
+        }
+      }
+    }
+    if (/Failed to send|TypeError|fetch/i.test(error.message)) {
+      return {
+        ok: false,
+        message:
+          "No se pudo contactar la función `admin-create-user`. Despliégala: `supabase functions deploy admin-create-user`.",
+      };
+    }
+    return { ok: false, message: error.message };
+  }
+
+  if (!data?.ok) {
+    return { ok: false, message: data?.error ?? "Error desconocido al crear el usuario." };
+  }
+  return { ok: true, id: data.id };
+}
+
 /** Cuando no hay fila en `tokko_users`, el perfil editable vive en `user_metadata` de Supabase Auth. */
 export async function updateAuthUserProfileMetadata(
   client: SupabaseClient,

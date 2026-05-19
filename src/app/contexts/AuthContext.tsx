@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   fetchAllTokkoUsersForDirectory,
   fetchTokkoUserRow,
+  provisionTokkoUser,
   upsertTokkoUserAccess,
 } from "../lib/supabaseTokkoUsers";
 import { AuthContext } from "./authContextInstance";
@@ -608,22 +609,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Creación local del directorio (localStorage). En producción, altas reales de cuentas
-   * suelen hacerse con Supabase Dashboard o una Edge Function con service role.
+   * Alta de usuario real:
+   * - Si hay cliente Supabase: invoca la Edge Function `admin-create-user` (service role) que crea
+   *   la cuenta en `auth.users` y la fila en `public.tokko_users`. Sin cliente cae a modo local
+   *   (útil para pruebas sin backend).
    */
-  const createUser: AuthContextType["createUser"] = (input, actorName = "Admin") => {
+  const createUser: AuthContextType["createUser"] = async (input, actorName = "Admin") => {
     const normalizedEmail = input.email.trim().toLowerCase();
     if (users.some((u) => u.email.toLowerCase() === normalizedEmail)) {
       return { ok: false, message: "Ya existe un usuario con ese correo." };
     }
+
+    const permissions = input.permissions?.length
+      ? input.permissions
+      : defaultPermissionsByRole[input.role];
+
+    const client = getSupabaseClient();
+    let newId = `${Date.now()}`;
+
+    if (client) {
+      const remote = await provisionTokkoUser(client, {
+        name: input.name.trim(),
+        email: normalizedEmail,
+        password: input.password,
+        role: input.role,
+        permissions,
+        phone: input.profile?.phone ?? "",
+        address: input.profile?.address ?? "",
+        birthDate: input.profile?.birthDate ?? "",
+        workHistory: input.profile?.workHistory ?? [],
+        picture: input.profile?.picture ?? "",
+      });
+      if (!remote.ok) {
+        return {
+          ok: false,
+          message: remote.message ?? "No se pudo crear el usuario en Supabase.",
+        };
+      }
+      if (remote.id) newId = remote.id;
+    }
+
     const now = new Date().toISOString();
-    const id = `${Date.now()}`;
     const created = normalizeUser({
-      id,
+      id: newId,
       name: input.name.trim(),
       email: normalizedEmail,
       role: input.role,
-      permissions: input.permissions?.length ? input.permissions : defaultPermissionsByRole[input.role],
+      permissions,
       profile: {
         phone: input.profile?.phone ?? "",
         address: input.profile?.address ?? "",
@@ -637,7 +669,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       history: [newHistoryEntry("created", "Usuario creado", actorName)],
     });
     persistUsers([...users, created]);
-    persistPasswords({ ...passwordByUserId, [id]: input.password });
+    if (input.password) {
+      persistPasswords({ ...passwordByUserId, [newId]: input.password });
+    }
     return { ok: true };
   };
 
