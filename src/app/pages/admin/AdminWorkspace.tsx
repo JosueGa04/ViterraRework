@@ -659,13 +659,7 @@ export function AdminWorkspace() {
           setPipelineSourcesHydrated(true);
 
           if (import.meta.env.DEV) {
-            const host = getSupabaseProjectHost();
-            if (host) {
-              console.info(
-                "[Viterra] Comprueba que este host coincide con tu proyecto en Supabase Dashboard:",
-                host
-              );
-            }
+            // console info removed by request
           }
         }
       );

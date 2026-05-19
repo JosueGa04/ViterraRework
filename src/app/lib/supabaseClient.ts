@@ -50,8 +50,6 @@ export async function syncSupabaseAuthSession(client: SupabaseClient): Promise<{
       if (import.meta.env.DEV) {
         console.warn("[Viterra] refreshSession:", error.message);
       }
-    } else if (data.session && import.meta.env.DEV) {
-      console.info("[Viterra] Sesión lista para consultas API, user:", data.session.user.id);
     }
   } catch (e) {
     if (import.meta.env.DEV) {
