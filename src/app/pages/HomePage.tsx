@@ -16,6 +16,7 @@ import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
+import { useInstagramFeed } from "../hooks/useInstagramFeed";
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
     <div className="text-center">
@@ -36,6 +37,7 @@ export function HomePage() {
   const pl = usePreviewLayout();
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
+  const { posts: igPosts } = useInstagramFeed(3);
   const h = content.home;
   const experienceMediaOnRight = h.experienceMediaPosition === "right";
   const {
@@ -483,37 +485,47 @@ export function HomePage() {
           </Reveal>
 
           <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
-            {[
-              "DYVH4oHCWo7",
-              "DYQZIH5juNY",
-              "DYAQNsZCT5I",
-            ].map((postId) => (
-              <Reveal key={postId} y={20} delay={0.04}>
-                <a
-                  href={`https://www.instagram.com/p/${postId}/`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-                >
-                  {/* Clip wrapper — oculta el header del embed (~68px) y el footer de acciones */}
-                  <div className="overflow-hidden" style={{ height: 320 }}>
-                    <iframe
-                      src={`https://www.instagram.com/p/${postId}/embed/captioned`}
-                      scrolling="no"
-                      loading="lazy"
-                      title={`Post de Instagram ${postId}`}
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        height: 700,
-                        border: "none",
-                        marginTop: -68,
-                        pointerEvents: "none",
-                      }}
-                    />
+            {igPosts.map(({ shortcode, type, videoUrl, thumbnail }) => (
+              <Reveal key={shortcode} y={20} delay={0.04}>
+                <div className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  {/* Área de media */}
+                  <div className="relative overflow-hidden bg-slate-100" style={{ height: 320 }}>
+                    {type === "reel" && videoUrl ? (
+                      /* Reel: video nativo con autoplay real */
+                      <video
+                        src={videoUrl}
+                        poster={thumbnail ?? undefined}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      /* Post / carrusel: iframe con clip del header */
+                      <iframe
+                        src={`https://www.instagram.com/${type}/${shortcode}/embed/captioned`}
+                        scrolling="no"
+                        loading="lazy"
+                        allow="encrypted-media; clipboard-write; picture-in-picture"
+                        title={`Publicación de Instagram ${shortcode}`}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          height: 700,
+                          border: "none",
+                          marginTop: -68,
+                        }}
+                      />
+                    )}
                   </div>
-                  {/* Footer */}
-                  <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+                  {/* Footer — link a Instagram */}
+                  <a
+                    href={`https://www.instagram.com/${type}/${shortcode}/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between border-t border-slate-100 px-4 py-3"
+                  >
                     <div className="flex items-center gap-2">
                       <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                         <rect x="2" y="2" width="20" height="20" rx="5" />
@@ -525,8 +537,8 @@ export function HomePage() {
                     <span className="text-xs font-medium text-primary transition-colors group-hover:text-primary/70" style={{ fontWeight: 500 }}>
                       Ver en Instagram →
                     </span>
-                  </div>
-                </a>
+                  </a>
+                </div>
               </Reveal>
             ))}
           </div>
