@@ -471,7 +471,8 @@ function normalizeHeaderNavSocial(raw: unknown, def: HeaderNavSocialLink[]): Hea
     const defRow = def.find((d) => d.id === id);
     const label =
       typeof row.label === "string" ? row.label : defRow?.label ?? HEADER_SOCIAL_PLATFORM_OPTIONS.find((o) => o.id === id)?.label ?? id;
-    const href = typeof row.href === "string" ? row.href : "";
+    const rawHref = typeof row.href === "string" ? row.href.trim() : "";
+    const href = rawHref && rawHref !== "#" ? rawHref : (defRow?.href ?? "");
     out.push({ id: id as HeaderNavSocialLink["id"], label, href });
   }
   /** JSON inválido o solo filas rechazadas: volver a plantilla por defecto. */

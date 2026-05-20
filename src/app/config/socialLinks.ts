@@ -30,7 +30,7 @@ export const SOCIAL_LINKS: ReadonlyArray<{
   label: string;
   href: string;
 }> = [
-  { id: "facebook", label: "Facebook", href: "#" },
-  { id: "instagram", label: "Instagram", href: "#" },
-  { id: "youtube", label: "YouTube", href: "#" },
+  { id: "facebook", label: "Facebook", href: "https://www.facebook.com/ViterraGrupoInmobiliario/" },
+  { id: "instagram", label: "Instagram", href: "https://www.instagram.com/viterrainmobiliaria/" },
+  { id: "youtube", label: "YouTube", href: "https://www.youtube.com/@ViterraGrupoInmobiliario" },
 ];

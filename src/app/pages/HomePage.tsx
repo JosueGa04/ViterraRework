@@ -16,6 +16,7 @@ import { HeroBackdropMedia } from "../components/HeroBackdropMedia";
 import { DEFAULT_SITE_CONTENT } from "../../data/siteContent";
 import { Reveal } from "../components/Reveal";
 import { cn } from "../components/ui/utils";
+import { useInstagramFeed } from "../hooks/useInstagramFeed";
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
     <div className="text-center">
@@ -36,6 +37,7 @@ export function HomePage() {
   const pl = usePreviewLayout();
   const reduceMotion = useReducedMotion();
   const { content } = useSiteContent();
+  const { posts: igPosts } = useInstagramFeed(3);
   const h = content.home;
   const experienceMediaOnRight = h.experienceMediaPosition === "right";
   const {
@@ -482,68 +484,68 @@ export function HomePage() {
             </p>
           </Reveal>
 
-          <div className={cn("mx-auto grid max-w-5xl gap-4", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
-            {[
-              {
-                id: "post-1",
-                image: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&h=600&fit=crop",
-                caption: "Nuevo desarrollo exclusivo en Zapopan. Departamentos con acabados premium y amenidades de lujo.",
-                date: "Hace 2 días",
-                likes: 148,
-              },
-              {
-                id: "post-2",
-                image: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&h=600&fit=crop",
-                caption: "Espacios diseñados para vivir mejor. Descubre nuestra selección de propiedades con terraza.",
-                date: "Hace 5 días",
-                likes: 203,
-              },
-              {
-                id: "post-3",
-                image: "https://images.unsplash.com/photo-1600566753376-12c8ab7c5a38?w=600&h=600&fit=crop",
-                caption: "La vista perfecta existe. Conoce los penthouses disponibles en nuestra cartera exclusiva.",
-                date: "Hace 1 semana",
-                likes: 312,
-              },
-            ].map((post) => (
-              <Reveal key={post.id} y={20} delay={0.04}>
-                <a
-                  href="https://www.instagram.com/viterramx"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-                >
-                  <div className="relative aspect-square overflow-hidden">
-                    <img
-                      src={post.image}
-                      alt={post.caption}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white opacity-0 backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
-                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+          <div className={cn("mx-auto grid max-w-5xl gap-6", pl.gridCols("grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"))}>
+            {igPosts.map(({ shortcode, type, videoUrl, thumbnail }) => (
+              <Reveal key={shortcode} y={20} delay={0.04}>
+                <div className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  {/* Área de media */}
+                  <div className="relative overflow-hidden bg-slate-100" style={{ height: 320 }}>
+                    {type === "reel" && videoUrl ? (
+                      /* Reel: video nativo con autoplay real */
+                      <video
+                        src={videoUrl}
+                        poster={thumbnail ?? undefined}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      /* Post / carrusel: iframe con clip del header */
+                      <iframe
+                        src={`https://www.instagram.com/${type}/${shortcode}/embed/captioned`}
+                        scrolling="no"
+                        loading="lazy"
+                        allow="encrypted-media; clipboard-write; picture-in-picture"
+                        title={`Publicación de Instagram ${shortcode}`}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          height: 700,
+                          border: "none",
+                          marginTop: -68,
+                        }}
+                      />
+                    )}
+                  </div>
+                  {/* Footer — link a Instagram */}
+                  <a
+                    href={`https://www.instagram.com/${type}/${shortcode}/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between border-t border-slate-100 px-4 py-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                        <rect x="2" y="2" width="20" height="20" rx="5" />
+                        <circle cx="12" cy="12" r="5" />
+                        <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
                       </svg>
-                      <span style={{ fontWeight: 500 }}>{post.likes}</span>
+                      <span className="text-xs text-slate-500">@viterrainmobiliaria</span>
                     </div>
-                  </div>
-                  <div className="p-4">
-                    <p className="line-clamp-2 text-sm leading-relaxed text-slate-700" style={{ fontWeight: 400 }}>
-                      {post.caption}
-                    </p>
-                    <p className="mt-2 text-xs text-slate-400" style={{ fontWeight: 500 }}>
-                      {post.date}
-                    </p>
-                  </div>
-                </a>
+                    <span className="text-xs font-medium text-primary transition-colors group-hover:text-primary/70" style={{ fontWeight: 500 }}>
+                      Ver en Instagram →
+                    </span>
+                  </a>
+                </div>
               </Reveal>
             ))}
           </div>
 
           <Reveal className="mt-12 flex justify-center" y={16} delay={0.08}>
             <a
-              href="https://www.instagram.com/viterramx"
+              href="https://www.instagram.com/viterrainmobiliaria/"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2.5 rounded-full border border-brand-navy/15 bg-white px-6 py-3 text-[13px] uppercase tracking-[0.14em] text-brand-navy shadow-sm transition-all hover:border-primary/40 hover:shadow-md"

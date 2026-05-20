@@ -413,9 +413,9 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     socialTitle: "Encuéntranos en línea",
     socialIntro: "Síguenos para novedades, propiedades destacadas y contenido del sector.",
     socialLinks: [
-      { platform: "facebook", url: "#" },
-      { platform: "instagram", url: "#" },
-      { platform: "youtube", url: "#" },
+      { platform: "facebook", url: "https://www.facebook.com/ViterraGrupoInmobiliario/" },
+      { platform: "instagram", url: "https://www.instagram.com/viterrainmobiliaria/" },
+      { platform: "youtube", url: "https://www.youtube.com/@ViterraGrupoInmobiliario" },
     ],
     advisorCta: "¿Prefieres hablar con un asesor? Te respondemos por teléfono o WhatsApp con la misma rapidez.",
     closingKicker: "Siguiente paso",
