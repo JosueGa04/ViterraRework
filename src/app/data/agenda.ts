@@ -21,6 +21,7 @@ export interface AgendaAppointment {
   status: AgendaStatus;
   clientName: string;
   staffName: string;
+  staffId?: string;
 }
 
 export function newAgendaId(): string {
@@ -201,6 +202,7 @@ export function normalizeStoredAgenda(raw: unknown): AgendaAppointment[] {
     const status = parseAgendaStatus(o.status);
     const clientName = typeof o.clientName === "string" ? o.clientName : "";
     const staffName = typeof o.staffName === "string" ? o.staffName : "";
+    const staffId = typeof o.staffId === "string" ? o.staffId : undefined;
     out.push({
       id,
       title,
@@ -209,6 +211,7 @@ export function normalizeStoredAgenda(raw: unknown): AgendaAppointment[] {
       status,
       clientName,
       staffName,
+      staffId,
     });
   }
   return out;

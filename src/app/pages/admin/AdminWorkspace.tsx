@@ -3584,7 +3584,14 @@ export function AdminWorkspace() {
           </div>
           ))}
 
-        {activeTab === "agenda" && <AdminAgendaModule />}
+        {activeTab === "agenda" && (
+          <AdminAgendaModule
+            currentUser={effectiveUser}
+            users={users}
+            userGroups={userGroups}
+            onAppointmentsChange={setAppointments}
+          />
+        )}
 
         {activeTab === "activities" && (
           <AdminActivitiesModule
