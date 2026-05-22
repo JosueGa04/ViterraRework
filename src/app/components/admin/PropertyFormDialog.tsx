@@ -1,36 +1,104 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/utils";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
 import type { Property } from "../PropertyCard";
-import { Download, Link2, Star } from "lucide-react";
-import { ImageGalleryEditor } from "./ImageGalleryEditor";
+import {
+  Building2,
+  ChevronRight,
+  ExternalLink,
+  FileText,
+  ImageIcon,
+  Link2,
+  ListChecks,
+  MapPin,
+  Phone,
+  Ruler,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { MAX_FEATURED_PROPERTIES } from "../../lib/supabaseProperties";
+import { getSupabaseClient } from "../../lib/supabaseClient";
+import { uploadPropertyImage } from "../../lib/supabasePropertyMedia";
+import { isValidWhatsappLinkInput } from "../../lib/whatsappLink";
+import { PropertyAmenitiesEditor } from "./propertyForm/PropertyAmenitiesEditor";
+import { RichDescriptionEditor } from "./propertyForm/RichDescriptionEditor";
+import { PropertyContactSection } from "./propertyForm/PropertyContactSection";
+import { PropertyFormPreview } from "./propertyForm/PropertyFormPreview";
+import { PropertyLocationSection } from "./propertyForm/PropertyLocationSection";
+import { PropertyDetailsSection } from "./propertyForm/PropertyDetailsSection";
+import { PropertyMediaTab } from "./propertyForm/PropertyMediaTab";
+import { PropertyTechnicalSection } from "./propertyForm/PropertyTechnicalSection";
+import {
+  PROPERTY_FORM_STEPS,
+  PropertyField,
+  PropertyFieldGrid,
+  PropertyFormSection,
+  PropertyFormStepId,
+  propertyFieldClass,
+  propertyTextareaClass,
+} from "./propertyForm/propertyFormUi";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   property: Property | null;
-  /** Id que se asignará al crear (calculado en el padre) */
   newId: string;
   onSave: (property: Property) => void;
-  /** Propiedades destacadas excluyendo la ficha actual (edit) o todas (crear). */
   otherFeaturedCount: number;
+};
+
+const STEP_ICONS: Record<PropertyFormStepId, typeof ImageIcon> = {
+  medios: ImageIcon,
+  ficha: FileText,
+  ubicacion: MapPin,
+  tecnica: Ruler,
+  detalles: Building2,
+  amenidades: ListChecks,
+  contacto: Phone,
 };
 
 const defaultImage =
   "https://images.unsplash.com/photo-1520106392146-ef585c111254?w=1080&q=80";
+
+function emptyDraft(id: string): Property {
+  return {
+    id,
+    title: "",
+    price: 0,
+    location: "",
+    bedrooms: 2,
+    bathrooms: 2,
+    area: 100,
+    image: defaultImage,
+    images: [defaultImage],
+    type: "",
+    status: "venta",
+    featured: false,
+    coordinates: { lat: 20.676208, lng: -103.34721 },
+    amenities: [],
+    services: [],
+    additionalFeatures: [],
+    colony: "",
+    fullAddress: "",
+    description: "",
+    richDescription: "",
+    referenceCode: "",
+    publicationTitle: "",
+    parkingSpaces: 0,
+    contactPhone: "",
+    contactWhatsapp: "",
+    videos: [],
+    tours3d: [],
+  };
+}
 
 export function PropertyFormDialog({
   open,
@@ -42,9 +110,21 @@ export function PropertyFormDialog({
   otherFeaturedCount,
 }: Props) {
   const [draft, setDraft] = useState<Property | null>(null);
+  const [activeStep, setActiveStep] = useState<PropertyFormStepId>("medios");
+  const propertyId = mode === "create" ? newId : property?.id ?? newId;
+  const client = getSupabaseClient();
+
+  const uploadImage = useCallback(
+    async (file: File) => {
+      if (!client) throw new Error("Supabase no está configurado.");
+      return uploadPropertyImage(client, propertyId, file);
+    },
+    [client, propertyId],
+  );
 
   useEffect(() => {
     if (!open) return;
+    setActiveStep("medios");
     if (mode === "edit" && property) {
       const gallery =
         property.images?.length
@@ -52,34 +132,47 @@ export function PropertyFormDialog({
           : property.image
             ? [property.image]
             : [defaultImage];
-      setDraft({ ...property, image: gallery[0] ?? property.image, images: gallery });
-    } else if (mode === "create") {
       setDraft({
-        id: newId,
-        title: "",
-        price: 0,
-        location: "",
-        bedrooms: 2,
-        bathrooms: 2,
-        area: 100,
-        image: defaultImage,
-        images: [defaultImage],
-        type: "Apartamento",
-        status: "venta",
-        featured: false,
-        coordinates: { lat: 20.676208, lng: -103.34721 },
-        amenities: [],
-        services: [],
-        additionalFeatures: [],
+        ...property,
+        image: gallery[0] ?? property.image,
+        images: gallery,
+        amenities: property.amenities ?? [],
+        services: property.services ?? [],
+        additionalFeatures: property.additionalFeatures ?? [],
+        coordinates: property.coordinates ?? { lat: 20.676208, lng: -103.34721 },
       });
+    } else if (mode === "create") {
+      setDraft(emptyDraft(newId));
     }
   }, [open, mode, property, newId]);
+
+  const patchDraft = (patch: Partial<Property>) => {
+    setDraft((d) => (d ? { ...d, ...patch } : d));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!draft) return;
     if (!draft.title.trim()) {
       window.alert("Indica un título para la propiedad.");
+      setActiveStep("ficha");
+      return;
+    }
+    if (draft.contactWhatsapp?.trim() && !isValidWhatsappLinkInput(draft.contactWhatsapp)) {
+      window.alert("El enlace de WhatsApp debe ser una URL (https://…) o un número con lada.");
+      setActiveStep("contacto");
+      return;
+    }
+    const lat = draft.coordinates?.lat;
+    const lng = draft.coordinates?.lng;
+    if (lat != null && (lat < -90 || lat > 90)) {
+      window.alert("Latitud inválida.");
+      setActiveStep("ubicacion");
+      return;
+    }
+    if (lng != null && (lng < -180 || lng > 180)) {
+      window.alert("Longitud inválida.");
+      setActiveStep("ubicacion");
       return;
     }
     const imgs =
@@ -90,28 +183,28 @@ export function PropertyFormDialog({
           : [defaultImage];
     const wasFeatured = mode === "edit" && property ? Boolean(property.featured) : false;
     if (draft.featured && !wasFeatured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES) {
-      window.alert(
-        `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
-      );
+      window.alert(`Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades.`);
       return;
     }
+
     onSave({
       ...draft,
-      id: mode === "create" ? newId : property?.id ?? draft.id,
+      id: propertyId,
       price: Number(draft.price) || 0,
       bedrooms: Number(draft.bedrooms) || 0,
       bathrooms: Number(draft.bathrooms) || 0,
       area: Number(draft.area) || 0,
       image: imgs[0] ?? defaultImage,
       images: imgs,
+      galleryImages: imgs,
       featured: Boolean(draft.featured),
     });
     onOpenChange(false);
   };
 
-  if (mode === "edit" && !property) {
-    return null;
-  }
+  if (mode === "edit" && !property) return null;
+
+  const stepIndex = PROPERTY_FORM_STEPS.findIndex((s) => s.id === activeStep);
 
   return (
     <Dialog
@@ -122,327 +215,304 @@ export function PropertyFormDialog({
       <DialogContent
         hideCloseButton
         className={cn(
-          "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none duration-200",
+          "!fixed !inset-0 !left-0 !top-0 z-50 flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 flex-row gap-0 overflow-hidden rounded-none border-0 bg-stone-100 p-0 shadow-none",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-          "data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100 sm:!max-w-none"
         )}
       >
-        <div className="h-0.5 shrink-0 bg-gradient-to-r from-brand-gold/90 via-primary to-brand-burgundy/90" aria-hidden />
         {!draft ? (
-          <div className="flex flex-1 items-center justify-center px-6 py-12 text-sm text-slate-500" style={{ fontWeight: 500 }}>
-            Cargando formulario…
-          </div>
+          <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Cargando…</div>
         ) : (
-        <form id="viterra-property-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-stone-200/80 bg-stone-50/90 px-3 py-2.5 sm:px-4 sm:py-3">
-            <DialogHeader className="gap-0 p-0 text-left">
-              <p className="text-[10px] text-slate-500" style={{ fontWeight: 500 }}>
-                <span className="text-primary/90">Panel admin</span>
-                <span className="text-slate-400"> · </span>
-                Propiedades
-              </p>
-              <div className="mt-1.5 flex flex-col gap-2 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-4">
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <DialogTitle
-                    className="font-heading text-xl leading-tight tracking-tight text-brand-navy sm:text-2xl"
-                    style={{ fontWeight: 700 }}
-                  >
-                    {mode === "create" ? "Nueva propiedad" : "Editar propiedad"}
-                  </DialogTitle>
-                  <DialogDescription className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                    Completa los datos del inmueble. La ficha será visible en el sitio público.
-                  </DialogDescription>
+          <form onSubmit={handleSubmit} className="flex min-h-0 w-full flex-1">
+            {/* Navegación lateral */}
+            <aside className="hidden w-[17rem] shrink-0 flex-col border-r border-white/10 bg-brand-navy text-white md:flex">
+              <div className="border-b border-white/10 px-5 py-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/50">Propiedades</p>
+                <h2 className="font-heading mt-1 text-xl font-semibold tracking-tight">
+                  {mode === "create" ? "Nueva propiedad" : "Editar propiedad"}
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-white/65">
+                  Paso {stepIndex + 1} de {PROPERTY_FORM_STEPS.length}
+                </p>
+              </div>
+              <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+                {PROPERTY_FORM_STEPS.map((step, i) => {
+                  const Icon = STEP_ICONS[step.id];
+                  const active = activeStep === step.id;
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => setActiveStep(step.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
+                        active
+                          ? "bg-white/12 text-white ring-1 ring-white/20"
+                          : "text-white/75 hover:bg-white/8 hover:text-white",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
+                          active ? "bg-primary text-white" : "bg-white/10 text-white/80",
+                        )}
+                      >
+                        {active ? <Icon className="h-4 w-4" /> : i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">{step.label}</span>
+                        <span className="block text-[11px] text-white/55">{step.short}</span>
+                      </span>
+                      {active ? <ChevronRight className="h-4 w-4 shrink-0 opacity-80" /> : null}
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
+
+            <div className="flex min-w-0 flex-1 flex-col">
+              {/* Barra superior */}
+              <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-stone-200/90 bg-white px-4 py-3 sm:px-6">
+                <div className="min-w-0 flex-1 md:hidden">
+                  <p className="font-heading text-lg font-semibold text-brand-navy">
+                    {mode === "create" ? "Nueva propiedad" : "Editar"}
+                  </p>
                 </div>
-                <div className="flex w-full shrink-0 flex-col gap-1.5 min-[1100px]:w-auto min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-end min-[1100px]:gap-2">
-                  <div className="flex items-center gap-1 min-[1100px]:mr-0.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
-                      title="Copiar enlace público"
-                      aria-label="Copiar enlace público"
-                      onClick={() => copyPublicPageUrl(`/propiedades/${draft.id}`)}
-                    >
-                      <Link2 className="h-4 w-4" strokeWidth={1.5} />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 border-stone-300 bg-white text-slate-600 hover:bg-stone-50 hover:text-slate-800"
-                      title="Exportar información (próximamente)"
-                      aria-label="Exportar información"
-                    >
-                      <Download className="h-4 w-4" strokeWidth={1.5} />
-                    </Button>
-                  </div>
+                <select
+                  className="md:hidden rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-medium"
+                  value={activeStep}
+                  onChange={(e) => setActiveStep(e.target.value as PropertyFormStepId)}
+                >
+                  {PROPERTY_FORM_STEPS.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => copyPublicPageUrl(`/propiedades/${draft.id}`)}>
+                    <Link2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={() => window.open(`/propiedades/${draft.id}`, "_blank", "noopener")}
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Ver en sitio
+                  </Button>
                   <DialogClose asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
-                      style={{ fontWeight: 600 }}
-                    >
-                      Regresar
-                    </Button>
-                  </DialogClose>
-                  <DialogClose asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9 w-fit shrink-0 border-stone-300 bg-white px-3 text-sm text-slate-700 hover:bg-stone-50 hover:text-slate-800"
-                      style={{ fontWeight: 600 }}
-                    >
+                    <Button type="button" variant="outline" className="rounded-xl">
+                      <X className="mr-2 h-4 w-4" />
                       Cerrar
                     </Button>
                   </DialogClose>
-                  <Button
-                    type="submit"
-                    className="h-9 w-full min-w-[10rem] bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-brand-red-hover min-[1100px]:w-auto"
-                  >
-                    {mode === "create" ? "Crear propiedad" : "Guardar cambios"}
+                  <Button type="submit" className="rounded-xl bg-primary px-5 font-semibold shadow-md">
+                    {mode === "create" ? "Crear propiedad" : "Guardar"}
                   </Button>
                 </div>
-              </div>
-            </DialogHeader>
-          </div>
+              </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6">
-            <div className="mx-auto grid max-w-[120rem] grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[min(100%,26rem)_minmax(0,1fr)] xl:gap-x-6 xl:gap-y-3 xl:items-start">
-              <div className="min-w-0 xl:sticky xl:top-1 xl:col-start-1 xl:row-start-1 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:pr-1">
-                <ImageGalleryEditor
-                  segment="hero"
-                  variant="featured"
-                  label="Galería"
-                  hint="Arrastra o sube fotos. La primera es la portada en el sitio público."
-                  images={draft.images?.length ? draft.images : draft.image ? [draft.image] : []}
-                  onChange={(next) =>
-                    setDraft((d) =>
-                      d
-                        ? {
-                            ...d,
-                            images: next,
-                            image: next[0] ?? defaultImage,
-                          }
-                        : d
-                    )
-                  }
-                />
-              </div>
-
-              <section
-                className={cn(
-                  "min-w-0 space-y-2.5 rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_6px_24px_-10px_rgba(20,28,46,0.1)] sm:p-3.5 xl:col-start-2 xl:row-start-1",
-                  "xl:max-h-[min(28rem,calc(100dvh-13rem))] xl:overflow-y-auto xl:pr-1"
-                )}
-              >
-                <div className="flex flex-col gap-3 border-b border-slate-200/60 pb-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:pb-3">
-                  <div className="min-w-0 sm:flex-1 sm:pt-0.5">
-                    <h3 className="font-heading text-base text-brand-navy sm:text-lg" style={{ fontWeight: 700 }}>
-                      Datos del inmueble
-                    </h3>
-                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                      Información pública en ficha y listados.
-                    </p>
-                  </div>
-
-                  <div
-                    className={cn(
-                      "flex w-full shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 shadow-sm sm:mt-0 sm:max-w-[min(100%,20rem)] sm:py-1.5",
-                      draft.featured
-                        ? "border-amber-300/50 bg-gradient-to-r from-amber-50/90 to-amber-50/20 ring-1 ring-amber-200/30"
-                        : "border-slate-200/80 bg-gradient-to-r from-slate-50/70 to-white ring-1 ring-slate-900/[0.04]"
+              <div className="flex min-h-0 flex-1">
+                <main className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10">
+                  <div className="mx-auto max-w-3xl space-y-6">
+                    {activeStep === "medios" && (
+                      <PropertyMediaTab
+                        client={client}
+                        propertyId={propertyId}
+                        draft={draft}
+                        onDraftChange={patchDraft}
+                        onImagesChange={(next) =>
+                          patchDraft({ images: next, image: next[0] ?? defaultImage, galleryImages: next })
+                        }
+                        onUploadImage={client ? uploadImage : undefined}
+                      />
                     )}
-                  >
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
-                        draft.featured
-                          ? "border-amber-200/80 bg-amber-100/80 text-amber-700"
-                          : "border-slate-200/90 bg-white text-amber-500/80"
-                      )}
-                      aria-hidden
-                    >
-                      <Star
-                        className="h-3.5 w-3.5"
-                        strokeWidth={2}
-                        fill={draft.featured ? "currentColor" : "none"}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 pr-0.5">
-                      <Label
-                        htmlFor="viterra-property-featured"
-                        className={cn(
-                          "block cursor-pointer text-[12px] leading-tight text-slate-800 sm:text-sm",
-                          !draft.featured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES && "text-slate-500"
-                        )}
-                        style={{ fontWeight: 600 }}
+
+                    {activeStep === "ficha" && (
+                      <PropertyFormSection
+                        icon={FileText}
+                        title="Información principal"
+                        description="Título, precio y textos que verán los visitantes."
                       >
-                        <span className="sm:hidden">Todos</span>
-                        <span className="hidden sm:inline">Destacar en la portada</span>
-                      </Label>
-                    </div>
-                    <div className="flex shrink-0 self-center pl-0.5">
-                      <Switch
-                        id="viterra-property-featured"
-                        checked={Boolean(draft.featured)}
-                        disabled={
-                          !draft.featured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES
-                        }
-                        onCheckedChange={(v) =>
-                          setDraft((d) => (d ? { ...d, featured: v } : d))
-                        }
-                        className="data-[state=unchecked]:bg-slate-200/80"
-                        aria-label="Destacar en la portada de inicio"
+                        <div className="mb-5 rounded-xl border border-amber-200/60 bg-gradient-to-r from-amber-50 to-amber-50/30 px-4 py-3">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="h-5 w-5 text-amber-600" />
+                              <span className="text-sm font-semibold text-amber-950">
+                                Destacar en portada del sitio
+                              </span>
+                            </div>
+                            <Switch
+                              checked={Boolean(draft.featured)}
+                              disabled={!draft.featured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES}
+                              onCheckedChange={(v) => patchDraft({ featured: v })}
+                            />
+                          </div>
+                          {!draft.featured && otherFeaturedCount >= MAX_FEATURED_PROPERTIES ? (
+                            <p className="mt-2 text-xs text-amber-900/90">
+                              Ya hay {MAX_FEATURED_PROPERTIES} propiedades destacadas. Quita una estrella en otra ficha
+                              para poder destacar esta.
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-amber-900/70">
+                              {otherFeaturedCount}/{MAX_FEATURED_PROPERTIES} destacadas en portada. Se guarda al crear o
+                              actualizar la propiedad.
+                            </p>
+                          )}
+                        </div>
+                        <PropertyFieldGrid>
+                          <PropertyField label="Título" span={2}>
+                            <input
+                              required
+                              className={propertyFieldClass}
+                              value={draft.title}
+                              onChange={(e) => patchDraft({ title: e.target.value })}
+                              placeholder="Ej. Casa con vista al parque"
+                            />
+                          </PropertyField>
+                          <PropertyField label="Título de publicación (opcional)" span={2}>
+                            <input
+                              className={propertyFieldClass}
+                              value={draft.publicationTitle ?? ""}
+                              onChange={(e) => patchDraft({ publicationTitle: e.target.value })}
+                            />
+                          </PropertyField>
+                          <PropertyField label="Precio (MXN)">
+                            <input
+                              type="number"
+                              min={0}
+                              className={propertyFieldClass}
+                              value={draft.price || ""}
+                              onChange={(e) => patchDraft({ price: Number(e.target.value) })}
+                            />
+                          </PropertyField>
+                          <PropertyField label="Operación">
+                            <select
+                              className={propertyFieldClass}
+                              value={draft.status}
+                              onChange={(e) => patchDraft({ status: e.target.value as Property["status"] })}
+                            >
+                              <option value="venta">Venta</option>
+                              <option value="alquiler">Renta</option>
+                            </select>
+                          </PropertyField>
+                          <PropertyField
+                            label="ID"
+                            hint={
+                              mode === "create"
+                                ? "Se asigna solo al guardar: número de 7 dígitos único (bloque 9xxxxxxx) y referencia VAP + ID."
+                                : "Identificador del CRM; no se modifica al editar."
+                            }
+                          >
+                            <div
+                              className={cn(
+                                propertyFieldClass,
+                                "flex items-center bg-stone-50 font-mono text-sm tabular-nums text-brand-navy",
+                              )}
+                            >
+                              {mode === "edit" && draft.tokkoId?.trim() ? (
+                                draft.tokkoId.trim()
+                              ) : (
+                                <span className="text-slate-500">Automático al crear</span>
+                              )}
+                            </div>
+                          </PropertyField>
+                          {(mode === "edit" && draft.referenceCode?.trim()) ||
+                          mode === "create" ? (
+                            <PropertyField label="Referencia en ficha" span={2}>
+                              <div
+                                className={cn(
+                                  propertyFieldClass,
+                                  "bg-stone-50 text-sm text-slate-700",
+                                )}
+                              >
+                                {mode === "edit" && draft.referenceCode?.trim()
+                                  ? draft.referenceCode.trim()
+                                  : "Se generará como VAP + ID (ej. VAP9000000)"}
+                              </div>
+                            </PropertyField>
+                          ) : null}
+                          <PropertyField
+                            label="Descripción breve"
+                            span={2}
+                            hint="Opcional. La descripción con formato (abajo) es la que se muestra en la ficha pública; esta breve sirve solo como resumen."
+                          >
+                            <textarea
+                              className={propertyTextareaClass}
+                              value={draft.description ?? ""}
+                              onChange={(e) => patchDraft({ description: e.target.value })}
+                              placeholder="Resumen en pocas líneas…"
+                            />
+                          </PropertyField>
+                          <PropertyField
+                            label="Descripción con formato (opcional)"
+                            span={2}
+                            hint="Usa la barra de herramientas: negritas, listas, subtítulos y enlaces. No hace falta saber HTML."
+                          >
+                            <RichDescriptionEditor
+                              value={draft.richDescription ?? ""}
+                              onChange={(html) => patchDraft({ richDescription: html })}
+                            />
+                          </PropertyField>
+                        </PropertyFieldGrid>
+                      </PropertyFormSection>
+                    )}
+
+                    {activeStep === "tecnica" && (
+                      <PropertyTechnicalSection
+                        client={client}
+                        draft={draft}
+                        onDraftChange={patchDraft}
                       />
-                    </div>
-                  </div>
-                </div>
+                    )}
 
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                    Título
-                  </Label>
-                  <input
-                    required
-                    value={draft.title}
-                    onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                    style={{ fontWeight: 500 }}
-                    placeholder="Ej. Casa con vista al parque"
-                  />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Precio
-                    </Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={draft.price || ""}
-                      onChange={(e) =>
-                        setDraft((d) => (d ? { ...d, price: Number(e.target.value) } : d))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Operación
-                    </Label>
-                    <select
-                      value={draft.status}
-                      onChange={(e) =>
-                        setDraft((d) =>
-                          d ? { ...d, status: e.target.value as Property["status"] } : d
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                    >
-                      <option value="venta">Venta</option>
-                      <option value="alquiler">Alquiler</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                    Ubicación
-                  </Label>
-                  <input
-                    value={draft.location}
-                    onChange={(e) => setDraft((d) => (d ? { ...d, location: e.target.value } : d))}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                    style={{ fontWeight: 500 }}
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Rec.
-                    </Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={draft.bedrooms}
-                      onChange={(e) =>
-                        setDraft((d) => (d ? { ...d, bedrooms: Number(e.target.value) } : d))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      Baños
-                    </Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={draft.bathrooms}
-                      onChange={(e) =>
-                        setDraft((d) => (d ? { ...d, bathrooms: Number(e.target.value) } : d))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                      m²
-                    </Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={draft.area}
-                      onChange={(e) =>
-                        setDraft((d) => (d ? { ...d, area: Number(e.target.value) } : d))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                      style={{ fontWeight: 500 }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase leading-none text-slate-600" style={{ fontWeight: 600 }}>
-                    Tipo
-                  </Label>
-                  <input
-                    value={draft.type}
-                    onChange={(e) => setDraft((d) => (d ? { ...d, type: e.target.value } : d))}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
-                    style={{ fontWeight: 500 }}
-                    placeholder="Casa, Penthouse…"
-                  />
-                </div>
-              </section>
+                    {activeStep === "ubicacion" && draft.coordinates && (
+                      <PropertyLocationSection
+                        location={draft.location}
+                        colony={draft.colony ?? ""}
+                        fullAddress={draft.fullAddress ?? ""}
+                        lat={draft.coordinates.lat}
+                        lng={draft.coordinates.lng}
+                        onLocationChange={(v) => patchDraft({ location: v })}
+                        onColonyChange={(v) => patchDraft({ colony: v })}
+                        onFullAddressChange={(v) => patchDraft({ fullAddress: v })}
+                        onCoordsChange={(lat, lng) => patchDraft({ coordinates: { lat, lng } })}
+                      />
+                    )}
 
-              <div className="min-w-0 xl:col-span-2 xl:row-start-2">
-                <ImageGalleryEditor
-                  segment="gallery"
-                  variant="featured"
-                  label="Galería"
-                  hint="Arrastra o sube fotos. La primera es la portada en el sitio público."
-                  images={draft.images?.length ? draft.images : draft.image ? [draft.image] : []}
-                  onChange={(next) =>
-                    setDraft((d) =>
-                      d
-                        ? {
-                            ...d,
-                            images: next,
-                            image: next[0] ?? defaultImage,
-                          }
-                        : d
-                    )
-                  }
-                />
+                    {activeStep === "detalles" && (
+                      <PropertyDetailsSection draft={draft} onDraftChange={patchDraft} />
+                    )}
+
+                    {activeStep === "amenidades" && (
+                      <PropertyAmenitiesEditor
+                        amenities={draft.amenities ?? []}
+                        services={draft.services ?? []}
+                        additionalFeatures={draft.additionalFeatures ?? []}
+                        onAmenitiesChange={(v) => patchDraft({ amenities: v })}
+                        onServicesChange={(v) => patchDraft({ services: v })}
+                        onAdditionalChange={(v) => patchDraft({ additionalFeatures: v })}
+                      />
+                    )}
+
+                    {activeStep === "contacto" && (
+                      <PropertyContactSection
+                        contactPhone={draft.contactPhone ?? ""}
+                        contactWhatsapp={draft.contactWhatsapp ?? ""}
+                        onPhoneChange={(v) => patchDraft({ contactPhone: v })}
+                        onWhatsappChange={(v) => patchDraft({ contactWhatsapp: v })}
+                      />
+                    )}
+                  </div>
+                </main>
+
+                <aside className="hidden w-[17.5rem] shrink-0 overflow-y-auto border-l border-stone-200/80 bg-gradient-to-b from-stone-100/80 to-stone-50 px-4 py-6 xl:block xl:w-[22rem] xl:px-5 2xl:w-[24rem]">
+                  <PropertyFormPreview draft={draft} />
+                </aside>
               </div>
             </div>
-          </div>
-        </form>
+          </form>
         )}
       </DialogContent>
     </Dialog>

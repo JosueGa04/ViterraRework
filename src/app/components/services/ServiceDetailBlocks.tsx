@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ContactInfoIcon, ServiceDetailBlock } from "@/data/siteContent";
 import { serviceIconForKey } from "@/lib/serviceIcons";
+import { embeddableVideoSrc } from "../../lib/embeddableVideo";
 import { cn } from "../ui/utils";
 import { PreviewFieldPulse } from "../admin/siteEditor/PreviewFieldPulse";
 
@@ -43,21 +44,6 @@ function telHrefFromNumberLikeInput(raw: string): string | null {
   }
   if (!out || out === "+") return null;
   return `tel:${out}`;
-}
-
-/** Convierte URL de YouTube/Vimeo o URL de embed en `src` de iframe. */
-function embeddableVideoSrc(raw: string): string | null {
-  const u = raw.trim();
-  if (!u) return null;
-  if (u.includes("youtube.com/embed") || u.includes("player.vimeo.com/video")) {
-    return /^https?:/i.test(u) ? u : `https:${u}`;
-  }
-  const yt = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/.exec(u);
-  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
-  const vm = /vimeo\.com\/(?:video\/)?(\d+)/.exec(u);
-  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
-  if (/^https?:\/\//i.test(u)) return u;
-  return null;
 }
 
 function blockShell(children: ReactNode, className?: string) {

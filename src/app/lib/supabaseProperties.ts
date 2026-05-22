@@ -1,5 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Property } from "../components/PropertyCard";
+import { normalizeWhatsappLinkForStorage } from "./whatsappLink";
+import {
+  allocateUniquePropertyTokkoId,
+  VITERRA_TOKKO_ID_MAX,
+  VITERRA_TOKKO_ID_MIN,
+  viterraReferenceFromTokkoId,
+} from "./propertyTokkoId";
+import {
+  legacyVideoColumnsFromVideos,
+  propertyVideosFromRow,
+  propertyVideosToJson,
+  videosFromLegacyFields,
+} from "./propertyVideos";
+import {
+  legacyTour3dUrlFromTours,
+  propertyTours3dFromRow,
+  propertyTours3dToJson,
+  tours3dFromLegacyFields,
+} from "./propertyTours3d";
 
 const nowIso = () => new Date().toISOString();
 
@@ -102,6 +121,26 @@ export type PropertyRow = {
   age?: number | null;
   parking_spaces?: number | null;
   development_tokko_id?: string | null;
+  contact_phone?: string | null;
+  contact_whatsapp?: string | null;
+  video_url?: string | null;
+  video_storage_path?: string | null;
+  property_videos?: unknown;
+  tour_3d_url?: string | null;
+  property_tours_3d?: unknown;
+  property_type_tokko_id?: string | null;
+  total_surface?: number | string | null;
+  roofed_surface?: number | string | null;
+  semiroofed_surface?: number | string | null;
+  unroofed_surface?: number | string | null;
+  front_measure?: number | string | null;
+  depth_measure?: number | string | null;
+  floors_amount?: number | null;
+  situation?: string | null;
+  orientation?: number | null;
+  half_bathrooms?: number | null;
+  credit_eligible?: boolean | null;
+  tags?: string[] | null;
   /** Ausente en listados admin sin columna `payload` (JSON grande). */
   payload?: Record<string, unknown>;
 };
@@ -165,30 +204,189 @@ export function rowToProperty(row: PropertyRow): Property {
     listedAtIso,
     listingInventory: parseListingInventory(rawStatus),
     images: galleryUrls.length > 0 ? galleryUrls : undefined,
+    contactPhone: row.contact_phone?.trim() || undefined,
+    contactWhatsapp: row.contact_whatsapp?.trim() || undefined,
+    videos: propertyVideosFromRow(row),
+    videoUrl: row.video_url?.trim() || undefined,
+    videoStoragePath: row.video_storage_path?.trim() || undefined,
+    tours3d: propertyTours3dFromRow(row),
+    tour3dUrl: row.tour_3d_url?.trim() || undefined,
+    tokkoId: row.tokko_id?.trim() || undefined,
+    propertyTypeTokkoId: row.property_type_tokko_id?.trim() || undefined,
+    totalSurface: optionalPositiveNum(row.total_surface),
+    roofedSurface: optionalPositiveNum(row.roofed_surface),
+    semiroofedSurface: optionalPositiveNum(row.semiroofed_surface),
+    unroofedSurface: optionalPositiveNum(row.unroofed_surface),
+    frontMeasure: optionalPositiveNum(row.front_measure),
+    depthMeasure: optionalPositiveNum(row.depth_measure),
+    floorsAmount: row.floors_amount != null ? nonNegInt(row.floors_amount) : undefined,
+    situation: row.situation?.trim() || undefined,
+    orientation:
+      row.orientation != null && Number.isFinite(row.orientation)
+        ? Math.round(row.orientation)
+        : undefined,
+    halfBathrooms: row.half_bathrooms != null ? nonNegInt(row.half_bathrooms) : undefined,
+    creditEligible: row.credit_eligible ?? undefined,
+    tags: textArrayCol(row.tags),
+  };
+}
+
+function isViterraAdminTokkoId(tokkoId: string): boolean {
+  const n = Number.parseInt(tokkoId, 10);
+  return /^\d{7}$/.test(tokkoId) && n >= VITERRA_TOKKO_ID_MIN && n <= VITERRA_TOKKO_ID_MAX;
+}
+
+function technicalFieldsFromProperty(p: Property): Record<string, unknown> {
+  return {
+    property_type_tokko_id: p.propertyTypeTokkoId?.trim() || null,
+    total_surface: p.totalSurface ?? null,
+    roofed_surface: p.roofedSurface ?? null,
+    semiroofed_surface: p.semiroofedSurface ?? null,
+    unroofed_surface: p.unroofedSurface ?? null,
+    front_measure: p.frontMeasure ?? null,
+    depth_measure: p.depthMeasure ?? null,
+    floors_amount: p.floorsAmount ?? null,
+    situation: p.situation?.trim() || null,
+    orientation: p.orientation ?? null,
+    half_bathrooms: p.halfBathrooms ?? null,
+    credit_eligible: p.creditEligible ?? null,
+    tags: [...(p.tags ?? [])],
+  };
+}
+
+function galleryUrlsFromProperty(p: Property): string[] {
+  const imgs =
+    p.galleryImages && p.galleryImages.length > 0
+      ? [...p.galleryImages]
+      : p.images && p.images.length > 0
+        ? [...p.images]
+        : p.image
+          ? [p.image]
+          : [];
+  return imgs;
+}
+
+/** Campos editables desde el CRM admin → fila `properties`. */
+export function propertyToRow(
+  p: Property,
+  opts: { ts: string; tokkoId?: string; existingPayload?: Record<string, unknown> | null }
+): Record<string, unknown> {
+  const imgs = galleryUrlsFromProperty(p);
+  const tokkoId = opts.tokkoId ?? `manual_${p.id}`;
+  const isManual = isViterraAdminTokkoId(tokkoId) || tokkoId.startsWith("manual_");
+  const videosJson = propertyVideosToJson(videosFromLegacyFields(p));
+  const legacyVideo = legacyVideoColumnsFromVideos(videosJson);
+  const toursJson = propertyTours3dToJson(tours3dFromLegacyFields(p));
+  const legacyTourUrl = legacyTour3dUrlFromTours(toursJson);
+  const payload = isManual
+    ? ({
+        ...(opts.existingPayload && typeof opts.existingPayload === "object" ? opts.existingPayload : {}),
+        source: "viterra_admin",
+        lastEdit: opts.ts,
+        viterra_videos: videosJson,
+        viterra_tours_3d: toursJson,
+      } as Record<string, unknown>)
+    : {
+        ...(opts.existingPayload && typeof opts.existingPayload === "object" ? opts.existingPayload : {}),
+        viterra_admin_edit: opts.ts,
+        viterra_videos: videosJson,
+        viterra_tours_3d: toursJson,
+      };
+  const wa = p.contactWhatsapp?.trim() ? normalizeWhatsappLinkForStorage(p.contactWhatsapp) : null;
+  return {
+    title: p.title,
+    price: p.price,
+    location: p.location || null,
+    bedrooms: p.bedrooms,
+    bathrooms: p.bathrooms,
+    area: p.area,
+    image: imgs[0] ?? p.image ?? null,
+    type: p.type || null,
+    status: dbStatusFromApp(p.status),
+    lat: p.coordinates?.lat ?? null,
+    lng: p.coordinates?.lng ?? null,
+    development_tokko_id: p.developmentTokkoId?.trim() || null,
+    images: imgs,
+    colony: p.colony?.trim() || null,
+    full_address: p.fullAddress?.trim() || null,
+    description: p.description?.trim() || null,
+    rich_description: p.richDescription?.trim() || null,
+    amenities: [...(p.amenities ?? [])],
+    services: [...(p.services ?? [])],
+    additional_features: [...(p.additionalFeatures ?? [])],
+    reference_code: p.referenceCode?.trim() || null,
+    public_url: p.publicUrl?.trim() || null,
+    publication_title: p.publicationTitle?.trim() || null,
+    featured: Boolean(p.featured),
+    surface_land: p.surfaceLand ?? null,
+    expenses: p.expenses ?? null,
+    age: p.age ?? null,
+    parking_spaces: p.parkingSpaces ?? null,
+    contact_phone: p.contactPhone?.trim() || null,
+    contact_whatsapp: wa || null,
+    property_videos: videosJson,
+    video_url: legacyVideo.video_url,
+    video_storage_path: legacyVideo.video_storage_path,
+    property_tours_3d: toursJson,
+    tour_3d_url: legacyTourUrl,
+    updated_at: opts.ts,
+    synced_at: opts.ts,
+    payload,
+    ...technicalFieldsFromProperty(p),
   };
 }
 
 /** PostgREST devuelve `data` como array en insert/update con `.select()`; normaliza el id devuelto. */
-export function idFromPropertyWriteResult(data: unknown): string | undefined {
-  if (data == null) return undefined;
-  if (Array.isArray(data)) {
-    const first = data[0];
-    if (first && typeof first === "object" && "id" in first) {
-      const v = (first as { id: unknown }).id;
-      return v != null ? String(v) : undefined;
-    }
-    return undefined;
-  }
-  if (typeof data === "object" && "id" in data) {
-    const v = (data as { id: unknown }).id;
-    return v != null ? String(v) : undefined;
-  }
-  return undefined;
+export function propertyWriteMetaFromResult(data: unknown): {
+  id?: string;
+  tokkoId?: string;
+  referenceCode?: string;
+} {
+  const first = Array.isArray(data) ? data[0] : data;
+  if (!first || typeof first !== "object") return {};
+  const row = first as Record<string, unknown>;
+  return {
+    id: row.id != null ? String(row.id) : undefined,
+    tokkoId: typeof row.tokko_id === "string" ? row.tokko_id.trim() : undefined,
+    referenceCode: typeof row.reference_code === "string" ? row.reference_code.trim() : undefined,
+  };
 }
 
-/** Columnas para listados admin: excluye `payload` (JSON Tokko grande) que no usa `rowToProperty`. */
-const ADMIN_CATALOG_PROPERTY_COLUMNS =
-  "id,tokko_id,title,price,location,bedrooms,bathrooms,area,image,type,status,lat,lng,images,deleted_at,synced_at,updated_at,featured,colony,amenities,services,additional_features,publication_title,full_address,description,rich_description,reference_code,public_url,surface_land,expenses,age,parking_spaces,development_tokko_id";
+export function idFromPropertyWriteResult(data: unknown): string | undefined {
+  return propertyWriteMetaFromResult(data).id;
+}
+
+/** Listado admin sin `payload` (JSON Tokko grande). */
+const ADMIN_CATALOG_PROPERTY_COLUMNS_CORE =
+  "id,tokko_id,title,price,location,bedrooms,bathrooms,area,image,type,status,lat,lng,images,deleted_at,synced_at,updated_at,featured,colony,amenities,services,additional_features,publication_title,full_address,description,rich_description,reference_code,public_url,surface_land,expenses,age,parking_spaces,development_tokko_id,property_type_tokko_id,total_surface,roofed_surface,semiroofed_surface,unroofed_surface,front_measure,depth_measure,floors_amount,situation,orientation,half_bathrooms,credit_eligible,tags";
+
+/** Requiere migración `20260520180000_property_media_contact.sql`. */
+const ADMIN_CATALOG_PROPERTY_COLUMNS_MEDIA =
+  "contact_phone,contact_whatsapp,video_url,video_storage_path,property_videos,tour_3d_url,property_tours_3d";
+
+const ADMIN_CATALOG_PROPERTY_COLUMNS = `${ADMIN_CATALOG_PROPERTY_COLUMNS_CORE},${ADMIN_CATALOG_PROPERTY_COLUMNS_MEDIA}`;
+
+function isMissingColumnError(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false;
+  if (err.code === "42703") return true;
+  return /column .* does not exist/i.test(err.message ?? "");
+}
+
+const MEDIA_ROW_KEYS = [
+  "contact_phone",
+  "contact_whatsapp",
+  "video_url",
+  "video_storage_path",
+  "property_videos",
+  "tour_3d_url",
+  "property_tours_3d",
+] as const;
+
+function stripMediaFieldsFromRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row };
+  for (const k of MEDIA_ROW_KEYS) delete out[k];
+  return out;
+}
 
 export type FetchCatalogPropertiesOpts = {
   /** Admin inventario: menos datos por fila (sin columna `payload`). */
@@ -200,8 +398,21 @@ export async function fetchCatalogProperties(
   opts?: FetchCatalogPropertiesOpts
 ) {
   /** No filtramos por `deleted_at IS NULL`: en datos sincronizados desde Tokko a veces nunca queda NULL y el listado quedaría vacío. El borrado en admin sigue usando `softDeleteProperty`. */
-  const selection = opts?.omitPayload ? ADMIN_CATALOG_PROPERTY_COLUMNS : "*";
-  return client.from("properties").select(selection).order("updated_at", { ascending: false });
+  if (!opts?.omitPayload) {
+    return client.from("properties").select("*").order("updated_at", { ascending: false });
+  }
+
+  const q = () =>
+    client.from("properties").select(ADMIN_CATALOG_PROPERTY_COLUMNS).order("updated_at", { ascending: false });
+
+  const res = await q();
+  if (res.error && isMissingColumnError(res.error)) {
+    return client
+      .from("properties")
+      .select(ADMIN_CATALOG_PROPERTY_COLUMNS_CORE)
+      .order("updated_at", { ascending: false });
+  }
+  return res;
 }
 
 /**
@@ -237,99 +448,49 @@ export async function fetchPropertiesByDevelopmentTokkoId(client: SupabaseClient
 export async function insertProperty(client: SupabaseClient, p: Property, explicitId: string) {
   const ts = nowIso();
   const id = explicitId || p.id;
-  const tokkoId = `manual_${id}`;
-  const imgs =
-    p.galleryImages && p.galleryImages.length > 0
-      ? [...p.galleryImages]
-      : p.images && p.images.length > 0
-        ? [...p.images]
-        : p.image
-          ? [p.image]
-          : [];
+  const tokkoId = await allocateUniquePropertyTokkoId(client);
+  const referenceCode = p.referenceCode?.trim() || viterraReferenceFromTokkoId(tokkoId);
   const row = {
     id,
     tokko_id: tokkoId,
-    title: p.title,
-    price: p.price,
-    location: p.location || null,
-    bedrooms: p.bedrooms,
-    bathrooms: p.bathrooms,
-    area: p.area,
-    image: imgs[0] ?? p.image ?? null,
-    type: p.type || null,
-    status: dbStatusFromApp(p.status),
-    lat: p.coordinates?.lat ?? null,
-    lng: p.coordinates?.lng ?? null,
-    development_tokko_id: p.developmentTokkoId?.trim() || null,
-    payload: { source: "viterra_admin" } as Record<string, unknown>,
-    synced_at: ts,
-    updated_at: ts,
-    images: imgs,
-    colony: p.colony?.trim() || null,
-    full_address: p.fullAddress?.trim() || null,
-    description: p.description?.trim() || null,
-    rich_description: p.richDescription?.trim() || null,
-    amenities: [...(p.amenities ?? [])],
-    services: [...(p.services ?? [])],
-    additional_features: [...(p.additionalFeatures ?? [])],
-    reference_code: p.referenceCode?.trim() || null,
-    public_url: p.publicUrl?.trim() || null,
     deleted_at: null,
-    publication_title: null,
-    featured: Boolean(p.featured),
-    surface_land: null,
-    expenses: null,
-    age: null,
-    parking_spaces: null,
-    property_type_tokko_id: null,
-    total_surface: null,
-    roofed_surface: null,
-    semiroofed_surface: null,
-    unroofed_surface: null,
-    front_measure: null,
-    depth_measure: null,
-    floors_amount: null,
-    situation: null,
-    orientation: null,
-    half_bathrooms: null,
-    credit_eligible: null,
-    tags: [] as string[],
+    ...propertyToRow({ ...p, referenceCode }, { ts, tokkoId }),
   };
-  return client.from("properties").insert(row).select("id");
+  const ins = await client.from("properties").insert(row).select("id,tokko_id,reference_code");
+  if (ins.error && isMissingColumnError(ins.error)) {
+    return client
+      .from("properties")
+      .insert(stripMediaFieldsFromRow(row))
+      .select("id,tokko_id,reference_code");
+  }
+  return ins;
 }
 
 export async function updateProperty(client: SupabaseClient, p: Property) {
   const ts = nowIso();
-  const imgs =
-    p.galleryImages && p.galleryImages.length > 0
-      ? [...p.galleryImages]
-      : p.images && p.images.length > 0
-        ? [...p.images]
-        : p.image
-          ? [p.image]
-          : [];
-  return client
+  const { data: existing } = await client
     .from("properties")
-    .update({
-      title: p.title,
-      price: p.price,
-      location: p.location || null,
-      bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      area: p.area,
-      image: imgs[0] ?? p.image ?? null,
-      type: p.type || null,
-      status: dbStatusFromApp(p.status),
-      lat: p.coordinates?.lat ?? null,
-      lng: p.coordinates?.lng ?? null,
-      images: imgs,
-      updated_at: ts,
-      synced_at: ts,
-      featured: Boolean(p.featured),
-      payload: { source: "viterra_admin", lastEdit: ts } as Record<string, unknown>,
-    })
+    .select("tokko_id, payload")
     .eq("id", p.id)
-    .select("id");
+    .maybeSingle();
+  const tokkoId =
+    existing && typeof (existing as { tokko_id?: string }).tokko_id === "string"
+      ? (existing as { tokko_id: string }).tokko_id
+      : `manual_${p.id}`;
+  const existingPayload =
+    existing && typeof (existing as { payload?: unknown }).payload === "object"
+      ? ((existing as { payload: Record<string, unknown> }).payload ?? null)
+      : null;
+  const row = propertyToRow(p, { ts, tokkoId, existingPayload });
+  const upd = await client.from("properties").update(row).eq("id", p.id).select("id");
+  if (upd.error && isMissingColumnError(upd.error)) {
+    return client
+      .from("properties")
+      .update(stripMediaFieldsFromRow(row))
+      .eq("id", p.id)
+      .select("id");
+  }
+  return upd;
 }
 
 export async function updatePropertyFeatured(client: SupabaseClient, id: string, featured: boolean) {

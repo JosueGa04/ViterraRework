@@ -120,6 +120,7 @@ export function useDirectMessages(meId: string | undefined): UseDirectMessagesRe
 
   useEffect(() => {
     let cancelled = false;
+    let idleHandle: number | undefined;
     const client = getSupabaseClient();
     if (!client || !safeMeId) {
       setMessages([]);
@@ -130,25 +131,63 @@ export function useDirectMessages(meId: string | undefined): UseDirectMessagesRe
       };
     }
 
-    void (async () => {
+    /**
+     * Difiere el bootstrap del inbox a un tick ocioso para no competir con la carga
+     * inicial del dashboard. Si la tabla `direct_messages` no existe (migración no
+     * aplicada), evita abrir el canal Realtime y entrar en bucle de reconexión.
+     */
+    const boot = async () => {
       setLoading(true);
       const { data, error: fetchError } = await fetchInbox(client, safeMeId);
       if (cancelled) return;
+
       if (fetchError) {
-        setError(fetchError.message);
-      } else {
-        setMessages(data ?? []);
-        setError(null);
+        const msg = fetchError.message ?? "";
+        const tableMissing = /direct_messages|relation .* does not exist|schema cache/i.test(msg);
+        setError(msg);
+        setLoading(false);
+        setReady(true);
+        if (tableMissing && import.meta.env.DEV) {
+          console.warn(
+            "[Viterra] Tabla `direct_messages` ausente. Aplica la migración para activar mensajes.",
+          );
+        }
+        // Sin tabla / sin permisos no abrimos Realtime: ahorra una WS que reconectaría sin parar.
+        return;
       }
+
+      setMessages(data ?? []);
+      setError(null);
       setLoading(false);
       setReady(true);
-    })();
 
-    const channel = subscribeToInbox(client, safeMeId, applyEvent);
-    channelRef.current = channel;
+      if (cancelled) return;
+      try {
+        const channel = subscribeToInbox(client, safeMeId, applyEvent);
+        channelRef.current = channel;
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] No se pudo suscribir a Realtime de mensajes:", e);
+        }
+      }
+    };
+
+    const w = typeof window !== "undefined" ? (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number; cancelIdleCallback?: (handle: number) => void }) : undefined;
+    if (w?.requestIdleCallback) {
+      idleHandle = w.requestIdleCallback(() => void boot(), { timeout: 2000 });
+    } else {
+      idleHandle = window.setTimeout(() => void boot(), 250) as unknown as number;
+    }
 
     return () => {
       cancelled = true;
+      if (idleHandle !== undefined) {
+        if (w?.cancelIdleCallback) {
+          w.cancelIdleCallback(idleHandle);
+        } else {
+          window.clearTimeout(idleHandle as unknown as number);
+        }
+      }
       if (channelRef.current) {
         void client.removeChannel(channelRef.current);
         channelRef.current = null;

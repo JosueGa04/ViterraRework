@@ -6,6 +6,8 @@ import { cn } from "../../ui/utils";
 
 type Props = {
   meId: string;
+  /** Usuario en sesión (avatar en mensajes propios). */
+  currentUser: User;
   peer: User | null;
   peerId: string;
   messages: DirectMessageRow[];
@@ -33,7 +35,7 @@ function shouldGroupWithPrevious(
   return gapMs >= 0 && gapMs < 5 * 60_000;
 }
 
-export function ChatThread({ meId, peer, peerId, messages, usersById }: Props) {
+export function ChatThread({ meId, currentUser, peer, peerId, messages, usersById }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(messages.length);
 
@@ -87,7 +89,9 @@ export function ChatThread({ meId, peer, peerId, messages, usersById }: Props) {
             const prev = idx > 0 ? messages[idx - 1] : undefined;
             const grouped = shouldGroupWithPrevious(m, prev);
             const isMine = m.sender_id === meId;
-            const sender = isMine ? null : (usersById.get(m.sender_id) ?? peer);
+            const sender = isMine
+              ? currentUser
+              : (usersById.get(m.sender_id) ?? peer);
             const senderName = isMine ? "Tú" : sender?.name ?? "Usuario";
             return (
               <div
@@ -97,8 +101,6 @@ export function ChatThread({ meId, peer, peerId, messages, usersById }: Props) {
                 <div className="w-9 shrink-0">
                   {!grouped && sender ? (
                     <KpiUserAvatar user={sender} size="sm" />
-                  ) : !grouped && isMine ? (
-                    <span className="block h-8 w-8 rounded-full bg-primary/20" aria-hidden />
                   ) : null}
                 </div>
                 <div

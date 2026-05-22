@@ -4,6 +4,7 @@ import { useLocation } from "react-router";
 import { getSupabaseClient } from "../lib/supabaseClient";
 import { withTimeout } from "../lib/withTimeout";
 import { toast } from "sonner";
+import { ALL_MODULE_PERMISSIONS, expandLegacyPermissions } from "../lib/modulePermissions";
 import {
   fetchAllTokkoUsersForDirectory,
   fetchTokkoUserRow,
@@ -109,24 +110,24 @@ const newHistoryEntry = (
 
 const normalizeRole = (role: string | undefined): UserRole => (role === "agente" ? "asesor" : (role as UserRole)) || "asesor";
 
-const ALL_PERMISSIONS: UserPermission[] = [
-  "manage_leads",
-  "manage_properties",
-  "manage_developments",
-  "manage_users",
-  "manage_clients",
-  "edit_site",
-];
+const ALL_PERMISSIONS: UserPermission[] = ALL_MODULE_PERMISSIONS;
 
 const normalizeUser = (raw: Partial<User>): User => {
   const now = new Date().toISOString();
   const role = normalizeRole(raw.role);
   const profile = raw.profile ?? { phone: "", address: "", birthDate: "", workHistory: [], picture: "" };
-  let permissions: UserPermission[] =
-    raw.permissions && raw.permissions.length > 0
-      ? raw.permissions.filter((p): p is UserPermission => ALL_PERMISSIONS.includes(p as UserPermission))
-      : [...defaultPermissionsByRole[role]];
-  if (!permissions.includes("manage_clients") && defaultPermissionsByRole[role].includes("manage_clients")) {
+  const hadExplicitPermissions = Boolean(raw.permissions && raw.permissions.length > 0);
+  let permissions: UserPermission[] = hadExplicitPermissions
+    ? expandLegacyPermissions(
+        raw.permissions!.filter((p): p is UserPermission => ALL_PERMISSIONS.includes(p as UserPermission)),
+      )
+    : [...defaultPermissionsByRole[role]];
+  // Solo al inferir permisos por rol (sin lista explícita), mantener compat con asesores + clientes.
+  if (
+    !hadExplicitPermissions &&
+    !permissions.includes("manage_clients") &&
+    defaultPermissionsByRole[role].includes("manage_clients")
+  ) {
     permissions = [...permissions, "manage_clients"];
   }
   return {
@@ -179,8 +180,10 @@ function sessionToAppUser(session: Session): User {
     Array.isArray(rawPerms) &&
     rawPerms.some((p) => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission));
   const permissions: UserPermission[] = hasCustomPerms
-    ? (rawPerms as unknown[]).filter(
-        (p): p is UserPermission => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission)
+    ? expandLegacyPermissions(
+        (rawPerms as unknown[]).filter(
+          (p): p is UserPermission => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission),
+        ),
       )
     : [...defaultPermissionsByRole[role]];
   const now = new Date().toISOString();
@@ -197,7 +200,7 @@ function sessionToAppUser(session: Session): User {
     permissions,
     tokkoUserId,
     profile: {
-      phone: String(meta.phone ?? ""),
+      phone: String(meta.cellphone ?? meta.phone ?? ""),
       address: String(meta.address ?? ""),
       birthDate: String(meta.birth_date ?? meta.birthDate ?? ""),
       workHistory: Array.isArray(meta.work_history)
@@ -233,14 +236,19 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
     Array.isArray(rawPerms) &&
     rawPerms.some((p) => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission));
   const permissions: UserPermission[] = hasCustomPerms
-    ? (rawPerms as unknown[]).filter(
-        (p): p is UserPermission => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission)
+    ? expandLegacyPermissions(
+        (rawPerms as unknown[]).filter(
+          (p): p is UserPermission => typeof p === "string" && ALL_PERMISSIONS.includes(p as UserPermission),
+        ),
       )
     : role !== base.role
       ? [...defaultPermissionsByRole[role]]
       : base.permissions;
 
-  const phone = typeof row.phone === "string" ? row.phone : base.profile.phone;
+  const phone =
+    (typeof row.cellphone === "string" && row.cellphone.trim()) ||
+    (typeof row.phone === "string" && row.phone.trim()) ||
+    base.profile.phone;
   const address = typeof row.address === "string" ? row.address : base.profile.address;
   const birthDate =
     (typeof row.birth_date === "string" && row.birth_date) ||
@@ -536,6 +544,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!refreshed || !refreshed.isActive) {
         void getSupabaseClient()?.auth.signOut();
         setUser(null);
+      } else {
+        setUser(refreshed);
       }
     }
   };
@@ -637,7 +647,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phone: input.profile?.phone ?? "",
         address: input.profile?.address ?? "",
         birthDate: input.profile?.birthDate ?? "",
-        workHistory: input.profile?.workHistory ?? [],
         picture: input.profile?.picture ?? "",
       });
       if (!remote.ok) {
@@ -664,6 +673,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         picture: input.profile?.picture ?? "",
       },
       isActive: true,
+      mustChangePassword: Boolean(client),
       createdAt: now,
       updatedAt: now,
       history: [newHistoryEntry("created", "Usuario creado", actorName)],
@@ -793,7 +803,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const appUser = await loadUserWithTokkoMerge(client, session);
     setUser(appUser);
-  }, []);
+    mergeSessionUserIntoDirectory(appUser);
+  }, [mergeSessionUserIntoDirectory]);
 
   const value = useMemo(
     () => ({

@@ -12,6 +12,15 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
+import type { PropertyVideoEntry } from "../lib/propertyVideos";
+import {
+  resolvePropertyVideoEntryUrl,
+  videosFromLegacyFields,
+} from "../lib/propertyVideos";
+import type { PropertyTour3dEntry } from "../lib/propertyTours3d";
+import { tours3dFromLegacyFields } from "../lib/propertyTours3d";
+
+export type { PropertyVideoEntry, PropertyTour3dEntry };
 
 export interface Property {
   id: string;
@@ -48,6 +57,8 @@ export interface Property {
   richDescription?: string;
   /** Código de referencia visible al cliente (`reference_code`). */
   referenceCode?: string;
+  /** Identificador Tokko de 7 dígitos (`tokko_id`). */
+  tokkoId?: string;
   /** Enlace a la ficha externa (`public_url`). */
   publicUrl?: string;
   /** Superficie de terreno en m² (`surface_land`). */
@@ -70,6 +81,59 @@ export interface Property {
   listingInventory?: "disponible" | "en_apartado" | "vendida" | "renta";
   /** Galería completa (admin / legado); la primera suele coincidir con `image`. */
   images?: string[];
+  /** Teléfono de contacto para esta ficha. */
+  contactPhone?: string;
+  /** WhatsApp (solo dígitos). */
+  contactWhatsapp?: string;
+  /** Varios videos (YouTube, subida o mixtos). */
+  videos?: PropertyVideoEntry[];
+  /** @deprecated Usar `videos`. Primer video externo. */
+  videoUrl?: string;
+  /** @deprecated Usar `videos`. Primer video en Storage. */
+  videoStoragePath?: string;
+  /** Varios recorridos 3D (Matterport, Kuula, etc.). */
+  tours3d?: PropertyTour3dEntry[];
+  /** @deprecated Usar `tours3d`. Primer tour 3D. */
+  tour3dUrl?: string;
+  /** `properties.property_type_tokko_id` → catálogo `tokko_property_types`. */
+  propertyTypeTokkoId?: string;
+  totalSurface?: number;
+  roofedSurface?: number;
+  semiroofedSurface?: number;
+  unroofedSurface?: number;
+  frontMeasure?: number;
+  depthMeasure?: number;
+  floorsAmount?: number;
+  halfBathrooms?: number;
+  situation?: string;
+  orientation?: number;
+  creditEligible?: boolean;
+  /** `properties.tags` (etiquetas Tokko, distinto de amenities). */
+  tags?: string[];
+}
+
+/** Lista de videos normalizada (incluye legacy de una sola columna). */
+export function propertyVideosList(
+  p: Pick<Property, "videos" | "videoUrl" | "videoStoragePath">,
+): PropertyVideoEntry[] {
+  return videosFromLegacyFields(p);
+}
+
+/** Lista de recorridos 3D normalizada (incluye legacy `tour3dUrl`). */
+export function propertyTours3dList(
+  p: Pick<Property, "tours3d" | "tour3dUrl">,
+): PropertyTour3dEntry[] {
+  return tours3dFromLegacyFields(p);
+}
+
+/** URL del primer video (compatibilidad). */
+export function resolvedPropertyVideoUrl(
+  p: Pick<Property, "videos" | "videoUrl" | "videoStoragePath">,
+  getPublicUrl?: (storagePath: string) => string | null,
+): string | null {
+  const list = propertyVideosList(p);
+  if (list.length === 0) return null;
+  return resolvePropertyVideoEntryUrl(list[0], getPublicUrl);
 }
 
 function cardHeadline(p: Property) {

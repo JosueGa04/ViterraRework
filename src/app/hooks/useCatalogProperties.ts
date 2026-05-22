@@ -24,6 +24,8 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(() => enabled);
   const [error, setError] = useState<string | null>(null);
+  /** Aviso cuando el listado cargó sin columnas de medios/contacto (migración pendiente). */
+  const [catalogSchemaWarning, setCatalogSchemaWarning] = useState<string | null>(null);
   const fetchGenerationRef = useRef(0);
 
   /** Sustituye o inserta una ficha tras guardar en admin (evita listado con precio antiguo si el refetch llega con lectura rezagada). */
@@ -47,12 +49,14 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
       if (gen !== fetchGenerationRef.current) return;
       setProperties([]);
       setError("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY.");
+      setCatalogSchemaWarning(null);
       if (!silent) setLoading(false);
       return;
     }
     if (!silent) {
       setLoading(true);
       setError(null);
+      setCatalogSchemaWarning(null);
     }
 
     try {
@@ -74,6 +78,20 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
           if (!qErr) {
             rows = (data ?? []) as PropertyRow[];
             lastErr = null;
+            if (omitPayload && rows.length > 0) {
+              const sample = rows[0] as PropertyRow;
+              const hasMediaCols =
+                "contact_phone" in sample ||
+                "video_url" in sample ||
+                "tour_3d_url" in sample;
+              setCatalogSchemaWarning(
+                hasMediaCols
+                  ? null
+                  : "Faltan columnas de contacto y medios en Supabase. Aplica las migraciones 20260520180000, 20260521100000 y 20260521120000 para medios, videos y tours 3D.",
+              );
+            } else {
+              setCatalogSchemaWarning(null);
+            }
             break;
           }
           lastErr = qErr;
@@ -123,5 +141,5 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
     void reload();
   }, [enabled, reload]);
 
-  return { properties, loading, error, reload, patchProperty, applySavedProperty };
+  return { properties, loading, error, catalogSchemaWarning, reload, patchProperty, applySavedProperty };
 }

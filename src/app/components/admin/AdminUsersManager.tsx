@@ -25,6 +25,7 @@ import {
   Filter,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CreateUserDialog, INITIAL_CREATE_USER_FORM } from "./CreateUserDialog";
 import { SendMessageDialog } from "./messages/SendMessageDialog";
 import { User, UserHistoryEntry, UserPermission, UserRole } from "../../contexts/AuthContext";
 import { labelForLeadStatus, type CustomKanbanStage, type Lead } from "../../data/leads";
@@ -53,57 +54,12 @@ import { foldSearchText } from "../../lib/searchText";
 import type { UserGroup } from "../../lib/userGroups";
 import { DEFAULT_PIPELINE_GROUP_ID, loadPipelineByGroup } from "../../lib/pipelineByGroup";
 import { UserGroupsPanel } from "./UserGroupsPanel";
+import { MODULE_PERMISSION_CARDS, permissionLabel } from "../../lib/modulePermissions";
 
 const userReadonlyFieldClass =
   "w-full rounded-lg border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-sm text-brand-navy";
 
-const permissionCards: Array<{
-  value: UserPermission;
-  label: string;
-  description: string;
-  Icon: ComponentType<{ className?: string; strokeWidth?: number }>;
-}> = [
-  {
-    value: "manage_leads",
-    label: "Leads",
-    description: "CRM, pipeline y seguimiento de clientes",
-    Icon: Users,
-  },
-  {
-    value: "manage_properties",
-    label: "Propiedades",
-    description: "Catálogo y fichas de inmuebles",
-    Icon: Home,
-  },
-  {
-    value: "manage_developments",
-    label: "Desarrollos",
-    description: "Proyectos y desarrollos en el sitio",
-    Icon: Building2,
-  },
-  {
-    value: "manage_users",
-    label: "Usuarios",
-    description: "Alta, permisos y equipo",
-    Icon: Shield,
-  },
-  {
-    value: "manage_clients",
-    label: "Clientes",
-    description: "Fichas de clientes y relación con inventario",
-    Icon: UserCircle2,
-  },
-  {
-    value: "edit_site",
-    label: "Sitio web",
-    description: "Contenido y bloques del sitio público",
-    Icon: Globe2,
-  },
-];
-
-function permissionLabel(value: UserPermission) {
-  return permissionCards.find((card) => card.value === value)?.label ?? value;
-}
+const permissionCards = MODULE_PERMISSION_CARDS;
 
 function userInitials(name: string) {
   return name
@@ -293,17 +249,12 @@ export function AdminUsersManager({
   const [sendMessageOpen, setSendMessageOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
-  const [createForm, setCreateForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    birthDate: "",
-    workHistory: "",
-    password: "",
-    role: "asesor" as UserRole,
-    permissions: ["manage_leads", "manage_clients"] as UserPermission[],
-  });
+  const [createForm, setCreateForm] = useState({ ...INITIAL_CREATE_USER_FORM });
+
+  const resetCreateForm = useCallback(() => {
+    setCreateForm({ ...INITIAL_CREATE_USER_FORM });
+    setError("");
+  }, []);
 
   const canManageUsers = currentUser.role === "admin";
 
@@ -540,10 +491,7 @@ export function AdminUsersManager({
           phone: createForm.phone,
           address: createForm.address,
           birthDate: createForm.birthDate,
-          workHistory: createForm.workHistory
-            .split("\n")
-            .map((row) => row.trim())
-            .filter(Boolean),
+          workHistory: [],
         },
       });
       if (!result.ok) {
@@ -553,17 +501,7 @@ export function AdminUsersManager({
       }
       toast.success(`Usuario ${createForm.name} creado correctamente.`);
       setCreatingOpen(false);
-      setCreateForm({
-        name: "",
-        email: "",
-        phone: "",
-        address: "",
-        birthDate: "",
-        workHistory: "",
-        password: "",
-        role: "asesor",
-        permissions: ["manage_leads", "manage_clients"],
-      });
+      resetCreateForm();
     } finally {
       setCreatingSubmitting(false);
     }
@@ -908,72 +846,17 @@ export function AdminUsersManager({
         />
       )}
 
-      <Dialog open={creatingOpen} onOpenChange={setCreatingOpen}>
-        <DialogContent className="w-full max-w-2xl border-slate-200 bg-white p-6">
-          <div className="mb-5">
-            <DialogHeader className="text-left">
-              <DialogTitle className="text-lg font-semibold text-slate-900">Crear usuario</DialogTitle>
-            </DialogHeader>
-          </div>
-            <form onSubmit={submitCreate} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <input required className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Nombre" value={createForm.name} onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))} />
-              <input required type="email" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Correo" value={createForm.email} onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))} />
-              <input required type="password" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Contraseña" value={createForm.password} onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))} />
-              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Teléfono" value={createForm.phone} onChange={(e) => setCreateForm((p) => ({ ...p, phone: e.target.value }))} />
-              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2" placeholder="Dirección" value={createForm.address} onChange={(e) => setCreateForm((p) => ({ ...p, address: e.target.value }))} />
-              <input type="date" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={createForm.birthDate} onChange={(e) => setCreateForm((p) => ({ ...p, birthDate: e.target.value }))} />
-              <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={createForm.role} onChange={(e) => setCreateForm((p) => ({ ...p, role: e.target.value as UserRole }))}>
-                {roleOptions.map((role) => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
-              <textarea className="rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2" rows={3} placeholder="Historial de trabajo (una línea por puesto)" value={createForm.workHistory} onChange={(e) => setCreateForm((p) => ({ ...p, workHistory: e.target.value }))} />
-              <div className="md:col-span-2 rounded-lg border border-slate-200 p-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Permisos</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {permissionCards.map((permission) => (
-                    <label key={permission.value} className="inline-flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={createForm.permissions.includes(permission.value)}
-                        onChange={(e) => {
-                          setCreateForm((prev) => ({
-                            ...prev,
-                            permissions: e.target.checked
-                              ? [...prev.permissions, permission.value]
-                              : prev.permissions.filter((item) => item !== permission.value),
-                          }));
-                        }}
-                      />
-                      {permission.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              {error && <p className="text-sm text-red-700 md:col-span-2">{error}</p>}
-              <div className="md:col-span-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCreatingOpen(false)}
-                  disabled={creatingSubmitting}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={creatingSubmitting}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-red-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <Plus className="h-4 w-4" />
-                  {creatingSubmitting ? "Creando…" : "Guardar usuario"}
-                </button>
-              </div>
-            </form>
-        </DialogContent>
-      </Dialog>
+      <CreateUserDialog
+        open={creatingOpen}
+        onOpenChange={setCreatingOpen}
+        form={createForm}
+        onFormChange={setCreateForm}
+        error={error}
+        submitting={creatingSubmitting}
+        roleOptions={roleOptions}
+        onSubmit={submitCreate}
+        onReset={resetCreateForm}
+      />
 
       <Dialog open={!!archiveCandidate} onOpenChange={(open) => !open && setArchiveCandidate(null)}>
         <DialogContent className="w-full max-w-md border-slate-200 bg-white p-6">
@@ -1205,7 +1088,7 @@ export function AdminUsersManager({
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">
                             Solo puedes editar rol y permisos de módulos para este usuario.
                           </p>
-                          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {permissionCards.map((card) => {
                               const on = selectedUser.permissions.includes(card.value);
                               const CardIcon = card.Icon;

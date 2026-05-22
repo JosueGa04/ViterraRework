@@ -95,6 +95,19 @@ import {
 import { canViewAllLeads, filterLeadsForUser, roleLabelEs } from "../../lib/leadsAccess";
 import { getKpiScope } from "../../lib/kpiAccess";
 import {
+  canAccessActivitiesModule,
+  canAccessAgendaModule,
+  canAccessClientsModule,
+  canAccessCompanyUsersModule,
+  canAccessConsultasModule,
+  canAccessDashboardModule,
+  canAccessDevelopmentsModule,
+  canAccessKpisModule,
+  canAccessLeadsModule,
+  canAccessPropertiesModule,
+  canEditSiteModule,
+} from "../../lib/userModuleAccess";
+import {
   canOpenTeamMemberProfile,
   type AdminSearchRoute,
 } from "../../lib/adminWorkspaceSearch";
@@ -114,6 +127,7 @@ import { useCatalogProperties } from "../../hooks/useCatalogProperties";
 import {
   idFromPropertyWriteResult,
   insertProperty,
+  propertyWriteMetaFromResult,
   softDeleteProperty,
   updateProperty,
   updatePropertyFeatured,
@@ -373,6 +387,8 @@ export function AdminWorkspace() {
   const {
     properties,
     loading: catalogPropertiesLoading,
+    error: catalogPropertiesError,
+    catalogSchemaWarning,
     reload: reloadProperties,
     patchProperty: patchCatalogProperty,
     applySavedProperty,
@@ -456,10 +472,34 @@ export function AdminWorkspace() {
   const isAdmin = effectiveRole === "admin";
   const isGroupLeader = effectiveRole === "lider_grupo";
   const isAdvisor = effectiveRole === "asesor";
-  const canAccessCompanyModule = !isAdvisor;
+  const canAccessDashboard = useMemo(() => canAccessDashboardModule(effectiveUser), [effectiveUser]);
+  const canAccessKpis = useMemo(() => canAccessKpisModule(effectiveUser), [effectiveUser]);
+  const canAccessLeads = useMemo(() => canAccessLeadsModule(effectiveUser), [effectiveUser]);
+  const canAccessConsultas = useMemo(() => canAccessConsultasModule(effectiveUser), [effectiveUser]);
+  const canAccessAgenda = useMemo(() => canAccessAgendaModule(effectiveUser), [effectiveUser]);
+  const canAccessProperties = useMemo(
+    () => canAccessPropertiesModule(effectiveUser),
+    [effectiveUser],
+  );
+  const canAccessDevelopments = useMemo(
+    () => canAccessDevelopmentsModule(effectiveUser),
+    [effectiveUser],
+  );
+  const canAccessActivities = useMemo(
+    () => canAccessActivitiesModule(effectiveUser),
+    [effectiveUser],
+  );
+  const canAccessCompanyModule = useMemo(
+    () => canAccessCompanyUsersModule(effectiveUser, effectiveRole),
+    [effectiveUser, effectiveRole],
+  );
   const canEditSite = useMemo(
-    () => !isAdvisor && (isAdmin || (effectiveUser?.permissions?.includes("edit_site") ?? false)),
-    [isAdvisor, isAdmin, effectiveUser],
+    () => canEditSiteModule(effectiveUser, effectiveRole),
+    [effectiveUser, effectiveRole],
+  );
+  const canAccessClients = useMemo(
+    () => canAccessClientsModule(effectiveUser),
+    [effectiveUser],
   );
   const canManageInventory = isAdmin;
 
@@ -808,10 +848,53 @@ export function AdminWorkspace() {
   }, [user, activePipelineGroupId]);
 
   useEffect(() => {
-    if (!isAdvisor) return;
+    if (canAccessCompanyModule) return;
     if (activeTab !== "company") return;
     navigate(buildAdminHref("dashboard"), { replace: true });
-  }, [isAdvisor, activeTab, navigate]);
+  }, [canAccessCompanyModule, activeTab, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    const firstAllowedTab = (): TabType => {
+      if (canAccessDashboard) return "dashboard";
+      if (canAccessKpis) return "kpis";
+      if (canAccessLeads) return "leads";
+      if (canAccessConsultas) return "consultas";
+      if (canAccessClients) return "clients";
+      if (canAccessAgenda) return "agenda";
+      if (canAccessProperties) return "properties";
+      if (canAccessDevelopments) return "developments";
+      if (canAccessActivities) return "activities";
+      if (canEditSite) return "sitio";
+      if (canAccessCompanyModule) return "company";
+      return "profile";
+    };
+    const goAllowed = () => navigate(buildAdminHref(firstAllowedTab()), { replace: true });
+    if (activeTab === "dashboard" && !canAccessDashboard) goAllowed();
+    else if (activeTab === "kpis" && !canAccessKpis) goAllowed();
+    else if (activeTab === "leads" && !canAccessLeads) goAllowed();
+    else if (activeTab === "consultas" && !canAccessConsultas) goAllowed();
+    else if (activeTab === "clients" && !canAccessClients) goAllowed();
+    else if (activeTab === "agenda" && !canAccessAgenda) goAllowed();
+    else if (activeTab === "properties" && !canAccessProperties) goAllowed();
+    else if (activeTab === "developments" && !canAccessDevelopments) goAllowed();
+    else if (activeTab === "activities" && !canAccessActivities) goAllowed();
+  }, [
+    user,
+    activeTab,
+    canAccessDashboard,
+    canAccessKpis,
+    canAccessLeads,
+    canAccessConsultas,
+    canAccessClients,
+    canAccessAgenda,
+    canAccessProperties,
+    canAccessDevelopments,
+    canAccessActivities,
+    canEditSite,
+    canAccessCompanyModule,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (!user) return;
@@ -820,12 +903,6 @@ export function AdminWorkspace() {
       navigate(buildAdminHref("dashboard"), { replace: true });
     }
   }, [user, canEditSite, activeTab, companySubtab, navigate]);
-
-  useEffect(() => {
-    if (!isAdmin && activeTab === "consultas") {
-      navigate(buildAdminHref("dashboard"), { replace: true });
-    }
-  }, [isAdmin, activeTab, navigate]);
 
   useEffect(() => {
     if (!isGroupLeader) return;
@@ -1723,64 +1800,73 @@ export function AdminWorkspace() {
         toast.error("Supabase no configurado.");
         return;
       }
-      const { hasSession } = await syncSupabaseAuthSession(client);
-      if (!hasSession) {
-        toast.error(
-          "No hay sesión activa. Las políticas de seguridad (RLS) solo permiten guardar como usuario autenticado — inicia sesión de nuevo e inténtalo."
-        );
-        return;
-      }
-      const prev = properties.find((x) => x.id === normalizedProperty.id);
-      const wasFeatured = Boolean(prev?.featured);
-      const otherFeatured = properties.filter((x) => x.featured && x.id !== normalizedProperty.id).length;
-      if (normalizedProperty.featured && !wasFeatured && otherFeatured >= MAX_FEATURED_PROPERTIES) {
-        toast.error(
-          `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
-        );
-        return;
-      }
-      const exists = properties.some((x) => x.id === normalizedProperty.id);
-      let propRes = exists
-        ? await updateProperty(client, normalizedProperty)
-        : await insertProperty(client, normalizedProperty, normalizedProperty.id);
-      if (propRes.error) {
-        toast.error(propRes.error.message);
-        return;
-      }
-      let returnedId = idFromPropertyWriteResult(propRes.data);
-      if (!returnedId) {
-        await syncSupabaseAuthSession(client);
-        propRes = exists
+      try {
+        const { hasSession } = await syncSupabaseAuthSession(client);
+        if (!hasSession) {
+          toast.error(
+            "No hay sesión activa. Las políticas de seguridad (RLS) solo permiten guardar como usuario autenticado — inicia sesión de nuevo e inténtalo."
+          );
+          return;
+        }
+        const prev = properties.find((x) => x.id === normalizedProperty.id);
+        const wasFeatured = Boolean(prev?.featured);
+        const otherFeatured = properties.filter((x) => x.featured && x.id !== normalizedProperty.id).length;
+        if (normalizedProperty.featured && !wasFeatured && otherFeatured >= MAX_FEATURED_PROPERTIES) {
+          toast.error(
+            `Solo pueden destacarse hasta ${MAX_FEATURED_PROPERTIES} propiedades en la portada. Quita una estrella en otra ficha e inténtalo de nuevo.`
+          );
+          return;
+        }
+        const exists = properties.some((x) => x.id === normalizedProperty.id);
+        let propRes = exists
           ? await updateProperty(client, normalizedProperty)
           : await insertProperty(client, normalizedProperty, normalizedProperty.id);
         if (propRes.error) {
           toast.error(propRes.error.message);
           return;
         }
-        returnedId = idFromPropertyWriteResult(propRes.data);
-      }
-      // No exigir fila devuelta en el JSON: PostgREST a veces no devuelve cuerpo y `error` sigue siendo null.
-      // Refresco en segundo plano: no bloquea la UI; si hubiera discrepancia, el listado silencioso la corrige.
-      if (import.meta.env.DEV && !returnedId && !propRes.error) {
-        console.warn(
-          "[Viterra] Guardado sin id en respuesta; se continúa si no hay error. Revisa políticas RLS si el listado no refleja el cambio."
+        let writeMeta = propertyWriteMetaFromResult(propRes.data);
+        if (!writeMeta.id) {
+          await syncSupabaseAuthSession(client);
+          propRes = exists
+            ? await updateProperty(client, normalizedProperty)
+            : await insertProperty(client, normalizedProperty, normalizedProperty.id);
+          if (propRes.error) {
+            toast.error(propRes.error.message);
+            return;
+          }
+          writeMeta = propertyWriteMetaFromResult(propRes.data);
+        }
+        if (import.meta.env.DEV && !writeMeta.id && !propRes.error) {
+          console.warn(
+            "[Viterra] Guardado sin id en respuesta; se continúa si no hay error. Revisa políticas RLS si el listado no refleja el cambio."
+          );
+        }
+        const saved: Property = {
+          ...normalizedProperty,
+          tokkoId: writeMeta.tokkoId ?? normalizedProperty.tokkoId,
+          referenceCode: writeMeta.referenceCode ?? normalizedProperty.referenceCode,
+        };
+        applySavedProperty(saved);
+        const { action, diff } = buildPropertySaveEvent(prev, saved, exists);
+        if (isInventoryTimelineAction(action)) {
+          void logCatalogActivity({
+            entity_type: "property",
+            entity_id: saved.id,
+            action,
+            snapshot: buildPropertySnapshot(saved),
+            diff,
+          });
+        }
+        void reloadProperties({ silent: true });
+        toast.success(
+          exists ? "Propiedad actualizada correctamente." : "Propiedad añadida al catálogo correctamente."
         );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo guardar la propiedad.";
+        toast.error(msg);
+        if (import.meta.env.DEV) console.error("[Viterra] handleSaveProperty", e);
       }
-      applySavedProperty(normalizedProperty);
-      const { action, diff } = buildPropertySaveEvent(prev, normalizedProperty, exists);
-      if (isInventoryTimelineAction(action)) {
-        void logCatalogActivity({
-          entity_type: "property",
-          entity_id: normalizedProperty.id,
-          action,
-          snapshot: buildPropertySnapshot(normalizedProperty),
-          diff,
-        });
-      }
-      void reloadProperties({ silent: true });
-      toast.success(
-        exists ? "Propiedad actualizada correctamente." : "Propiedad añadida al catálogo correctamente."
-      );
     },
     [applySavedProperty, properties, reloadProperties, canManageInventory, logCatalogActivity]
   );
@@ -1940,11 +2026,6 @@ export function AdminWorkspace() {
   const handleUsersPanelFocusConsumed = useCallback(() => {
     setUsersPanelFocus(null);
   }, []);
-
-  const canAccessClients = useMemo(
-    () => Boolean(user?.permissions?.includes("manage_clients")),
-    [user]
-  );
 
   const handleRegisterClientFromLead = useCallback(
     (lead: Lead) => {
@@ -2268,41 +2349,60 @@ export function AdminWorkspace() {
 
   const buildAdminNavigationRoutes = useCallback(
     (
-      navIsAdmin: boolean,
       navIsGroupLeader: boolean,
+      navCanAccessDashboard: boolean,
+      navCanAccessKpis: boolean,
+      navCanAccessConsultas: boolean,
+      navCanAccessAgenda: boolean,
       navCanAccessClients: boolean,
       navCanAccessCompanyModule: boolean,
       navCanEditSite: boolean,
+      navCanAccessLeads: boolean,
+      navCanAccessProperties: boolean,
+      navCanAccessDevelopments: boolean,
+      navCanAccessActivities: boolean,
     ): AdminSearchRoute[] => {
     const routes: AdminSearchRoute[] = [
-      {
-        id: "dashboard",
-        title: "Dashboard",
-        description: "Inicio operativo: prioridades, citas y accesos rápidos",
-        keywords: ["inicio", "resumen", "dashboard", "panel", "hoy", "prioridades"],
-        category: "crm",
-        icon: LayoutDashboard,
-        action: () => goTab("dashboard"),
-      },
-      {
-        id: "kpis",
-        title: "KPI's",
-        description: "Reportes: métricas, metas y comparativos por período",
-        keywords: ["kpi", "kpis", "reportes", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
-        category: "crm",
-        icon: BarChart3,
-        action: () => goTab("kpis"),
-      },
-      {
-        id: "leads",
-        title: "Leads",
-        description: "Pipeline y seguimiento comercial",
-        keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
-        category: "crm",
-        icon: Users,
-        action: () => goTab("leads"),
-      },
-      ...(navIsAdmin
+      ...(navCanAccessDashboard
+        ? [
+            {
+              id: "dashboard",
+              title: "Dashboard",
+              description: "Inicio operativo: prioridades, citas y accesos rápidos",
+              keywords: ["inicio", "resumen", "dashboard", "panel", "hoy", "prioridades"],
+              category: "crm",
+              icon: LayoutDashboard,
+              action: () => goTab("dashboard"),
+            },
+          ]
+        : []),
+      ...(navCanAccessKpis
+        ? [
+            {
+              id: "kpis",
+              title: "KPI's",
+              description: "Reportes: métricas, metas y comparativos por período",
+              keywords: ["kpi", "kpis", "reportes", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
+              category: "crm",
+              icon: BarChart3,
+              action: () => goTab("kpis"),
+            },
+          ]
+        : []),
+      ...(navCanAccessLeads
+        ? [
+            {
+              id: "leads",
+              title: "Leads",
+              description: "Pipeline y seguimiento comercial",
+              keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
+              category: "crm",
+              icon: Users,
+              action: () => goTab("leads"),
+            },
+          ]
+        : []),
+      ...(navCanAccessConsultas
         ? [
             {
               id: "consultas",
@@ -2335,42 +2435,58 @@ export function AdminWorkspace() {
             },
           ]
         : []),
-      {
-        id: "agenda",
-        title: "Agenda",
-        description: "Calendario semanal de citas",
-        keywords: ["agenda", "calendario", "citas", "semana", "horario"],
-        category: "crm",
-        icon: Calendar,
-        action: () => goTab("agenda"),
-      },
-      {
-        id: "properties",
-        title: "Propiedades",
-        description: "Catálogo y administración de propiedades",
-        keywords: ["propiedades", "inmuebles", "venta", "renta"],
-        category: "catalog",
-        icon: Home,
-        action: () => goTab("properties"),
-      },
-      {
-        id: "developments",
-        title: "Desarrollos",
-        description: "Gestión de desarrollos propios",
-        keywords: ["desarrollos", "proyectos", "desarrollo"],
-        category: "catalog",
-        icon: Building2,
-        action: () => goTab("developments"),
-      },
-      {
-        id: "activities",
-        title: "Actividades",
-        description: "Timeline del catálogo: propiedades y desarrollos",
-        keywords: ["actividades", "timeline", "historial", "cambios", "precio", "inventario"],
-        category: "catalog",
-        icon: History,
-        action: () => goTab("activities"),
-      },
+      ...(navCanAccessAgenda
+        ? [
+            {
+              id: "agenda",
+              title: "Agenda",
+              description: "Calendario semanal de citas",
+              keywords: ["agenda", "calendario", "citas", "semana", "horario"],
+              category: "crm",
+              icon: Calendar,
+              action: () => goTab("agenda"),
+            },
+          ]
+        : []),
+      ...(navCanAccessProperties
+        ? [
+            {
+              id: "properties",
+              title: "Propiedades",
+              description: "Catálogo y administración de propiedades",
+              keywords: ["propiedades", "inmuebles", "venta", "renta"],
+              category: "catalog",
+              icon: Home,
+              action: () => goTab("properties"),
+            },
+          ]
+        : []),
+      ...(navCanAccessDevelopments
+        ? [
+            {
+              id: "developments",
+              title: "Desarrollos",
+              description: "Gestión de desarrollos propios",
+              keywords: ["desarrollos", "proyectos", "desarrollo"],
+              category: "catalog",
+              icon: Building2,
+              action: () => goTab("developments"),
+            },
+          ]
+        : []),
+      ...(navCanAccessActivities
+        ? [
+            {
+              id: "activities",
+              title: "Actividades",
+              description: "Timeline del catálogo: propiedades y desarrollos",
+              keywords: ["actividades", "timeline", "historial", "cambios", "precio", "inventario"],
+              category: "catalog",
+              icon: History,
+              action: () => goTab("activities"),
+            },
+          ]
+        : []),
       ...(navCanEditSite
         ? [
             {
@@ -2498,19 +2614,33 @@ export function AdminWorkspace() {
   const adminNavigationRoutes = useMemo(
     () =>
       buildAdminNavigationRoutes(
-        isAdmin,
         isGroupLeader,
+        canAccessDashboard,
+        canAccessKpis,
+        canAccessConsultas,
+        canAccessAgenda,
         canAccessClients,
         canAccessCompanyModule,
         canEditSite,
+        canAccessLeads,
+        canAccessProperties,
+        canAccessDevelopments,
+        canAccessActivities,
       ),
     [
       buildAdminNavigationRoutes,
-      isAdmin,
       isGroupLeader,
+      canAccessDashboard,
+      canAccessKpis,
+      canAccessConsultas,
+      canAccessAgenda,
       canAccessClients,
       canAccessCompanyModule,
       canEditSite,
+      canAccessLeads,
+      canAccessProperties,
+      canAccessDevelopments,
+      canAccessActivities,
     ],
   );
 
@@ -2610,6 +2740,7 @@ export function AdminWorkspace() {
             Módulos admin
           </p>
           <nav className="space-y-1.5" aria-label="Navegación del panel admin">
+                {canAccessDashboard && (
                 <button
                   type="button"
                   onClick={() => goTab("dashboard")}
@@ -2620,6 +2751,8 @@ export function AdminWorkspace() {
                   <LayoutDashboard className="h-4 w-4" strokeWidth={activeTab === "dashboard" ? 2 : 1.75} />
                   Dashboard
                 </button>
+                )}
+                {canAccessKpis && (
                 <button
                   type="button"
                   onClick={() => goTab("kpis")}
@@ -2630,6 +2763,8 @@ export function AdminWorkspace() {
                   <BarChart3 className="h-4 w-4" strokeWidth={activeTab === "kpis" ? 2 : 1.75} />
                   KPI's
                 </button>
+                )}
+                {canAccessLeads && (
                 <button
                   type="button"
                   onClick={() => goTab("leads")}
@@ -2640,7 +2775,8 @@ export function AdminWorkspace() {
                   <Users className="h-4 w-4" strokeWidth={activeTab === "leads" ? 2 : 1.75} />
                   Leads
                 </button>
-                {isAdmin && (
+                )}
+                {canAccessConsultas && (
                   <button
                     type="button"
                     onClick={() => goTab("consultas")}
@@ -2668,6 +2804,7 @@ export function AdminWorkspace() {
                     Clientes
                   </button>
                 )}
+                {canAccessAgenda && (
                 <button
                   type="button"
                   onClick={() => goTab("agenda")}
@@ -2678,6 +2815,8 @@ export function AdminWorkspace() {
                   <Calendar className="h-4 w-4" strokeWidth={activeTab === "agenda" ? 2 : 1.75} />
                   Agenda
                 </button>
+                )}
+                {canAccessProperties && (
                 <button
                   type="button"
                   onClick={() => goTab("properties")}
@@ -2688,6 +2827,8 @@ export function AdminWorkspace() {
                   <Home className="h-4 w-4" strokeWidth={activeTab === "properties" ? 2 : 1.75} />
                   Propiedades
                 </button>
+                )}
+                {canAccessDevelopments && (
                 <button
                   type="button"
                   onClick={() => goTab("developments")}
@@ -2698,6 +2839,8 @@ export function AdminWorkspace() {
                   <Building2 className="h-4 w-4" strokeWidth={activeTab === "developments" ? 2 : 1.75} />
                   Desarrollos
                 </button>
+                )}
+                {canAccessActivities && (
                 <button
                   type="button"
                   onClick={() => goTab("activities")}
@@ -2708,6 +2851,7 @@ export function AdminWorkspace() {
                   <History className="h-4 w-4" strokeWidth={activeTab === "activities" ? 2 : 1.75} />
                   Actividades
                 </button>
+                )}
                 {canEditSite && (
                   <button
                     type="button"
@@ -2756,26 +2900,39 @@ export function AdminWorkspace() {
         </div>
         <div className="border-t border-white/15 px-4 py-4">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => goTab("profile")}
-              className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/25 bg-white/10 text-white transition hover:bg-white/20",
-                activeTab === "profile" && "ring-2 ring-white/40"
-              )}
-              title="Abrir mi perfil"
-              aria-label="Abrir mi perfil"
-            >
-              {user.profile.picture ? (
-                <img
-                  src={user.profile.picture}
-                  alt={`Foto de ${user.name}`}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <UserIcon className="h-5 w-5" strokeWidth={1.75} />
-              )}
-            </button>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => goTab("profile")}
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-white/25 bg-white/10 text-white transition hover:bg-white/20",
+                  activeTab === "profile" && "ring-2 ring-white/40",
+                )}
+                title="Abrir mi perfil"
+                aria-label="Abrir mi perfil"
+              >
+                {user.profile.picture ? (
+                  <img
+                    src={user.profile.picture}
+                    alt={`Foto de ${user.name}`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <UserIcon className="h-5 w-5" strokeWidth={1.75} />
+                )}
+              </button>
+              {messagesUnreadTotal > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => goTab("messages")}
+                  className="absolute -right-1 -top-1 z-10 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white shadow-md ring-2 ring-brand-navy"
+                  aria-label={`${messagesUnreadTotal} mensajes sin leer`}
+                  title="Ver mensajes sin leer"
+                >
+                  {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+                </button>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => goTab("profile")}
@@ -2900,15 +3057,15 @@ export function AdminWorkspace() {
           </p>
           <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Navegación del panel admin">
             {[
-              { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-              { id: "kpis", label: "KPI's", icon: BarChart3 },
-              { id: "leads", label: "Leads", icon: Users },
-              ...(isAdmin ? [{ id: "consultas", label: "Consultas", icon: ClipboardList }] : []),
+              ...(canAccessDashboard ? [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
+              ...(canAccessKpis ? [{ id: "kpis", label: "KPI's", icon: BarChart3 }] : []),
+              ...(canAccessLeads ? [{ id: "leads", label: "Leads", icon: Users }] : []),
+              ...(canAccessConsultas ? [{ id: "consultas", label: "Consultas", icon: ClipboardList }] : []),
               ...(canAccessClients ? [{ id: "clients", label: "Clientes", icon: UserCircle2 }] : []),
-              { id: "agenda", label: "Agenda", icon: Calendar },
-              { id: "properties", label: "Propiedades", icon: Home },
-              { id: "developments", label: "Desarrollos", icon: Building2 },
-              { id: "activities", label: "Actividades", icon: History },
+              ...(canAccessAgenda ? [{ id: "agenda", label: "Agenda", icon: Calendar }] : []),
+              ...(canAccessProperties ? [{ id: "properties", label: "Propiedades", icon: Home }] : []),
+              ...(canAccessDevelopments ? [{ id: "developments", label: "Desarrollos", icon: Building2 }] : []),
+              ...(canAccessActivities ? [{ id: "activities", label: "Actividades", icon: History }] : []),
               ...(canEditSite ? [{ id: "sitio", label: "Sitio web", icon: Globe2 }] : []),
               ...(canAccessCompanyModule
                 ? [{ id: "company", label: isGroupLeader ? "Pipeline de ventas" : "Mi empresa", icon: Briefcase }]
@@ -3533,7 +3690,7 @@ export function AdminWorkspace() {
           ))}
 
         {activeTab === "consultas" && (
-          isAdmin ? (
+          canAccessConsultas ? (
             leadsModuleLoading ? (
               <AdminConsultasSkeleton />
             ) : (
@@ -3616,6 +3773,30 @@ export function AdminWorkspace() {
             <AdminPropertiesSkeleton />
           ) : (
           <div className="space-y-6">
+            {catalogPropertiesError ? (
+              <div
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                role="alert"
+              >
+                <p className="font-semibold">No se pudo cargar el catálogo</p>
+                <p className="mt-1">{catalogPropertiesError}</p>
+                <button
+                  type="button"
+                  className="mt-2 font-medium text-red-900 underline"
+                  onClick={() => void reloadProperties()}
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : null}
+            {catalogSchemaWarning ? (
+              <div
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                role="status"
+              >
+                {catalogSchemaWarning}
+              </div>
+            ) : null}
             {/* Properties Header */}
             <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
               <div

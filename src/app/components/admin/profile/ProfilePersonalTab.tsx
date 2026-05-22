@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Briefcase, Phone, Smartphone } from "lucide-react";
+import { Briefcase, Smartphone } from "lucide-react";
 import { Label } from "../../ui/label";
 import { cn } from "../../ui/utils";
 import type { TokkoUserProfilePatch } from "../../../lib/supabaseTokkoUsers";
@@ -11,6 +11,7 @@ type Props = {
   draft: ProfileDraft;
   setDraft: Dispatch<SetStateAction<ProfileDraft>>;
   saving: boolean;
+  readOnly?: boolean;
   canEditPosition: boolean;
   onClearField: (key: keyof TokkoUserProfilePatch) => void;
 };
@@ -19,9 +20,11 @@ export function ProfilePersonalTab({
   draft,
   setDraft,
   saving,
+  readOnly = false,
   canEditPosition,
   onClearField,
 }: Props) {
+  const positionEditable = !readOnly && canEditPosition;
   return (
     <div
       id="profile-panel-personal"
@@ -33,49 +36,48 @@ export function ProfilePersonalTab({
         <h3 className={profileSectionTitle}>Datos generales</h3>
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-slate-600">Nombre completo</Label>
-          <input
-            className={inputClass}
-            value={draft.name}
-            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          />
+          {readOnly ? (
+            <p className={cn(readClass, !draft.name.trim() && "text-slate-400")}>
+              {draft.name.trim() || "—"}
+            </p>
+          ) : (
+            <input
+              className={inputClass}
+              value={draft.name}
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            />
+          )}
         </div>
       </section>
 
       <section>
         <h3 className={profileSectionTitle}>Contacto</h3>
         <div className="grid gap-5 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs font-medium text-slate-600">
-                <Phone className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-slate-400" strokeWidth={1.5} />
-                Teléfono
-              </Label>
-              <ProfileClearLink visible={Boolean(draft.phone)} saving={saving} onClick={() => onClearField("phone")} />
-            </div>
-            <input
-              className={inputClass}
-              value={draft.phone}
-              onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 sm:col-span-2">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-xs font-medium text-slate-600">
                 <Smartphone className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-slate-400" strokeWidth={1.5} />
                 Celular
               </Label>
               <ProfileClearLink
-                visible={Boolean(draft.cellphone)}
+                visible={Boolean(draft.cellphone.trim())}
                 saving={saving}
                 onClick={() => onClearField("cellphone")}
               />
             </div>
             <input
+              type="tel"
+              autoComplete="tel"
               className={inputClass}
               value={draft.cellphone}
               onChange={(e) => setDraft((d) => ({ ...d, cellphone: e.target.value }))}
+              placeholder="+52 …"
             />
+            {readOnly ? (
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                Puedes actualizar tu celular y guardar los cambios abajo.
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -84,7 +86,7 @@ export function ProfilePersonalTab({
                 <Briefcase className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-slate-400" strokeWidth={1.5} />
                 Puesto
               </Label>
-              {canEditPosition ? (
+              {positionEditable ? (
                 <ProfileClearLink
                   visible={Boolean(draft.position.trim())}
                   saving={saving}
@@ -92,7 +94,7 @@ export function ProfilePersonalTab({
                 />
               ) : null}
             </div>
-            {canEditPosition ? (
+            {positionEditable ? (
               <input
                 className={inputClass}
                 value={draft.position}
@@ -100,14 +102,9 @@ export function ProfilePersonalTab({
                 placeholder="Ej. Asesor inmobiliario"
               />
             ) : (
-              <>
-                <p className={cn(readClass, !draft.position.trim() && "text-slate-400")}>
-                  {draft.position.trim() || "Sin puesto asignado"}
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  Solo administradores y líderes de grupo pueden editar el puesto.
-                </p>
-              </>
+              <p className={cn(readClass, !draft.position.trim() && "text-slate-400")}>
+                {draft.position.trim() || "Sin puesto asignado"}
+              </p>
             )}
           </div>
         </div>

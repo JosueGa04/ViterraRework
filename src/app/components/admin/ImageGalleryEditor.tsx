@@ -4,7 +4,13 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
 
 const MAX_IMAGES = 24;
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_DATA_URL_BYTES = 5 * 1024 * 1024;
+const MAX_STORAGE_IMAGE_BYTES = 25 * 1024 * 1024;
+
+function isImageFile(file: File): boolean {
+  if (/^image\//i.test(file.type)) return true;
+  return /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp|avif)$/i.test(file.name);
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,6 +40,8 @@ type Props = {
    * (p. ej. formulario de desarrollos en una pantalla sin desplazarse).
    */
   compactSingleScreen?: boolean;
+  /** Si se define, sube a Storage en lugar de data URL (permite más formatos y tamaño). */
+  onUploadFile?: (file: File) => Promise<string>;
 };
 
 export function ImageGalleryEditor({
@@ -41,12 +49,18 @@ export function ImageGalleryEditor({
   onChange,
   disabled = false,
   label = "Imágenes",
-  hint = "PNG, JPG o WebP · máx. 5 MB por archivo · la primera imagen es la portada.",
+  hint,
   variant = "default",
   segment = "all",
   className,
   compactSingleScreen = false,
+  onUploadFile,
 }: Props) {
+  const resolvedHint =
+    hint ??
+    (onUploadFile
+      ? "Cualquier imagen · máx. 25 MB · la primera es la portada."
+      : "PNG, JPG o WebP · máx. 5 MB · la primera es la portada.");
   const featured = variant === "featured";
   const splitHero = featured && segment === "hero";
   const splitGallery = featured && segment === "gallery";
@@ -67,8 +81,11 @@ export function ImageGalleryEditor({
 
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
-      const list = Array.from(files).filter((f) => /^image\//i.test(f.type));
-      if (list.length === 0) return;
+      const list = Array.from(files).filter(isImageFile);
+      if (list.length === 0) {
+        window.alert("Selecciona archivos de imagen válidos.");
+        return;
+      }
       const room = MAX_IMAGES - images.length;
       if (room <= 0) {
         window.alert(`Máximo ${MAX_IMAGES} imágenes. Elimina alguna antes de agregar más.`);
@@ -78,11 +95,14 @@ export function ImageGalleryEditor({
       try {
         const next: string[] = [...images];
         for (const file of list.slice(0, room)) {
-          if (file.size > MAX_FILE_BYTES) {
-            window.alert(`«${file.name}» supera 5 MB. Elige otro archivo o comprime la imagen.`);
+          const maxBytes = onUploadFile ? MAX_STORAGE_IMAGE_BYTES : MAX_DATA_URL_BYTES;
+          if (file.size > maxBytes) {
+            window.alert(
+              `«${file.name}» supera ${onUploadFile ? "25 MB" : "5 MB"}. Comprime la imagen o usa otro archivo.`,
+            );
             continue;
           }
-          const url = await readFileAsDataUrl(file);
+          const url = onUploadFile ? await onUploadFile(file) : await readFileAsDataUrl(file);
           next.push(url);
         }
         if (next.length !== images.length) onChange(next);
@@ -90,7 +110,7 @@ export function ImageGalleryEditor({
         setBusy(false);
       }
     },
-    [images, onChange]
+    [images, onChange, onUploadFile]
   );
 
   const removeAt = useCallback(
@@ -266,9 +286,9 @@ export function ImageGalleryEditor({
           <p className="text-xs font-bold uppercase leading-tight tracking-wide text-brand-navy min-[1100px]:text-sm" style={{ fontWeight: 700 }}>
             {label}
           </p>
-          {hint ? (
+          {resolvedHint ? (
             <p className="line-clamp-2 text-[10px] leading-snug text-slate-500 min-[1100px]:text-xs" style={{ fontWeight: 500 }}>
-              {hint}
+              {resolvedHint}
             </p>
           ) : null}
 
@@ -380,9 +400,9 @@ export function ImageGalleryEditor({
             >
               {label}
             </p>
-            {hint ? (
+            {resolvedHint ? (
               <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                {hint}
+                {resolvedHint}
               </p>
             ) : null}
           </div>
@@ -464,12 +484,12 @@ export function ImageGalleryEditor({
           >
             {label}
           </p>
-          {hint ? (
+          {resolvedHint ? (
             <p
               className={cn("text-slate-500", featured ? "mt-2 text-xs sm:text-sm" : "mt-1 text-[11px]")}
               style={{ fontWeight: 500 }}
             >
-              {hint}
+              {resolvedHint}
             </p>
           ) : null}
         </div>

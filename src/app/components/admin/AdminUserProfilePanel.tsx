@@ -99,9 +99,11 @@ export function AdminUserProfilePanel({
   const [initial, setInitial] = useState<ProfileDraft>(emptyProfileDraft);
   const [profileTab, setProfileTab] = useState<ProfileTabId>("personal");
 
+  /** Mi perfil es solo consulta; los cambios los hace un administrador desde Mi empresa. */
+  const readOnly = true;
   const isRealAdmin = user?.role === "admin";
-  const canEditEmail = isRealAdmin;
-  const canEditPosition = user?.role === "admin" || user?.role === "lider_grupo";
+  const canEditEmail = !readOnly && isRealAdmin;
+  const canEditPosition = !readOnly && (user?.role === "admin" || user?.role === "lider_grupo");
   const hasTokkoDirectoryRow = row !== null;
   const [cropOpen, setCropOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
@@ -175,6 +177,11 @@ export function AdminUserProfilePanel({
   }, [user, load]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initial), [draft, initial]);
+  const cellphoneDirty = useMemo(
+    () => draft.cellphone.trim() !== initial.cellphone.trim(),
+    [draft.cellphone, initial.cellphone],
+  );
+  const showSaveBar = profileTab === "personal" && (readOnly ? cellphoneDirty : dirty);
 
   const onPictureFileChange = (file: File | null) => {
     if (!file) return;
@@ -210,6 +217,15 @@ export function AdminUserProfilePanel({
   const buildPatch = (): TokkoUserProfilePatch | null => {
     if (!user) return null;
     const patch: TokkoUserProfilePatch = {};
+
+    if (readOnly) {
+      if (draft.cellphone.trim() !== initial.cellphone.trim()) {
+        const v = draft.cellphone.trim() || null;
+        patch.cellphone = v;
+        patch.phone = v;
+      }
+      return Object.keys(patch).length > 0 ? patch : null;
+    }
 
     if (draft.name.trim() !== initial.name.trim()) {
       if (!draft.name.trim()) {
@@ -248,8 +264,11 @@ export function AdminUserProfilePanel({
     if (!user) return;
     const patch = buildPatch();
     if (!patch) {
-      if (dirty) toast.error("Revisa los campos obligatorios o los permisos de edición.");
-      else toast.info("No hay cambios que guardar.");
+      if (readOnly ? cellphoneDirty : dirty) {
+        toast.error("Revisa los campos obligatorios o los permisos de edición.");
+      } else {
+        toast.info("No hay cambios que guardar.");
+      }
       return;
     }
 
@@ -261,13 +280,16 @@ export function AdminUserProfilePanel({
 
     setSaving(true);
     if (!row) {
-      const { error } = await updateAuthUserProfileMetadata(client, {
-        name: patch.name,
-        phone: patch.phone,
-        cellphone: patch.cellphone,
-        position: canEditPosition ? patch.position : undefined,
-        picture: patch.picture,
-      });
+      const metaPatch: Parameters<typeof updateAuthUserProfileMetadata>[1] = readOnly
+        ? { cellphone: patch.cellphone, phone: patch.phone }
+        : {
+            name: patch.name,
+            phone: patch.phone,
+            cellphone: patch.cellphone,
+            position: canEditPosition ? patch.position : undefined,
+            picture: patch.picture,
+          };
+      const { error } = await updateAuthUserProfileMetadata(client, metaPatch);
       setSaving(false);
       if (error) {
         toast.error(error.message || "No se pudo guardar el perfil.");
@@ -362,7 +384,8 @@ export function AdminUserProfilePanel({
             Mi perfil
           </h1>
           <p className="mt-1 max-w-lg text-sm text-slate-600">
-            Datos de contacto, equipo, metas KPI y estadísticas de tu rendimiento comercial.
+            Consulta tus datos, equipo, metas KPI y rendimiento. Solo puedes editar tu celular; el resto lo
+            gestiona un administrador.
           </p>
         </div>
         <Button
@@ -386,6 +409,7 @@ export function AdminUserProfilePanel({
             setDraft={setDraft}
             roleLabel={roRole}
             saving={saving}
+            readOnly={readOnly}
             canEditEmail={canEditEmail}
             hasTokkoDirectoryRow={hasTokkoDirectoryRow}
             onPictureFileChange={(file) => void onPictureFileChange(file)}
@@ -403,6 +427,7 @@ export function AdminUserProfilePanel({
                   draft={draft}
                   setDraft={setDraft}
                   saving={saving}
+                  readOnly={readOnly}
                   canEditPosition={canEditPosition}
                   onClearField={(key) => void clearField(key)}
                 />
@@ -425,22 +450,28 @@ export function AdminUserProfilePanel({
               ) : null}
             </div>
 
-            {profileTab !== "performance" ? (
-              <ProfileStickyActions saving={saving} dirty={dirty} onSave={() => void save()} />
+            {showSaveBar ? (
+              <ProfileStickyActions
+                saving={saving}
+                dirty={readOnly ? cellphoneDirty : dirty}
+                onSave={() => void save()}
+              />
             ) : null}
           </div>
         </div>
       </section>
 
-      <ProfilePictureCropDialog
-        open={cropOpen}
-        imageSrc={cropImageSrc}
-        onOpenChange={(open) => {
-          setCropOpen(open);
-          if (!open) setCropImageSrc(null);
-        }}
-        onConfirm={onCropConfirm}
-      />
+      {!readOnly ? (
+        <ProfilePictureCropDialog
+          open={cropOpen}
+          imageSrc={cropImageSrc}
+          onOpenChange={(open) => {
+            setCropOpen(open);
+            if (!open) setCropImageSrc(null);
+          }}
+          onConfirm={onCropConfirm}
+        />
+      ) : null}
     </div>
   );
 }

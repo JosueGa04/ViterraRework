@@ -117,6 +117,7 @@ export function MessagesModule({ currentUser, users, initialPeerId, onPeerIdChan
             <>
               <ChatThread
                 meId={currentUser.id}
+                currentUser={currentUser}
                 peer={peerUser}
                 peerId={selectedPeerId}
                 messages={messagesWithPeer}

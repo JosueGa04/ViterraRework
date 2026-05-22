@@ -1,6 +1,7 @@
 import React from "react";
 import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer";
 import type { Property } from "../PropertyCard";
+import { hasRichDescription } from "../../lib/propertyDescription";
 import type { Development } from "../../data/developments";
 import type { User } from "../../contexts/AuthContext";
 
@@ -295,7 +296,11 @@ export function FichaTecnicaPdf({ data, type, includeLogo, user }: FichaTecnicaP
   const title = isDev ? p.name : (p.publicationTitle || p.title);
   const location = isDev ? (p.colony || p.location) : p.location;
   const price = isDev ? p.priceRange : `$${p.price?.toLocaleString()}`;
-  const descriptionRaw = isDev ? p.description : (p.richDescription || p.description);
+  const descriptionRaw = isDev
+    ? p.description
+    : hasRichDescription(p.richDescription)
+      ? p.richDescription!
+      : p.description;
   const descriptionText = stripHtml(descriptionRaw);
   const image = p.image;
   const reference = p.referenceCode || (isDev ? p.tokkoId : undefined);

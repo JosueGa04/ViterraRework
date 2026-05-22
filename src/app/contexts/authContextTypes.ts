@@ -1,25 +1,51 @@
 export type UserRole = "admin" | "lider_grupo" | "asesor";
 
 export type UserPermission =
+  | "access_dashboard"
+  | "access_kpis"
   | "manage_leads"
+  | "access_consultas"
+  | "manage_clients"
+  | "access_agenda"
   | "manage_properties"
   | "manage_developments"
-  | "manage_users"
-  | "manage_clients"
-  | "edit_site";
+  | "access_activities"
+  | "edit_site"
+  | "manage_users";
 
 /** Permisos por defecto al crear o simular un rol (sin asignación explícita en BD). */
 export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, UserPermission[]> = {
   admin: [
+    "access_dashboard",
+    "access_kpis",
     "manage_leads",
+    "access_consultas",
+    "manage_clients",
+    "access_agenda",
     "manage_properties",
     "manage_developments",
-    "manage_users",
-    "manage_clients",
+    "access_activities",
     "edit_site",
+    "manage_users",
   ],
-  lider_grupo: ["manage_leads", "manage_properties", "manage_developments", "manage_clients"],
-  asesor: ["manage_leads", "manage_clients"],
+  lider_grupo: [
+    "access_dashboard",
+    "access_kpis",
+    "manage_leads",
+    "manage_clients",
+    "access_agenda",
+    "manage_properties",
+    "manage_developments",
+    "access_activities",
+    "manage_users",
+  ],
+  asesor: [
+    "access_dashboard",
+    "access_kpis",
+    "manage_leads",
+    "manage_clients",
+    "access_agenda",
+  ],
 };
 
 export interface UserHistoryEntry {

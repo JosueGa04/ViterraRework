@@ -156,7 +156,12 @@ Deno.serve(async (req: Request) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: name, name },
+      user_metadata: {
+        full_name: name,
+        name,
+        role,
+        permissions,
+      },
     });
     if (createRes.error || !createRes.data.user) {
       const msg = createRes.error?.message ?? "No se pudo crear la cuenta.";
@@ -169,9 +174,6 @@ Deno.serve(async (req: Request) => {
     const payloadExtras: Record<string, unknown> = {};
     if ((body.address ?? "").trim()) payloadExtras.address = body.address!.trim();
     if ((body.birthDate ?? "").trim()) payloadExtras.birth_date = body.birthDate!.trim();
-    if (Array.isArray(body.workHistory) && body.workHistory.length > 0) {
-      payloadExtras.work_history = body.workHistory;
-    }
 
     const insertRow: Record<string, unknown> = {
       id: newUserId,
@@ -180,7 +182,7 @@ Deno.serve(async (req: Request) => {
       email,
       role,
       permissions,
-      must_change_password: false,
+      must_change_password: true,
       synced_at: nowIso,
       updated_at: nowIso,
     };

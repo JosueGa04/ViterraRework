@@ -27,7 +27,20 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "../components/ui/utils";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
-import type { Property } from "../components/PropertyCard";
+import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
+import { propertyTours3dList, propertyVideosList, type Property } from "../components/PropertyCard";
+import { propertyVideoDisplayTitle, resolveAllPropertyVideoUrls } from "../lib/propertyVideos";
+import {
+  propertyTour3dDisplayTitle,
+  resolvePropertyTour3dUrls,
+} from "../lib/propertyTours3d";
+import { useSiteContent } from "../../contexts/SiteContentContext";
+import { mergeSiteSection } from "../../lib/siteContentMerge";
+import { propertyMediaPublicUrl } from "../lib/supabasePropertyMedia";
+import { resolveWhatsappHref } from "../lib/whatsappLink";
+import { resolveTelHref } from "../lib/phoneLink";
+import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS } from "../lib/propertyDescription";
+import { orientationLabel } from "../lib/propertyOrientation";
 
 function listingActivityLabel(iso: string | undefined): string {
   if (!iso) return "—";
@@ -63,6 +76,8 @@ export function PropertyDetailPage() {
   const { id } = useParams();
   const location = useLocation();
   const { properties, loading } = useCatalogProperties();
+  const { content } = useSiteContent();
+  const contactSite = mergeSiteSection("contact", content.contact);
   const seededProperty = useMemo(() => {
     const maybe = (location.state as { property?: Property } | null)?.property;
     return maybe?.id === id ? maybe : undefined;
@@ -164,26 +179,75 @@ export function PropertyDetailPage() {
 
   const hasLinkedProject = Boolean(property?.developmentTokkoId?.trim());
 
+  const resolvedVideos = useMemo(() => {
+    if (!property) return [];
+    const client = getSupabaseClient();
+    return resolveAllPropertyVideoUrls(propertyVideosList(property), client);
+  }, [property]);
+
+  const resolvedTours3d = useMemo(() => {
+    if (!property) return [];
+    return resolvePropertyTour3dUrls(propertyTours3dList(property));
+  }, [property]);
+
+  const hasVideo = resolvedVideos.length > 0;
+  const hasTour3d = resolvedTours3d.length > 0;
+
+  const whatsappInterestMessage = `Hola, me interesa la propiedad ${property?.publicationTitle?.trim() || property?.title || ""}.`;
+
+  const telHref = useMemo(() => {
+    const fromProp = resolveTelHref(property?.contactPhone);
+    if (fromProp) return fromProp;
+    const phoneItem = contactSite.infoItems?.find((i) => i.icon === "phone");
+    return resolveTelHref(phoneItem?.body?.split("\n")[0]);
+  }, [property?.contactPhone, contactSite.infoItems]);
+
+  const whatsappHref = useMemo(() => {
+    const stored = property?.contactWhatsapp?.trim();
+    const fallback = contactSite.quickWhatsappHref || "https://wa.me/523318878494";
+    if (stored) {
+      return resolveWhatsappHref(stored, fallback, whatsappInterestMessage);
+    }
+    return resolveWhatsappHref(undefined, fallback, whatsappInterestMessage);
+  }, [property?.contactWhatsapp, contactSite.quickWhatsappHref, whatsappInterestMessage]);
+
+  const propertyTags = useMemo(
+    () => (property?.tags ?? []).map((t) => t.trim()).filter(Boolean),
+    [property?.tags],
+  );
+
   const propertyDetailTabs = useMemo(() => {
-    const core = [
-      { id: "descripcion" as const, label: "Descripción" },
-      { id: "unidad" as const, label: "Esta publicación" },
-      { id: "ubicacion" as const, label: "Ubicación" },
+    const core: Array<{ id: string; label: string }> = [
+      { id: "descripcion", label: "Descripción" },
     ];
-    if (!hasLinkedProject) return core;
-    return [
-      { id: "descripcion" as const, label: "Descripción" },
-      { id: "desarrollo" as const, label: "Proyecto" },
-      { id: "unidad" as const, label: "Esta publicación" },
-      { id: "ubicacion" as const, label: "Ubicación" },
-    ];
-  }, [hasLinkedProject]);
+    if (hasVideo) {
+      core.push({
+        id: "video",
+        label: resolvedVideos.length > 1 ? `Videos (${resolvedVideos.length})` : "Video",
+      });
+    }
+    if (hasTour3d) {
+      core.push({
+        id: "tour3d",
+        label:
+          resolvedTours3d.length > 1
+            ? `Recorridos 3D (${resolvedTours3d.length})`
+            : "Recorrido 3D",
+      });
+    }
+    if (hasLinkedProject) core.push({ id: "desarrollo", label: "Proyecto" });
+    core.push({ id: "unidad", label: "Esta publicación" });
+    core.push({ id: "ubicacion", label: "Ubicación" });
+    return core;
+  }, [hasLinkedProject, hasVideo, hasTour3d, resolvedVideos.length, resolvedTours3d.length]);
 
   useEffect(() => {
     if (!hasLinkedProject && activeTab === "desarrollo") {
       setActiveTab("descripcion");
     }
-  }, [hasLinkedProject, activeTab, property?.id]);
+    if (!hasVideo && activeTab === "video") setActiveTab("descripcion");
+    if (!hasTour3d && activeTab === "tour3d") setActiveTab("descripcion");
+  }, [hasLinkedProject, hasVideo, hasTour3d, activeTab, property?.id]);
 
   useEffect(() => {
     const tokko = property?.developmentTokkoId?.trim();
@@ -457,6 +521,14 @@ export function PropertyDetailPage() {
                       Destacada
                     </span>
                   ) : null}
+                  {propertyTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-lg border border-slate-200/90 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                    >
+                      {tag}
+                    </span>
+                  ))}
                 </div>
 
                 <div className="absolute top-4 right-4 flex gap-2">
@@ -521,18 +593,28 @@ export function PropertyDetailPage() {
                   >
                     {activeTab === "descripcion" && (
                       <div className="space-y-4">
-                        {property.description ? (
+                        {hasRichDescription(property.richDescription) ? (
+                          <>
+                            {property.description?.trim() ? (
+                              <p
+                                className="whitespace-pre-line text-base text-slate-600 leading-relaxed"
+                                style={{ fontWeight: 400 }}
+                              >
+                                {property.description.trim()}
+                              </p>
+                            ) : null}
+                            <div
+                              className={RICH_DESCRIPTION_HTML_CLASS}
+                              dangerouslySetInnerHTML={{ __html: property.richDescription! }}
+                            />
+                          </>
+                        ) : property.description?.trim() ? (
                           <p
                             className="whitespace-pre-line text-base text-slate-700 leading-relaxed"
                             style={{ fontWeight: 400 }}
                           >
-                            {property.description}
+                            {property.description.trim()}
                           </p>
-                        ) : property.richDescription ? (
-                          <div
-                            className="prose prose-slate max-w-none text-base text-slate-700 prose-headings:font-semibold prose-p:leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: property.richDescription }}
-                          />
                         ) : (
                           <>
                             <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
@@ -635,6 +717,54 @@ export function PropertyDetailPage() {
                       </div>
                     )}
 
+                    {activeTab === "video" && hasVideo && (
+                      <div className="space-y-8">
+                        {resolvedVideos.map(({ entry, playbackUrl }, index) => {
+                          const heading = propertyVideoDisplayTitle(
+                            entry,
+                            index,
+                            resolvedVideos.length,
+                          );
+                          return (
+                            <div key={entry.id} className="space-y-2">
+                              {heading ? (
+                                <h3 className="text-base font-semibold text-slate-800">{heading}</h3>
+                              ) : null}
+                              <PropertyVideoPlayer
+                                url={playbackUrl}
+                                title={heading ?? displayTitle}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {activeTab === "tour3d" && hasTour3d && (
+                      <div className="space-y-8">
+                        {resolvedTours3d.map(({ entry, embedUrl }, index) => {
+                          const heading = propertyTour3dDisplayTitle(
+                            entry,
+                            index,
+                            resolvedTours3d.length,
+                          );
+                          return (
+                            <div key={entry.id} className="space-y-2">
+                              {heading ? (
+                                <h3 className="text-base font-semibold text-slate-800">{heading}</h3>
+                              ) : null}
+                              <iframe
+                                title={heading ?? "Recorrido virtual 3D"}
+                                src={embedUrl}
+                                className="h-[min(70vh,520px)] w-full rounded-xl border border-slate-200 bg-slate-100"
+                                allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {activeTab === "unidad" && (
                       <div className="space-y-6">
                         {hasCatalogFeatureLists ? (
@@ -644,18 +774,21 @@ export function PropertyDetailPage() {
                               title="Amenidades"
                               items={property.amenities ?? []}
                               keyPrefix="u-am"
+                              layout="list"
                             />
                             <FeatureSection
                               variant="service"
                               title="Servicios"
                               items={property.services ?? []}
                               keyPrefix="u-sv"
+                              layout="list"
                             />
                             <FeatureSection
                               variant="extra"
                               title="Características adicionales"
                               items={property.additionalFeatures ?? []}
                               keyPrefix="u-af"
+                              layout="list"
                             />
                           </div>
                         ) : property.developmentTokkoId ? (
@@ -794,16 +927,26 @@ export function PropertyDetailPage() {
               </p>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <Link
-                  to="/contacto"
-                  className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
-                  style={{ fontWeight: 600 }}
-                >
-                  <Phone className="h-4 w-4" strokeWidth={2} />
-                  Llamar
-                </Link>
+                {telHref ? (
+                  <a
+                    href={telHref}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
+                    style={{ fontWeight: 600 }}
+                  >
+                    <Phone className="h-4 w-4" strokeWidth={2} />
+                    Llamar
+                  </a>
+                ) : (
+                  <span
+                    className="flex cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-3 text-sm font-semibold text-slate-400"
+                    title="Añade un teléfono con al menos 3 dígitos en Contacto"
+                  >
+                    <Phone className="h-4 w-4" strokeWidth={2} />
+                    Llamar
+                  </span>
+                )}
                 <a
-                  href="https://wa.me/523318878494"
+                  href={whatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#20bd5a]"
@@ -813,6 +956,11 @@ export function PropertyDetailPage() {
                   WhatsApp
                 </a>
               </div>
+              {!property?.contactWhatsapp?.trim() ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  WhatsApp: enlace global del sitio. Configura uno propio en la pestaña Contacto del admin.
+                </p>
+              ) : null}
 
               <div className="relative py-6">
                 <div className="absolute inset-0 flex items-center" aria-hidden>
@@ -985,6 +1133,33 @@ export function PropertyDetailPage() {
                     <span className="text-slate-600" style={{ fontWeight: 500 }}>Tipo:</span>
                     <span className="text-slate-900 capitalize" style={{ fontWeight: 600 }}>{property.type}</span>
                   </div>
+                  {orientationLabel(property.orientation) ? (
+                    <div className="flex justify-between">
+                      <span className="text-slate-600" style={{ fontWeight: 500 }}>
+                        Orientación:
+                      </span>
+                      <span className="text-slate-900" style={{ fontWeight: 600 }}>
+                        {orientationLabel(property.orientation)}
+                      </span>
+                    </div>
+                  ) : null}
+                  {propertyTags.length > 0 ? (
+                    <div className="flex flex-col gap-1.5 pt-1">
+                      <span className="text-slate-600" style={{ fontWeight: 500 }}>
+                        Etiquetas:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        {propertyTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-800"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {property.colony ? (
                     <div className="flex justify-between gap-3">
                       <span className="shrink-0 text-slate-600" style={{ fontWeight: 500 }}>
