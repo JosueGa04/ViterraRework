@@ -87,7 +87,7 @@ function FilterPreview({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center bg-brand-navy text-xs font-semibold text-white ring-1 ring-slate-200/80",
+        "flex shrink-0 items-center justify-center bg-gradient-to-br from-slate-700 to-slate-800 text-xs font-semibold text-white ring-1 ring-slate-200/80 border border-slate-600/20 shadow-sm",
         dim,
         rounded,
         size === "sm" && "text-[10px]",

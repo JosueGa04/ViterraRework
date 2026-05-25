@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addDays,
   differenceInMinutes,
@@ -13,12 +13,16 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Clock,
   Plus,
   User,
   TrendingUp,
   BarChart3,
   CheckCircle2,
+  Search,
+  Check,
+  X,
 } from "lucide-react";
 import type { User as AuthUser } from "../../contexts/AuthContext";
 import type { UserGroup } from "../../lib/userGroups";
@@ -139,8 +143,57 @@ export function AdminAgendaModule({
   // Filtro activo de asesor seleccionado para el calendario
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>("all");
 
+  // Estado para el buscador combobox
+  const [searchQuery, setSearchQuery] = useState("");
+  const [comboboxOpen, setComboboxOpen] = useState(false);
+  const comboboxRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar combobox al hacer clic afuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (comboboxRef.current && !comboboxRef.current.contains(event.target as Node)) {
+        setComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<AgendaAppointment | null>(null);
+
+  // Valores calculados para el buscador combobox
+  const allOptionLabel = isGroupLeader ? "Todo mi equipo" : "Todo el equipo";
+
+  const selectedLabel = useMemo(() => {
+    if (selectedStaffFilter === "all") return allOptionLabel;
+    if (currentUser && selectedStaffFilter === currentUser.id) return "Mi agenda personal";
+    const matched = assignedAdvisors.find((adv) => adv.id === selectedStaffFilter);
+    return matched ? matched.name : "Seleccionar asesor";
+  }, [selectedStaffFilter, assignedAdvisors, currentUser, allOptionLabel]);
+
+  const filteredAdvisorsList = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return assignedAdvisors;
+    return assignedAdvisors.filter((adv) =>
+      adv.name.toLowerCase().includes(q) ||
+      adv.email.toLowerCase().includes(q)
+    );
+  }, [assignedAdvisors, searchQuery]);
+
+  const showAllOption = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return allOptionLabel.toLowerCase().includes(q);
+  }, [searchQuery, allOptionLabel]);
+
+  const showPersonalOption = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return "mi agenda personal".includes(q);
+  }, [searchQuery]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [formTitle, setFormTitle] = useState("");
@@ -287,33 +340,135 @@ export function AdminAgendaModule({
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3.5">
             {(isGroupLeader || isAdmin) && (
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto relative" ref={comboboxRef}>
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider hidden md:inline">
                   Ver agenda de:
                 </span>
-                <Select
-                  value={selectedStaffFilter}
-                  onValueChange={setSelectedStaffFilter}
-                >
-                  <SelectTrigger className="w-full sm:w-[200px] bg-white border-slate-200/90 text-slate-800 text-xs shadow-sm focus:ring-2 focus:ring-primary/20">
-                    <SelectValue placeholder="Seleccionar asesor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      {isGroupLeader ? "Todo mi equipo" : "Todo el equipo"}
-                    </SelectItem>
-                    {currentUser && (
-                      <SelectItem value={currentUser.id}>
-                        Mi agenda personal
-                      </SelectItem>
-                    )}
-                    {assignedAdvisors.map((adv) => (
-                      <SelectItem key={adv.id} value={adv.id}>
-                        {adv.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="relative w-full sm:w-[220px]">
+                  <button
+                    type="button"
+                    onClick={() => setComboboxOpen(!comboboxOpen)}
+                    className="flex h-9 w-full items-center justify-between rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm transition-all hover:bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <span className="truncate">{selectedLabel}</span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60 ml-2" />
+                  </button>
+
+                  {comboboxOpen && (
+                    <div className="absolute right-0 mt-1.5 z-50 w-full min-w-[240px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center border-b border-slate-100 px-2 pb-1.5 pt-0.5">
+                        <Search className="h-3.5 w-3.5 mr-2 text-slate-400 shrink-0" />
+                        <input
+                          type="text"
+                          className="w-full bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none py-1"
+                          placeholder="Buscar asesor..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          autoFocus
+                        />
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchQuery("")}
+                            className="text-slate-400 hover:text-slate-600 ml-1"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-[220px] overflow-y-auto pt-1.5 space-y-0.5 scrollbar-thin">
+                        {showAllOption && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStaffFilter("all");
+                              setComboboxOpen(false);
+                              setSearchQuery("");
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors",
+                              selectedStaffFilter === "all"
+                                ? "bg-primary/5 text-primary"
+                                : "text-slate-700 hover:bg-slate-50"
+                            )}
+                          >
+                            <span>{allOptionLabel}</span>
+                            {selectedStaffFilter === "all" && <Check className="h-3.5 w-3.5 text-primary" />}
+                          </button>
+                        )}
+
+                        {currentUser && showPersonalOption && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStaffFilter(currentUser.id);
+                              setComboboxOpen(false);
+                              setSearchQuery("");
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors",
+                              selectedStaffFilter === currentUser.id
+                                ? "bg-primary/5 text-primary"
+                                : "text-slate-700 hover:bg-slate-50"
+                            )}
+                          >
+                            <span>Mi agenda personal</span>
+                            {selectedStaffFilter === currentUser.id && <Check className="h-3.5 w-3.5 text-primary" />}
+                          </button>
+                        )}
+
+                        {filteredAdvisorsList.map((adv) => {
+                          const isSelected = selectedStaffFilter === adv.id;
+                          const initials = adv.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2);
+                          const hasPic = Boolean(adv.profile?.picture?.trim());
+
+                          return (
+                            <button
+                              key={adv.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedStaffFilter(adv.id);
+                                setComboboxOpen(false);
+                                setSearchQuery("");
+                              }}
+                              className={cn(
+                                "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold transition-colors",
+                                isSelected
+                                  ? "bg-primary/5 text-primary"
+                                  : "text-slate-700 hover:bg-slate-50"
+                              )}
+                            >
+                              {hasPic ? (
+                                <img
+                                  src={adv.profile.picture}
+                                  alt={adv.name}
+                                  className="h-5 w-5 rounded-full object-cover border border-slate-100"
+                                />
+                              ) : (
+                                <div className="h-5 w-5 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-white font-bold text-[8px] shrink-0 uppercase tracking-wider border border-slate-600/20 shadow-sm">
+                                  {initials}
+                                </div>
+                              )}
+                              <span className="flex-1 truncate">{adv.name}</span>
+                              {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-auto" />}
+                            </button>
+                          );
+                        })}
+
+                        {filteredAdvisorsList.length === 0 && !showAllOption && !showPersonalOption && (
+                          <p className="p-3 text-center text-[10px] text-slate-400 font-medium">
+                            No se encontraron asesores
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <Button
@@ -721,22 +876,31 @@ export function AdminAgendaModule({
                 return (
                   <div
                     key={stat.advisor.id}
-                    className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_20px_-4px_rgba(20,28,46,0.06)] transition-all duration-300 hover:shadow-[0_8px_30px_-6px_rgba(20,28,46,0.12)] hover:border-slate-300/90 group"
+                    className="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-[0_4px_24px_-4px_rgba(20,28,46,0.04)] transition-all duration-300 hover:shadow-[0_12px_40px_-8px_rgba(20,28,46,0.12)] hover:border-slate-300/80 group flex flex-col justify-between"
                   >
-                    {/* Indicador superior de progreso */}
+                    {/* Indicador superior de progreso - Degradado sofisticado */}
                     <div
-                      className="absolute top-0 left-0 h-1 bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
+                      className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-gold to-emerald-600 transition-all duration-500"
                       style={{ width: `${stat.completionRate}%` }}
                       aria-hidden
                     />
                     
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm border border-primary/20 shrink-0">
-                          {initials}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="font-heading text-sm text-brand-navy truncate" style={{ fontWeight: 600 }}>
+                    <div className="p-5 flex-1 flex flex-col justify-between">
+                      {/* Cabecera (Avatar + Nombre & Email) */}
+                      <div className="flex items-center gap-3.5">
+                        {Boolean(stat.advisor.profile?.picture?.trim()) ? (
+                          <img
+                            src={stat.advisor.profile.picture}
+                            alt={stat.advisor.name}
+                            className="h-11 w-11 rounded-full object-cover border border-slate-200 shadow-sm shrink-0"
+                          />
+                        ) : (
+                          <div className="h-11 w-11 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 uppercase tracking-wider border border-slate-600/20">
+                            {initials}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-heading text-sm text-brand-navy truncate group-hover:text-primary transition-colors duration-200" style={{ fontWeight: 600 }}>
                             {stat.advisor.name}
                           </h3>
                           <p className="text-[10px] text-slate-500 truncate" style={{ fontWeight: 500 }}>
@@ -744,60 +908,64 @@ export function AdminAgendaModule({
                           </p>
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedStaffFilter(stat.advisor.id)}
-                        className="text-[11px] font-semibold text-primary hover:text-primary/90 hover:bg-primary/5 px-2.5 h-7 transition-colors rounded-lg shrink-0"
-                      >
-                        Ver agenda
-                      </Button>
+
+                      {/* Cuadro de Estadísticas */}
+                      <div className="mt-4 grid grid-cols-2 gap-2 bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+                        <div className="text-center">
+                          <p className="text-[9px] uppercase font-semibold tracking-wider text-slate-400">
+                            Citas Totales
+                          </p>
+                          <p className="text-lg font-bold text-brand-navy mt-0.5 tabular-nums">
+                            {stat.total}
+                          </p>
+                        </div>
+                        <div className="text-center border-l border-slate-100">
+                          <p className="text-[9px] uppercase font-semibold tracking-wider text-slate-400">
+                            Completadas
+                          </p>
+                          <p className="text-lg font-bold text-emerald-600 mt-0.5 tabular-nums">
+                            {stat.completed}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Barra de Tasa de Finalización */}
+                      <div className="mt-4 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                          <span className="text-[10px] uppercase tracking-wider text-slate-400">Tasa de finalización</span>
+                          <span className="text-slate-800 font-bold tabular-nums text-xs">{stat.completionRate}%</span>
+                        </div>
+                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden p-[1px]">
+                          <div
+                            className="h-full bg-gradient-to-r from-brand-gold to-emerald-500 rounded-full transition-all duration-500"
+                            style={{ width: `${stat.completionRate}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Badges de Estatus */}
+                      <div className="mt-4 flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50/80 text-emerald-700 border border-emerald-100/50">
+                          Confirmadas: <strong className="ml-1 tabular-nums">{stat.confirmed}</strong>
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-50/80 text-amber-700 border border-amber-100/50">
+                          Pendientes: <strong className="ml-1 tabular-nums">{stat.pending}</strong>
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-50/80 text-rose-700 border border-rose-100/50">
+                          Canceladas: <strong className="ml-1 tabular-nums">{stat.cancelled}</strong>
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-2 bg-slate-50/80 rounded-xl p-3 border border-slate-100/70">
-                      <div className="text-center">
-                        <p className="text-[9px] uppercase font-semibold tracking-wider text-slate-500">
-                          Citas Totales
-                        </p>
-                        <p className="text-lg font-bold text-brand-navy mt-0.5 tabular-nums">
-                          {stat.total}
-                        </p>
-                      </div>
-                      <div className="text-center border-l border-slate-200">
-                        <p className="text-[9px] uppercase font-semibold tracking-wider text-slate-500">
-                          Completadas
-                        </p>
-                        <p className="text-lg font-bold text-emerald-600 mt-0.5 tabular-nums">
-                          {stat.completed}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-1.5">
-                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                        <span className="text-[11px]">Tasa de finalización</span>
-                        <span className="text-slate-900 tabular-nums text-[11px]">{stat.completionRate}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${stat.completionRate}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/[0.08] text-emerald-700 border border-emerald-500/10">
-                        Confirmadas: {stat.confirmed}
-                      </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/[0.08] text-amber-700 border border-amber-500/10">
-                        Pendientes: {stat.pending}
-                      </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/[0.08] text-rose-700 border border-rose-500/10">
-                        Canceladas: {stat.cancelled}
-                      </span>
-                    </div>
+                    {/* Botón de pie de ancho completo interactivo */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStaffFilter(stat.advisor.id)}
+                      className="w-full border-t border-slate-100 py-3 text-xs font-semibold text-slate-700 bg-slate-50/30 hover:bg-primary hover:text-white hover:border-primary transition-all duration-200 flex items-center justify-center gap-1.5"
+                    >
+                      <span>Ver agenda de {stat.advisor.name.split(" ")[0]}</span>
+                      <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    </button>
                   </div>
                 );
               })}

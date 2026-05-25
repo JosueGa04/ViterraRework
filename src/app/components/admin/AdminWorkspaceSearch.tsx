@@ -114,7 +114,7 @@ function UserAvatar({ user }: { user: User }) {
     );
   }
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-xs font-semibold text-primary ring-2 ring-white">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-800 text-xs font-semibold text-white ring-2 ring-white border border-slate-600/20 shadow-sm">
       {userInitials(user.name)}
     </span>
   );

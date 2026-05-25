@@ -39,7 +39,7 @@ export function KpiUserAvatar({ user, size = "md", className }: Props) {
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full bg-brand-navy font-semibold text-white ring-2 ring-white",
+        "flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-800 font-semibold text-white ring-2 ring-white border border-slate-600/20 shadow-sm",
         sizeClass[size],
         className,
       )}

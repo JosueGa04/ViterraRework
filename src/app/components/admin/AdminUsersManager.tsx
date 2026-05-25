@@ -809,7 +809,7 @@ export function AdminUsersManager({
                       }}
                       className="flex items-center gap-3 text-left"
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-navy text-xs font-semibold text-white shadow-sm ring-1 ring-slate-200">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 text-xs font-semibold text-white shadow-sm ring-1 ring-slate-200 border border-slate-600/20">
                         {user.profile.picture ? (
                           <img src={user.profile.picture} alt="" className="h-full w-full object-cover" />
                         ) : (
