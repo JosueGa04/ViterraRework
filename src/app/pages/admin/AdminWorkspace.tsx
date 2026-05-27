@@ -820,6 +820,18 @@ export function AdminWorkspace() {
     };
   }, []);
 
+  // Marca el shell como "booted" después de la animación inicial del sidebar (~500 ms).
+  // El CSS de admin-nav-item-in usa :not([data-booted]) para NO re-animar los ítems
+  // al cambiar de módulo (solo animamos en la carga inicial).
+  useEffect(() => {
+    const shellEl = document.querySelector(".viterra-admin-shell");
+    if (!shellEl) return;
+    const t = window.setTimeout(() => {
+      shellEl.setAttribute("data-booted", "true");
+    }, 550); // mayor que el último animation-delay (0.40s) + duración (0.32s)
+    return () => window.clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
   }, [clients]);
