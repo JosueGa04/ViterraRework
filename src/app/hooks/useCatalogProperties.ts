@@ -10,6 +10,8 @@ const CATALOG_FETCH_ATTEMPTS = 3;
 const SYNC_SESSION_TIMEOUT_MS = 8_000;
 /** Por intento; si la red cuelga, no dejar "Cargando…" indefinidamente. */
 const FETCH_PROPERTIES_TIMEOUT_MS = 25_000;
+/** Catalog data is considered fresh for 3 minutes — skip refetch on tab switches within this window. */
+const CATALOG_FRESH_MS = 3 * 60 * 1000;
 
 export type UseCatalogPropertiesOptions = {
   /** Si es false, no se dispara la carga automática (p. ej. pestañas admin que no usan el catálogo). */
@@ -27,6 +29,8 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
   /** Aviso cuando el listado cargó sin columnas de medios/contacto (migración pendiente). */
   const [catalogSchemaWarning, setCatalogSchemaWarning] = useState<string | null>(null);
   const fetchGenerationRef = useRef(0);
+  /** Timestamp of the last successful fetch — used to skip redundant reloads on tab switches. */
+  const lastFetchedAtRef = useRef<number>(0);
 
   /** Sustituye o inserta una ficha tras guardar en admin (evita listado con precio antiguo si el refetch llega con lectura rezagada). */
   const applySavedProperty = useCallback((p: Property) => {
@@ -117,6 +121,7 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
         if (silent) setError(null);
         const list = rows ?? [];
         setProperties(list.map((row) => rowToProperty(row)));
+        lastFetchedAtRef.current = Date.now();
         if (import.meta.env.DEV && list.length === 0) {
           void logTableCountHints(client, "properties");
         }
@@ -128,18 +133,25 @@ export function useCatalogProperties(opts?: UseCatalogPropertiesOptions) {
     }
   }, [omitPayload]);
 
-  /** Actualiza una fila en memoria (p. ej. destacado) sin esperar un refetch completo. */
-  const patchProperty = useCallback((id: string, patch: Partial<Property>) => {
-    setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-  }, []);
-
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
       return;
     }
+    // Skip automatic reload if data was fetched recently (e.g. user switching tabs back and forth).
+    // Manual calls to reload() bypass this guard and always fetch fresh data.
+    const ageMs = Date.now() - lastFetchedAtRef.current;
+    if (properties.length > 0 && ageMs < CATALOG_FRESH_MS) {
+      setLoading(false);
+      return;
+    }
     void reload();
-  }, [enabled, reload]);
+  }, [enabled, reload]); // eslint-disable-line react-hooks/exhaustive-deps -- `properties` intentionally excluded to avoid loop
+
+  /** Actualiza una fila en memoria (p. ej. destacado) sin esperar un refetch completo. */
+  const patchProperty = useCallback((id: string, patch: Partial<Property>) => {
+    setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
 
   return { properties, loading, error, catalogSchemaWarning, reload, patchProperty, applySavedProperty };
 }

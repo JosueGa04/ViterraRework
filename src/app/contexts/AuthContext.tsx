@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, ReactNode } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { useLocation } from "react-router";
 import { getSupabaseClient } from "../lib/supabaseClient";
@@ -290,20 +290,31 @@ function mergeTokkoRowIntoUser(base: User, row: Record<string, unknown>): User {
 /**
  * Refuerza rol/permisos desde `tokko_users`. Reintenta: la primera lectura tras login o un timeout
  * previo puede devolver vacío y sin esto el JWT (sin `role` en metadata) deja al usuario como asesor.
+ * Limitado a 2 intentos con 400 ms de espera fija para no bloquear `authReady` más de ~500 ms.
  */
 async function loadUserWithTokkoMerge(client: SupabaseClient, session: Session): Promise<User> {
-  let appUser = sessionToAppUser(session);
-  const maxAttempts = 4;
+  const appUser = sessionToAppUser(session);
+  const maxAttempts = 2;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { data, error } = await fetchTokkoUserRow(client, session.user.id);
-    if (!error && data) {
-      return mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
-    }
-    if (import.meta.env.DEV && error) {
-      console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts}:`, error.message);
+    try {
+      const { data, error } = await withTimeout(
+        fetchTokkoUserRow(client, session.user.id, session.user.email),
+        3500,
+        `fetchTokkoUserRow (intento ${attempt + 1})`
+      );
+      if (!error && data) {
+        return mergeTokkoRowIntoUser(appUser, data as Record<string, unknown>);
+      }
+      if (import.meta.env.DEV && error) {
+        console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts}:`, error.message);
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn(`[Viterra] fetchTokkoUserRow intento ${attempt + 1}/${maxAttempts} timeout/error:`, e);
+      }
     }
     if (attempt < maxAttempts - 1) {
-      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 400));
     }
   }
   return appUser;
@@ -350,6 +361,13 @@ function tokkoDbNeededForPath(pathname: string): boolean {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
+
+  /**
+   * Tracks the Supabase user ID for which the Tokko directory has already been
+   * loaded. Prevents `loadTokkoProfileAndDirectory` from re-firing on every
+   * tab navigation (pathname change) when the session hasn't changed.
+   */
+  const directoryLoadedForUserIdRef = useRef<string | null>(null);
 
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
@@ -471,18 +489,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [TOKKO_DIRECTORY_MS, mergeSessionUserIntoDirectory, syncDirectoryAccessToTokkoUsers]
   );
 
-  const loadTokkoProfileAndDirectory = useCallback(async () => {
+  const loadTokkoProfileAndDirectory = useCallback(async (forceReload = false) => {
     if (!tokkoDbNeededForPath(location.pathname)) return;
     const client = getSupabaseClient();
     if (!client) return;
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    if (!session?.user) return;
+    try {
+      const {
+        data: { session },
+      } = await withTimeout(client.auth.getSession(), 5000, "getSession en directorio");
+      if (!session?.user) return;
 
-    const appUser = await loadUserWithTokkoMerge(client, session);
-    setUser(appUser);
-    void hydrateTokkoDirectory(appUser);
+      // Skip if we already loaded the directory for this exact session user —
+      // avoids a DB round-trip on every tab navigation (pathname change).
+      if (!forceReload && directoryLoadedForUserIdRef.current === session.user.id) return;
+
+      const appUser = await loadUserWithTokkoMerge(client, session);
+      setUser(appUser);
+      directoryLoadedForUserIdRef.current = session.user.id;
+      void hydrateTokkoDirectory(appUser);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Viterra] loadTokkoProfileAndDirectory error:", e);
+      }
+    }
   }, [location.pathname, hydrateTokkoDirectory]);
 
   useEffect(() => {
@@ -515,12 +544,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    void client.auth
-      .getSession()
-      .then(({ data: { session } }) => applySession(session))
-      .finally(() => {
-        setAuthReady(true);
-      });
+    const fetchSession = async () => {
+      try {
+        const { data: { session } } = await withTimeout(
+          client.auth.getSession(),
+          6000,
+          "getSession"
+        );
+        await applySession(session);
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] Error en inicialización de sesión:", err);
+        }
+        await applySession(null);
+      }
+    };
+
+    void fetchSession().finally(() => {
+      setAuthReady(true);
+    });
 
     const {
       data: { subscription },
@@ -533,7 +575,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!tokkoDbNeededForPath(location.pathname)) return;
-    void loadTokkoProfileAndDirectory();
+    // `forceReload` is false by default — the ref guard inside will skip
+    // re-fetching unless the session user has changed since last load.
+    void loadTokkoProfileAndDirectory(false);
   }, [location.pathname, loadTokkoProfileAndDirectory]);
 
   const persistUsers = (next: User[]) => {
@@ -572,44 +616,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!client) {
       return { ok: false, message: "Supabase no está configurado (variables VITE_SUPABASE_*)." };
     }
-    const { error } = await client.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) {
-      return { ok: false, message: error.message };
-    }
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid || !session?.user) {
-      return { ok: true, mustChangePassword: false };
-    }
-    let flagRow: { must_change_password?: unknown } | null = null;
-    const byId = await client.from("tokko_users").select("must_change_password").eq("id", uid).maybeSingle();
-    if (!byId.error && byId.data) {
-      flagRow = byId.data as { must_change_password?: unknown };
-    } else if (session.user.email?.trim()) {
-      const byEmail = await client
-        .from("tokko_users")
-        .select("must_change_password")
-        .ilike("email", session.user.email.trim())
-        .maybeSingle();
-      if (!byEmail.error && byEmail.data) {
-        flagRow = byEmail.data as { must_change_password?: unknown };
+    try {
+      const { error } = await withTimeout(
+        client.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }),
+        8000,
+        "signInWithPassword"
+      );
+      if (error) {
+        return { ok: false, message: error.message };
       }
-    }
-    const appUser = await loadUserWithTokkoMerge(client, session);
-    setUser(appUser);
+      
+      const {
+        data: { session },
+      } = await withTimeout(client.auth.getSession(), 5000, "getSession login");
+      const uid = session?.user?.id;
+      if (!uid || !session?.user) {
+        return { ok: true, mustChangePassword: false };
+      }
 
-    if (!flagRow) {
-      return { ok: true, mustChangePassword: false };
+      let flagRow: { must_change_password?: unknown } | null = null;
+      try {
+        const byId = await withTimeout(
+          client.from("tokko_users").select("must_change_password").eq("id", uid).maybeSingle() as unknown as Promise<any>,
+          4000,
+          "check mustChangePassword by id"
+        );
+        if (!byId.error && byId.data) {
+          flagRow = byId.data as { must_change_password?: unknown };
+        } else if (session.user.email?.trim()) {
+          const byEmail = await withTimeout(
+            client
+              .from("tokko_users")
+              .select("must_change_password")
+              .ilike("email", session.user.email.trim())
+              .maybeSingle() as unknown as Promise<any>,
+            4000,
+            "check mustChangePassword by email"
+          );
+          if (!byEmail.error && byEmail.data) {
+            flagRow = byEmail.data as { must_change_password?: unknown };
+          }
+        }
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn("[Viterra] login check mustChangePassword timeout/error:", e);
+        }
+      }
+
+      const appUser = await loadUserWithTokkoMerge(client, session);
+      setUser(appUser);
+
+      if (!flagRow) {
+        return { ok: true, mustChangePassword: false };
+      }
+      const v = flagRow.must_change_password;
+      const mustChangePassword =
+        v === true || v === "true" || v === "t" || v === 1;
+      return { ok: true, mustChangePassword };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
     }
-    const v = flagRow.must_change_password;
-    const mustChangePassword =
-      v === true || v === "true" || v === "t" || v === 1;
-    return { ok: true, mustChangePassword };
   };
 
   const logout: AuthContextType["logout"] = async () => {
@@ -771,14 +840,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const client = getSupabaseClient();
     if (client) {
-      const res = await client.from("tokko_users").delete().eq("id", id);
-      if (res.error) {
-        if (import.meta.env.DEV) {
-          console.warn("[Viterra] No se pudo borrar en tokko_users:", res.error.message);
+      try {
+        const res = await withTimeout(
+          client.from("tokko_users").delete().eq("id", id) as unknown as Promise<any>,
+          5000,
+          "delete user from tokko_users"
+        );
+        if (res.error) {
+          if (import.meta.env.DEV) {
+            console.warn("[Viterra] No se pudo borrar en tokko_users:", res.error.message);
+          }
+          return {
+            ok: false,
+            message: "No se pudo eliminar el usuario en la base de datos (RLS o permisos).",
+          };
         }
+      } catch (e) {
         return {
           ok: false,
-          message: "No se pudo eliminar el usuario en la base de datos (RLS o permisos).",
+          message: e instanceof Error ? e.message : "Tiempo de espera agotado al eliminar el usuario.",
         };
       }
     }
@@ -794,16 +874,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = useCallback(async () => {
     const client = getSupabaseClient();
     if (!client) return;
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    if (!session?.user) {
-      setUser(null);
-      return;
+    try {
+      const {
+        data: { session },
+      } = await withTimeout(client.auth.getSession(), 5000, "getSession en refreshUser");
+      if (!session?.user) {
+        setUser(null);
+        return;
+      }
+      const appUser = await loadUserWithTokkoMerge(client, session);
+      setUser(appUser);
+      mergeSessionUserIntoDirectory(appUser);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Viterra] refreshUser error:", e);
+      }
     }
-    const appUser = await loadUserWithTokkoMerge(client, session);
-    setUser(appUser);
-    mergeSessionUserIntoDirectory(appUser);
   }, [mergeSessionUserIntoDirectory]);
 
   const value = useMemo(

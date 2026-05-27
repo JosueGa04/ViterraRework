@@ -63,6 +63,7 @@ import {
   updateLead,
   softDeleteLead,
 } from "../../lib/supabaseLeads";
+import { withTimeout } from "../../lib/withTimeout";
 import { toast } from "sonner";
 import {
   appendClientActivity,
@@ -385,6 +386,16 @@ export function AdminWorkspace() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState<string | null>(null);
+  /**
+   * Tracks the (userId + viewAs) combination for which leads have already been
+   * successfully fetched. Prevents re-fetching on every tab navigation.
+   * Reset to null when the user or viewAs role changes to force a fresh load.
+   */
+  const leadsFetchedForRef = useRef<string | null>(null);
+  /** Same guard for developments. */
+  const devsFetchedForRef = useRef<string | null>(null);
+  /** Set to true once the pipeline bootstrap has run for this session. */
+  const pipelineBootstrappedRef = useRef(false);
   const {
     properties,
     loading: catalogPropertiesLoading,
@@ -572,23 +583,65 @@ export function AdminWorkspace() {
       return;
     }
 
+    // Build a cache key that represents the current user+viewAs combination.
+    // Leads and developments are only re-fetched when this key changes, not on
+    // every tab navigation.
+    const fetchKey = `${user?.id ?? ""}|${adminViewAs}`;
+
     const { needsLeads, needsDevelopments } = adminRemoteDataPlan;
 
-    if (needsLeads) {
+    // Determine whether each dataset needs a network round-trip.
+    const shouldFetchLeads = needsLeads && leadsFetchedForRef.current !== fetchKey;
+    const shouldFetchDevs = needsDevelopments && devsFetchedForRef.current !== fetchKey;
+    const shouldBootstrapPipeline = !pipelineBootstrappedRef.current;
+
+    if (needsLeads && !shouldFetchLeads) {
+      // Data already loaded for this user+viewAs — stay in non-loading state.
+      setLeadsLoading(false);
+      setLeadsError(null);
+    } else if (shouldFetchLeads) {
       setLeadsLoading(true);
       setLeadsError(null);
     } else {
       setLeadsLoading(false);
       setLeadsError(null);
     }
-    if (needsDevelopments) {
+
+    if (shouldFetchDevs) {
       setDevelopmentsLoading(true);
     } else {
       setDevelopmentsLoading(false);
     }
 
+    // If nothing needs to be fetched, bail out early (instant render).
+    if (!shouldFetchLeads && !shouldFetchDevs && !shouldBootstrapPipeline) {
+      return;
+    }
+
     let cancelled = false;
     (async () => {
+      async function fetchWithRetry<T>(
+        fn: () => Promise<{ data?: T; error?: any }>,
+        label: string,
+        maxAttempts = 3
+      ): Promise<{ data?: T; error?: any }> {
+        let lastRes: { data?: T; error?: any } = {};
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          try {
+            const res = await withTimeout(fn(), 15000, label);
+            if (!res.error) return res;
+            lastRes = res;
+          } catch (e) {
+            lastRes = { error: { message: e instanceof Error ? e.message : String(e) } };
+          }
+          if (attempt < maxAttempts - 1) {
+            if (cancelled) break;
+            await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          }
+        }
+        return lastRes;
+      }
+
       const client = getSupabaseClient();
       if (!client) {
         setLeadsError(
@@ -625,40 +678,44 @@ export function AdminWorkspace() {
         user && effectiveRoleFromView(user, adminViewAs) === "admin"
           ? fetchAllLeadsForAdmin
           : fetchActiveLeads;
-      const leadsP = needsLeads
-        ? leadsLoader(client)
-            .then((leadsRes) => {
-              if (cancelled) return;
-              if (leadsRes.error) {
-                setLeadsError(leadsRes.error.message);
-                setLeads([]);
-              } else {
-                setLeads(leadsRes.data);
-                if (import.meta.env.DEV && leadsRes.data.length === 0) {
-                  void logTableCountHints(client, "leads");
-                }
-              }
-              setLeadsLoading(false);
-            })
-            .catch((e: unknown) => {
-              if (cancelled) return;
-              setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
-              setLeads([]);
-              setLeadsLoading(false);
-            })
-        : Promise.resolve().then(() => {
-            if (cancelled) return;
-            setLeadsLoading(false);
-          });
 
-      const devP = needsDevelopments
-        ? fetchDevelopmentsWithUnits(client, { publicOnly: false }).then((devRes) => {
+      const leadsP = shouldFetchLeads
+        ? fetchWithRetry(() => leadsLoader(client), "Leads")
+          .then((leadsRes) => {
+            if (cancelled) return;
+            if (leadsRes.error) {
+              setLeadsError(leadsRes.error.message);
+              setLeads([]);
+            } else {
+              setLeads((leadsRes.data as Lead[]) ?? []);
+              leadsFetchedForRef.current = fetchKey;
+              if (import.meta.env.DEV && (leadsRes.data?.length ?? 0) === 0) {
+                void logTableCountHints(client, "leads");
+              }
+            }
+            setLeadsLoading(false);
+          })
+          .catch((e: unknown) => {
+            if (cancelled) return;
+            setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
+            setLeads([]);
+            setLeadsLoading(false);
+          })
+        : Promise.resolve().then(() => {
+          if (cancelled) return;
+          setLeadsLoading(false);
+        });
+
+      const devP = shouldFetchDevs
+        ? fetchWithRetry(() => fetchDevelopmentsWithUnits(client, { publicOnly: false }), "Desarrollos")
+          .then((devRes) => {
             if (cancelled) return;
             if (devRes.error) {
               toast.error(devRes.error.message);
               setDevelopments([]);
             } else {
               setDevelopments(devRes.data ?? []);
+              devsFetchedForRef.current = fetchKey;
               if (import.meta.env.DEV && (devRes.data?.length ?? 0) === 0) {
                 void logTableCountHints(client, "developments");
               }
@@ -666,44 +723,50 @@ export function AdminWorkspace() {
             setDevelopmentsLoading(false);
           })
         : Promise.resolve().then(() => {
-            if (cancelled) return;
-            setDevelopmentsLoading(false);
-          });
-
-      const bootstrapP = Promise.all([fetchActiveUserGroups(client), fetchSalesPipelineConfigs(client)]).then(
-        ([groupsRes, pipeRes]) => {
           if (cancelled) return;
+          setDevelopmentsLoading(false);
+        });
 
-          let groupsData: UserGroup[] = [];
-          if (groupsRes.error) {
-            if (import.meta.env.DEV) {
-              console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
+      const bootstrapP = shouldBootstrapPipeline
+        ? Promise.all([
+          fetchWithRetry(() => fetchActiveUserGroups(client), "Grupos"),
+          fetchWithRetry(() => fetchSalesPipelineConfigs(client), "Pipeline"),
+        ]).then(
+          ([groupsRes, pipeRes]) => {
+            if (cancelled) return;
+
+            let groupsData: UserGroup[] = [];
+            if (groupsRes.error) {
+              if (import.meta.env.DEV) {
+                console.warn("[Viterra] No se pudieron cargar grupos desde DB:", groupsRes.error.message);
+              }
+              setUserGroups([]);
+            } else {
+              groupsData = groupsRes.data;
+              setUserGroups(groupsRes.data);
             }
-            setUserGroups([]);
-          } else {
-            groupsData = groupsRes.data;
-            setUserGroups(groupsRes.data);
-          }
 
-          const allowedGroupIds = effectiveUser
-            ? getAllowedPipelineGroupIds(effectiveUser, groupsData)
-            : [DEFAULT_PIPELINE_GROUP_ID];
-          const localLegacy = loadPipelineByGroup();
-          if (pipeRes.error) {
-            if (import.meta.env.DEV) {
-              console.warn("[Viterra] sales_pipeline_configs:", pipeRes.error.message);
+            const allowedGroupIds = effectiveUser
+              ? getAllowedPipelineGroupIds(effectiveUser, groupsData)
+              : [DEFAULT_PIPELINE_GROUP_ID];
+            const localLegacy = loadPipelineByGroup();
+            if (pipeRes.error) {
+              if (import.meta.env.DEV) {
+                console.warn("[Viterra] sales_pipeline_configs:", pipeRes.error.message);
+              }
+              setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
+            } else {
+              setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
             }
-            setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
-          } else {
-            setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
-          }
-          setPipelineSourcesHydrated(true);
+            setPipelineSourcesHydrated(true);
+            pipelineBootstrappedRef.current = true;
 
-          if (import.meta.env.DEV) {
-            // console info removed by request
+            if (import.meta.env.DEV) {
+              // console info removed by request
+            }
           }
-        }
-      );
+        )
+        : Promise.resolve();
 
       await Promise.all([leadsP, devP, bootstrapP]);
     })();
@@ -728,6 +791,7 @@ export function AdminWorkspace() {
     authReady,
     user?.mustChangePassword,
     user?.id,
+    adminViewAs,
     adminRemoteDataPlan,
   ]);
 
@@ -938,8 +1002,8 @@ export function AdminWorkspace() {
     () =>
       effectiveUser
         ? filterLeadsForUser(leads, effectiveUser).filter(
-            (l) => l.crmSoftDeletedAt == null || String(l.crmSoftDeletedAt).trim() === "",
-          )
+          (l) => l.crmSoftDeletedAt == null || String(l.crmSoftDeletedAt).trim() === "",
+        )
         : [],
     [leads, effectiveUser],
   );
@@ -1019,11 +1083,11 @@ export function AdminWorkspace() {
     () =>
       Boolean(
         user &&
-          pipelineCopyFrom &&
-          pipelineCopyTo &&
-          pipelineCopyFrom !== pipelineCopyTo &&
-          pipelineCopySourceOptions.includes(pipelineCopyFrom) &&
-          pipelineCopyDestOptions.includes(pipelineCopyTo)
+        pipelineCopyFrom &&
+        pipelineCopyTo &&
+        pipelineCopyFrom !== pipelineCopyTo &&
+        pipelineCopySourceOptions.includes(pipelineCopyFrom) &&
+        pipelineCopyDestOptions.includes(pipelineCopyTo)
       ),
     [user, pipelineCopyFrom, pipelineCopyTo, pipelineCopySourceOptions, pipelineCopyDestOptions]
   );
@@ -1536,21 +1600,21 @@ export function AdminWorkspace() {
           lead.status !== stageId || lead.pipelineGroupId !== gid
             ? lead
             : {
-                ...lead,
-                status: fallbackStageId,
-                updatedAt,
-                activity: [
-                  {
-                    id: newLeadActivityId(),
-                    type: "status_change" as const,
-                    createdAt: updatedAt,
-                    description: fallbackStageId
-                      ? `La columna ${stageLabel} se eliminó y el lead se movió a ${resolveStatusLabel(fallbackStageId)}`
-                      : `La columna ${stageLabel} se eliminó y el lead quedó sin columna asignada`,
-                  },
-                  ...(lead.activity ?? []),
-                ],
-              }
+              ...lead,
+              status: fallbackStageId,
+              updatedAt,
+              activity: [
+                {
+                  id: newLeadActivityId(),
+                  type: "status_change" as const,
+                  createdAt: updatedAt,
+                  description: fallbackStageId
+                    ? `La columna ${stageLabel} se eliminó y el lead se movió a ${resolveStatusLabel(fallbackStageId)}`
+                    : `La columna ${stageLabel} se eliminó y el lead quedó sin columna asignada`,
+                },
+                ...(lead.activity ?? []),
+              ],
+            }
         );
 
         const client = getSupabaseClient();
@@ -1574,16 +1638,16 @@ export function AdminWorkspace() {
       });
       setLeadDialog((current) =>
         current &&
-        current.lead.status === stageId &&
-        current.lead.pipelineGroupId === gid
+          current.lead.status === stageId &&
+          current.lead.pipelineGroupId === gid
           ? {
-              ...current,
-              lead: {
-                ...current.lead,
-                status: fallbackStageId,
-                updatedAt,
-              },
-            }
+            ...current,
+            lead: {
+              ...current.lead,
+              status: fallbackStageId,
+              updatedAt,
+            },
+          }
           : current
       );
     },
@@ -1715,13 +1779,13 @@ export function AdminWorkspace() {
         lead.activity && lead.activity.length > 0
           ? lead.activity
           : [
-              {
-                id: newLeadActivityId(),
-                type: "created",
-                createdAt,
-                description: "Lead creado",
-              },
-            ],
+            {
+              id: newLeadActivityId(),
+              type: "created",
+              createdAt,
+              description: "Lead creado",
+            },
+          ],
     };
 
     const client = getSupabaseClient();
@@ -1748,14 +1812,14 @@ export function AdminWorkspace() {
         activity: hasNewActivity
           ? baseActivity
           : [
-              {
-                id: newLeadActivityId(),
-                type: "updated",
-                createdAt: new Date().toISOString(),
-                description: "Se actualizaron los datos del lead",
-              },
-              ...baseActivity,
-            ],
+            {
+              id: newLeadActivityId(),
+              type: "updated",
+              createdAt: new Date().toISOString(),
+              description: "Se actualizaron los datos del lead",
+            },
+            ...baseActivity,
+          ],
       };
       return prev.map((row) => (row.id === updated.id ? merged! : row));
     });
@@ -1838,9 +1902,8 @@ export function AdminWorkspace() {
             id: newLeadActivityId(),
             type: "updated",
             createdAt: ts,
-            description: `Reasignado de ${previousName} a ${newAssigneeName.trim() || "Sin asignar"}${
-              user?.name ? ` por ${user.name}` : ""
-            }`,
+            description: `Reasignado de ${previousName} a ${newAssigneeName.trim() || "Sin asignar"}${user?.name ? ` por ${user.name}` : ""
+              }`,
             status: lead.status,
           },
           ...(lead.activity ?? []),
@@ -2443,9 +2506,9 @@ export function AdminWorkspace() {
       navCanAccessDevelopments: boolean,
       navCanAccessActivities: boolean,
     ): AdminSearchRoute[] => {
-    const routes: AdminSearchRoute[] = [
-      ...(navCanAccessDashboard
-        ? [
+      const routes: AdminSearchRoute[] = [
+        ...(navCanAccessDashboard
+          ? [
             {
               id: "dashboard",
               title: "Dashboard",
@@ -2456,9 +2519,9 @@ export function AdminWorkspace() {
               action: () => goTab("dashboard"),
             },
           ]
-        : []),
-      ...(navCanAccessKpis
-        ? [
+          : []),
+        ...(navCanAccessKpis
+          ? [
             {
               id: "kpis",
               title: "KPI's",
@@ -2469,9 +2532,9 @@ export function AdminWorkspace() {
               action: () => goTab("kpis"),
             },
           ]
-        : []),
-      ...(navCanAccessLeads
-        ? [
+          : []),
+        ...(navCanAccessLeads
+          ? [
             {
               id: "leads",
               title: "Leads",
@@ -2482,9 +2545,9 @@ export function AdminWorkspace() {
               action: () => goTab("leads"),
             },
           ]
-        : []),
-      ...(navCanAccessConsultas
-        ? [
+          : []),
+        ...(navCanAccessConsultas
+          ? [
             {
               id: "consultas",
               title: "Consultas",
@@ -2502,9 +2565,9 @@ export function AdminWorkspace() {
               action: () => goTab("consultas"),
             },
           ]
-        : []),
-      ...(navCanAccessClients
-        ? [
+          : []),
+        ...(navCanAccessClients
+          ? [
             {
               id: "clients",
               title: "Clientes",
@@ -2515,9 +2578,9 @@ export function AdminWorkspace() {
               action: () => goTab("clients"),
             },
           ]
-        : []),
-      ...(navCanAccessAgenda
-        ? [
+          : []),
+        ...(navCanAccessAgenda
+          ? [
             {
               id: "agenda",
               title: "Agenda",
@@ -2528,9 +2591,9 @@ export function AdminWorkspace() {
               action: () => goTab("agenda"),
             },
           ]
-        : []),
-      ...(navCanAccessProperties
-        ? [
+          : []),
+        ...(navCanAccessProperties
+          ? [
             {
               id: "properties",
               title: "Propiedades",
@@ -2541,9 +2604,9 @@ export function AdminWorkspace() {
               action: () => goTab("properties"),
             },
           ]
-        : []),
-      ...(navCanAccessDevelopments
-        ? [
+          : []),
+        ...(navCanAccessDevelopments
+          ? [
             {
               id: "developments",
               title: "Desarrollos",
@@ -2554,9 +2617,9 @@ export function AdminWorkspace() {
               action: () => goTab("developments"),
             },
           ]
-        : []),
-      ...(navCanAccessActivities
-        ? [
+          : []),
+        ...(navCanAccessActivities
+          ? [
             {
               id: "activities",
               title: "Actividades",
@@ -2567,9 +2630,9 @@ export function AdminWorkspace() {
               action: () => goTab("activities"),
             },
           ]
-        : []),
-      ...(navCanEditSite
-        ? [
+          : []),
+        ...(navCanEditSite
+          ? [
             {
               id: "sitio-editor",
               title: "Sitio web · Editor",
@@ -2580,114 +2643,114 @@ export function AdminWorkspace() {
               action: () => goTab("sitio"),
             },
           ]
-        : []),
-      ...(navCanAccessCompanyModule
-        ? (navIsGroupLeader
-        ? [
-            {
-              id: "company-pipeline",
-              title: "Pipeline de ventas",
-              description: "Grupos asignados y configuración de columnas",
-              keywords: ["pipeline", "ventas", "grupos", "columnas", "kanban"],
-              category: "company",
-              icon: Briefcase,
-              action: () => {
-                goTab("company", "leadStages");
+          : []),
+        ...(navCanAccessCompanyModule
+          ? (navIsGroupLeader
+            ? [
+              {
+                id: "company-pipeline",
+                title: "Pipeline de ventas",
+                description: "Grupos asignados y configuración de columnas",
+                keywords: ["pipeline", "ventas", "grupos", "columnas", "kanban"],
+                category: "company",
+                icon: Briefcase,
+                action: () => {
+                  goTab("company", "leadStages");
+                },
               },
-            },
-          ]
-        : [
-            {
-              id: "company-users",
-              title: "Mi empresa · Usuarios",
-              description: "Administración de usuarios y permisos",
-              keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
-              category: "company",
-              icon: Users,
-              action: () => {
-                goTab("company", "users");
+            ]
+            : [
+              {
+                id: "company-users",
+                title: "Mi empresa · Usuarios",
+                description: "Administración de usuarios y permisos",
+                keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
+                category: "company",
+                icon: Users,
+                action: () => {
+                  goTab("company", "users");
+                },
               },
-            },
-            {
-              id: "company-pipeline",
-              title: "Mi empresa · Pipeline de leads",
-              description: "Configura estados y orden del pipeline",
-              keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
-              category: "company",
-              icon: LayoutGrid,
-              action: () => {
-                goTab("company", "leadStages");
+              {
+                id: "company-pipeline",
+                title: "Mi empresa · Pipeline de leads",
+                description: "Configura estados y orden del pipeline",
+                keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
+                category: "company",
+                icon: LayoutGrid,
+                action: () => {
+                  goTab("company", "leadStages");
+                },
               },
-            },
-            {
-              id: "company-settings",
-              title: "Mi empresa · Configuración",
-              description: "Espacio de trabajo, copias de seguridad y datos locales",
-              keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
-              category: "company",
-              icon: Settings,
-              action: () => {
-                goTab("company", "settings");
+              {
+                id: "company-settings",
+                title: "Mi empresa · Configuración",
+                description: "Espacio de trabajo, copias de seguridad y datos locales",
+                keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
+                category: "company",
+                icon: Settings,
+                action: () => {
+                  goTab("company", "settings");
+                },
               },
-            },
-          ])
-        : []),
-      {
-        id: "messages",
-        title: "Mensajes",
-        description: "Accesos al centro de mensajes",
-        keywords: ["mensajes", "contacto", "correo"],
-        category: "account",
-        icon: MessageSquare,
-        action: () => goTab("messages"),
-      },
-      {
-        id: "profile",
-        title: "Mi perfil",
-        description: "Datos en tokko_users, contacto y payload",
-        keywords: ["perfil", "cuenta", "datos", "tokko", "correo", "teléfono", "foto"],
-        category: "account",
-        icon: UserIcon,
-        action: () => goTab("profile"),
-      },
-      {
-        id: "site-home",
-        title: "Sitio público · Inicio",
-        description: "Ir a la página principal del sitio",
-        keywords: ["sitio", "home", "inicio público", "web"],
-        category: "site",
-        icon: Globe2,
-        action: () => navigate("/"),
-      },
-      {
-        id: "site-properties",
-        title: "Sitio público · Propiedades",
-        description: "Ir al catálogo público de propiedades",
-        keywords: ["sitio propiedades", "catálogo", "propiedades públicas"],
-        category: "site",
-        icon: Home,
-        action: () => navigate("/propiedades"),
-      },
-      {
-        id: "site-developments",
-        title: "Sitio público · Desarrollos",
-        description: "Ir a la página pública de desarrollos",
-        keywords: ["sitio desarrollos", "desarrollos públicos"],
-        category: "site",
-        icon: Building2,
-        action: () => navigate("/desarrollos"),
-      },
-      {
-        id: "site-contact",
-        title: "Sitio público · Contacto",
-        description: "Ir al formulario de contacto",
-        keywords: ["contacto", "formulario", "mensaje", "sitio contacto"],
-        category: "site",
-        icon: MessageSquare,
-        action: () => navigate("/contacto"),
-      },
-    ];
-    return routes;
+            ])
+          : []),
+        {
+          id: "messages",
+          title: "Mensajes",
+          description: "Accesos al centro de mensajes",
+          keywords: ["mensajes", "contacto", "correo"],
+          category: "account",
+          icon: MessageSquare,
+          action: () => goTab("messages"),
+        },
+        {
+          id: "profile",
+          title: "Mi perfil",
+          description: "Datos en tokko_users, contacto y payload",
+          keywords: ["perfil", "cuenta", "datos", "tokko", "correo", "teléfono", "foto"],
+          category: "account",
+          icon: UserIcon,
+          action: () => goTab("profile"),
+        },
+        {
+          id: "site-home",
+          title: "Sitio público · Inicio",
+          description: "Ir a la página principal del sitio",
+          keywords: ["sitio", "home", "inicio público", "web"],
+          category: "site",
+          icon: Globe2,
+          action: () => navigate("/"),
+        },
+        {
+          id: "site-properties",
+          title: "Sitio público · Propiedades",
+          description: "Ir al catálogo público de propiedades",
+          keywords: ["sitio propiedades", "catálogo", "propiedades públicas"],
+          category: "site",
+          icon: Home,
+          action: () => navigate("/propiedades"),
+        },
+        {
+          id: "site-developments",
+          title: "Sitio público · Desarrollos",
+          description: "Ir a la página pública de desarrollos",
+          keywords: ["sitio desarrollos", "desarrollos públicos"],
+          category: "site",
+          icon: Building2,
+          action: () => navigate("/desarrollos"),
+        },
+        {
+          id: "site-contact",
+          title: "Sitio público · Contacto",
+          description: "Ir al formulario de contacto",
+          keywords: ["contacto", "formulario", "mensaje", "sitio contacto"],
+          category: "site",
+          icon: MessageSquare,
+          action: () => navigate("/contacto"),
+        },
+      ];
+      return routes;
     },
     [navigate, goTab, companySubtab],
   );
@@ -2763,16 +2826,16 @@ export function AdminWorkspace() {
   }
 
   return (
-    <div className="viterra-page viterra-crm min-h-screen bg-gradient-to-b from-[#f7f5f2] via-slate-50 to-slate-100">
+    <div className="viterra-page viterra-crm viterra-admin-shell min-h-screen" style={{ background: "linear-gradient(160deg, #f5f2ed 0%, #ede9e2 100%)" }}>
       {!adminSidebarExpanded ? (
         <button
           type="button"
           onClick={() => setAdminSidebarExpanded(true)}
           title="Mostrar menú lateral"
           aria-label="Mostrar menú lateral"
-          className="fixed left-0 top-1/2 z-[60] hidden h-7 w-[22px] -translate-y-1/2 items-center justify-center rounded-r-md border border-slate-400/30 border-l-0 bg-white/30 pl-px text-brand-navy shadow-sm backdrop-blur-sm transition hover:bg-white/45 hover:shadow active:scale-[0.96] lg:flex"
+          className="admin-sidebar-toggle admin-sidebar-toggle--open"
         >
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+          <ChevronRight className="h-3 w-3" strokeWidth={2} aria-hidden />
         </button>
       ) : (
         <button
@@ -2781,260 +2844,199 @@ export function AdminWorkspace() {
           title="Ocultar menú lateral"
           aria-label="Ocultar menú lateral"
           style={{ left: ADMIN_SIDEBAR_LG_WIDTH }}
-          className="fixed top-1/2 z-[60] hidden h-7 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/35 bg-slate-950/40 px-0 text-white shadow-sm backdrop-blur-sm transition hover:border-brand-gold/45 hover:bg-slate-950/55 hover:shadow active:scale-[0.96] lg:flex"
+          className="admin-sidebar-toggle admin-sidebar-toggle--close"
         >
-          <ChevronLeft className="h-3.5 w-3.5 drop-shadow-sm" strokeWidth={2.25} aria-hidden />
+          <ChevronLeft className="h-3 w-3" strokeWidth={2} aria-hidden />
         </button>
       )}
       <aside
         className={cn(
-          "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[14.5rem] lg:flex-col lg:border-r lg:border-brand-gold/20 lg:bg-brand-navy lg:text-white lg:transition-transform lg:duration-200 lg:ease-out",
+          "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[15rem] lg:flex-col lg:transition-transform lg:duration-200 lg:ease-out",
           !adminSidebarExpanded && "lg:pointer-events-none lg:-translate-x-full"
         )}
+        style={{ backgroundColor: "#0d1117", borderRight: "1px solid rgba(255,255,255,0.05)" }}
         aria-hidden={!adminSidebarExpanded}
       >
-        <div className="border-b border-white/15 px-5 py-5">
+        {/* Logo / Wordmark */}
+        <div style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "1.25rem 1.25rem 1.125rem" }}>
           <Link
             to="/"
             aria-label="Ir al inicio del sitio público"
-            className="group block rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10"
+            className="block transition-opacity hover:opacity-80"
           >
-            <span className="font-heading block font-light leading-tight tracking-[0.22em] text-white sm:text-lg">
-              VITERRA
-            </span>
-            <span className="relative my-2 block h-px max-w-[11rem] overflow-hidden rounded-full" aria-hidden>
-              <span className="absolute inset-0 bg-white/50" />
-              <span className="absolute inset-0 origin-left bg-[#C8102E]" style={{ transform: "scaleX(0.55)" }} />
-            </span>
-            <p
-              className="text-[10px] font-normal uppercase tracking-[0.26em] text-white/72 group-hover:text-white/88"
-              style={{
-                fontFamily: 'Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif',
-              }}
-            >
-              CRM System
-            </p>
+            <span className="admin-logo-wordmark">VITERRA</span>
+            <div className="admin-logo-subtitle">CRM System</div>
           </Link>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 py-5">
-          <p className="px-2 pb-2 text-[11px] uppercase tracking-[0.14em] text-white/55" style={{ fontWeight: 600 }}>
-            Módulos admin
-          </p>
-          <nav className="space-y-1.5" aria-label="Navegación del panel admin">
-                {canAccessDashboard && (
-                <button
-                  type="button"
-                  onClick={() => goTab("dashboard")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "dashboard" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4" strokeWidth={activeTab === "dashboard" ? 2 : 1.75} />
-                  Dashboard
-                </button>
-                )}
-                {canAccessKpis && (
-                <button
-                  type="button"
-                  onClick={() => goTab("kpis")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "kpis" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <BarChart3 className="h-4 w-4" strokeWidth={activeTab === "kpis" ? 2 : 1.75} />
-                  KPI's
-                </button>
-                )}
-                {canAccessLeads && (
-                <button
-                  type="button"
-                  onClick={() => goTab("leads")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "leads" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Users className="h-4 w-4" strokeWidth={activeTab === "leads" ? 2 : 1.75} />
-                  Leads
-                </button>
-                )}
-                {canAccessConsultas && (
-                  <button
-                    type="button"
-                    onClick={() => goTab("consultas")}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                      activeTab === "consultas"
-                        ? "bg-white text-brand-navy"
-                        : "text-white/80 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <ClipboardList className="h-4 w-4" strokeWidth={activeTab === "consultas" ? 2 : 1.75} />
-                    Consultas
-                  </button>
-                )}
-                {canAccessClients && (
-                  <button
-                    type="button"
-                    onClick={() => goTab("clients")}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                      activeTab === "clients"
-                        ? "bg-white text-brand-navy"
-                        : "text-white/80 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <UserCircle2 className="h-4 w-4" strokeWidth={activeTab === "clients" ? 2 : 1.75} />
-                    Clientes
-                  </button>
-                )}
-                {canAccessAgenda && (
-                <button
-                  type="button"
-                  onClick={() => goTab("agenda")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "agenda" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Calendar className="h-4 w-4" strokeWidth={activeTab === "agenda" ? 2 : 1.75} />
-                  Agenda
-                </button>
-                )}
-                {canAccessProperties && (
-                <button
-                  type="button"
-                  onClick={() => goTab("properties")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "properties" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Home className="h-4 w-4" strokeWidth={activeTab === "properties" ? 2 : 1.75} />
-                  Propiedades
-                </button>
-                )}
-                {canAccessDevelopments && (
-                <button
-                  type="button"
-                  onClick={() => goTab("developments")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "developments" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Building2 className="h-4 w-4" strokeWidth={activeTab === "developments" ? 2 : 1.75} />
-                  Desarrollos
-                </button>
-                )}
-                {canAccessActivities && (
-                <button
-                  type="button"
-                  onClick={() => goTab("activities")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "activities" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <History className="h-4 w-4" strokeWidth={activeTab === "activities" ? 2 : 1.75} />
-                  Actividades
-                </button>
-                )}
-                {canEditSite && (
-                  <button
-                    type="button"
-                    onClick={() => goTab("sitio")}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                      activeTab === "sitio" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Globe2 className="h-4 w-4" strokeWidth={activeTab === "sitio" ? 2 : 1.75} />
-                    Sitio web
-                  </button>
-                )}
-                {canAccessCompanyModule && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      goTab("company", isGroupLeader ? "leadStages" : companySubtab);
-                    }}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                      activeTab === "company" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Briefcase className="h-4 w-4" strokeWidth={activeTab === "company" ? 2 : 1.75} />
-                    {isGroupLeader ? "Pipeline de ventas" : "Mi empresa"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => goTab("messages")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                    activeTab === "messages" ? "bg-white text-brand-navy" : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <MessageSquare className="h-4 w-4" strokeWidth={activeTab === "messages" ? 2 : 1.75} />
-                  <span className="flex-1">Mensajes</span>
-                  {messagesUnreadTotal > 0 ? (
-                    <span
-                      className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white"
-                      aria-label={`${messagesUnreadTotal} mensajes sin leer`}
-                    >
-                      {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
-                    </span>
-                  ) : null}
-                </button>
-          </nav>
-        </div>
-        <div className="border-t border-white/15 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="relative shrink-0">
+
+        {/* Nav */}
+        <div className="flex-1 overflow-y-auto" style={{ padding: "1.25rem 0 0" }}>
+          <div className="admin-section-label">Módulos</div>
+          <nav aria-label="Navegación del panel admin">
+            {canAccessDashboard && (
               <button
                 type="button"
-                onClick={() => goTab("profile")}
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-white/25 bg-white/10 text-white transition hover:bg-white/20",
-                  activeTab === "profile" && "ring-2 ring-white/40",
-                )}
-                title="Abrir mi perfil"
-                aria-label="Abrir mi perfil"
+                onClick={() => goTab("dashboard")}
+                className={cn("admin-nav-item", activeTab === "dashboard" && "is-active")}
               >
-                {user.profile.picture ? (
-                  <img
-                    src={user.profile.picture}
-                    alt={`Foto de ${user.name}`}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <UserIcon className="h-5 w-5" strokeWidth={1.75} />
-                )}
+                <LayoutDashboard className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "dashboard" ? 2 : 1.6} aria-hidden />
+                Dashboard
               </button>
-              {messagesUnreadTotal > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => goTab("messages")}
-                  className="absolute -right-1 -top-1 z-10 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white shadow-md ring-2 ring-brand-navy"
-                  aria-label={`${messagesUnreadTotal} mensajes sin leer`}
-                  title="Ver mensajes sin leer"
-                >
-                  {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
-                </button>
-              ) : null}
-            </div>
+            )}
+            {canAccessKpis && (
+              <button
+                type="button"
+                onClick={() => goTab("kpis")}
+                className={cn("admin-nav-item", activeTab === "kpis" && "is-active")}
+              >
+                <BarChart3 className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "kpis" ? 2 : 1.6} aria-hidden />
+                KPI's
+              </button>
+            )}
+            {canAccessLeads && (
+              <button
+                type="button"
+                onClick={() => goTab("leads")}
+                className={cn("admin-nav-item", activeTab === "leads" && "is-active")}
+              >
+                <Users className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "leads" ? 2 : 1.6} aria-hidden />
+                Leads
+              </button>
+            )}
+            {canAccessConsultas && (
+              <button
+                type="button"
+                onClick={() => goTab("consultas")}
+                className={cn("admin-nav-item", activeTab === "consultas" && "is-active")}
+              >
+                <ClipboardList className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "consultas" ? 2 : 1.6} aria-hidden />
+                Consultas
+              </button>
+            )}
+            {canAccessClients && (
+              <button
+                type="button"
+                onClick={() => goTab("clients")}
+                className={cn("admin-nav-item", activeTab === "clients" && "is-active")}
+              >
+                <UserCircle2 className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "clients" ? 2 : 1.6} aria-hidden />
+                Clientes
+              </button>
+            )}
+            {canAccessAgenda && (
+              <button
+                type="button"
+                onClick={() => goTab("agenda")}
+                className={cn("admin-nav-item", activeTab === "agenda" && "is-active")}
+              >
+                <Calendar className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "agenda" ? 2 : 1.6} aria-hidden />
+                Agenda
+              </button>
+            )}
+            {(canAccessProperties || canAccessDevelopments || canAccessActivities) && (
+              <div className="admin-nav-divider" aria-hidden />
+            )}
+            {canAccessProperties && (
+              <button
+                type="button"
+                onClick={() => goTab("properties")}
+                className={cn("admin-nav-item", activeTab === "properties" && "is-active")}
+              >
+                <Home className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "properties" ? 2 : 1.6} aria-hidden />
+                Propiedades
+              </button>
+            )}
+            {canAccessDevelopments && (
+              <button
+                type="button"
+                onClick={() => goTab("developments")}
+                className={cn("admin-nav-item", activeTab === "developments" && "is-active")}
+              >
+                <Building2 className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "developments" ? 2 : 1.6} aria-hidden />
+                Desarrollos
+              </button>
+            )}
+            {canAccessActivities && (
+              <button
+                type="button"
+                onClick={() => goTab("activities")}
+                className={cn("admin-nav-item", activeTab === "activities" && "is-active")}
+              >
+                <History className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "activities" ? 2 : 1.6} aria-hidden />
+                Actividades
+              </button>
+            )}
+            {(canEditSite || canAccessCompanyModule) && (
+              <div className="admin-nav-divider" aria-hidden />
+            )}
+            {canEditSite && (
+              <button
+                type="button"
+                onClick={() => goTab("sitio")}
+                className={cn("admin-nav-item", activeTab === "sitio" && "is-active")}
+              >
+                <Globe2 className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "sitio" ? 2 : 1.6} aria-hidden />
+                Sitio web
+              </button>
+            )}
+            {canAccessCompanyModule && (
+              <button
+                type="button"
+                onClick={() => { goTab("company", isGroupLeader ? "leadStages" : companySubtab); }}
+                className={cn("admin-nav-item", activeTab === "company" && "is-active")}
+              >
+                <Briefcase className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "company" ? 2 : 1.6} aria-hidden />
+                {isGroupLeader ? "Pipeline" : "Mi empresa"}
+              </button>
+            )}
+            <div className="admin-nav-divider" aria-hidden />
             <button
               type="button"
-              onClick={() => goTab("profile")}
-              className="min-w-0 flex-1 text-left"
-              title="Mi perfil"
+              onClick={() => goTab("messages")}
+              className={cn("admin-nav-item", activeTab === "messages" && "is-active")}
             >
-              <p className="truncate text-sm text-white" style={{ fontWeight: 600 }}>
-                {user.name}
-              </p>
-              <p className="truncate text-[11px] uppercase tracking-[0.08em] text-white/65">
-                {roleLabelEs(user.role)}
-              </p>
+              <MessageSquare className="h-[15px] w-[15px] shrink-0" strokeWidth={activeTab === "messages" ? 2 : 1.6} aria-hidden />
+              <span className="flex-1">Mensajes</span>
+              {messagesUnreadTotal > 0 && (
+                <span className="admin-unread-badge" aria-label={`${messagesUnreadTotal} mensajes sin leer`}>
+                  {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+                </span>
+              )}
             </button>
-          </div>
+          </nav>
         </div>
+
+        {/* User Card */}
+        <button
+          type="button"
+          onClick={() => goTab("profile")}
+          className="admin-user-card w-full text-left"
+          title="Mi perfil"
+          aria-label="Abrir mi perfil"
+        >
+          <div className={cn("admin-user-avatar", activeTab === "profile" && "is-active-profile")}>
+            {user.profile.picture ? (
+              <img src={user.profile.picture} alt={`Foto de ${user.name}`} className="h-full w-full object-cover" />
+            ) : (
+              <UserIcon className="h-4 w-4" strokeWidth={1.6} aria-hidden />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="admin-user-name">{user.name}</div>
+            <div className="admin-user-role">{roleLabelEs(user.role)}</div>
+          </div>
+          {messagesUnreadTotal > 0 && (
+            <span className="admin-unread-badge shrink-0" aria-label={`${messagesUnreadTotal} mensajes sin leer`}>
+              {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+            </span>
+          )}
+        </button>
       </aside>
 
       <div
         className={cn(
           "transform-none px-4 pb-4 pt-4 sm:px-6 sm:pt-4 lg:pr-8 lg:transition-[padding] lg:duration-200 lg:ease-out",
-          adminSidebarExpanded ? "lg:pl-[16.5rem]" : "lg:pl-4",
+          adminSidebarExpanded ? "lg:pl-[17rem]" : "lg:pl-4",
           activeTab === "sitio" && canEditSite && "pb-2 pt-2 sm:pb-2 sm:pt-2 lg:pb-2"
         )}
       >
@@ -3049,71 +3051,67 @@ export function AdminWorkspace() {
             className={cn(
               "relative z-20 mb-5 overflow-visible",
               isAdvisor || isGroupLeader
-                ? "rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white/95 via-white/95 to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.22)] ring-1 ring-slate-900/[0.04] backdrop-blur-md"
+                ? "overflow-hidden rounded-2xl border border-black/[0.06] bg-white shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1)]"
                 : "",
             )}
           >
             {(isAdvisor || isGroupLeader) && (
               <>
                 <div
-                  className="h-1.5 w-full shrink-0 bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-                  aria-hidden
-                />
-                <div
-                  className="pointer-events-none absolute -right-16 top-14 h-40 w-40 rounded-full bg-gradient-to-br from-primary/[0.1] to-transparent blur-3xl"
+                  className="h-[3px] w-full shrink-0"
+                  style={{ background: "linear-gradient(90deg, #9a7b4f 0%, #c8102e 55%, #7f1d1d 100%)" }}
                   aria-hidden
                 />
               </>
             )}
-            <div className={cn("relative", isAdvisor || isGroupLeader ? "px-4 py-4 sm:px-5 sm:py-5" : "")}>
+            <div className={cn("relative", isAdvisor || isGroupLeader ? "px-5 py-5 sm:px-6 sm:py-6" : "")}>
               {(isAdvisor || isGroupLeader) && (
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary"
-                    style={{ fontWeight: 600 }}
-                  >
-                    Panel Viterra
-                  </p>
-                  <h2
-                    className="font-heading mt-1.5 text-[1.25rem] leading-tight text-brand-navy sm:text-[1.45rem]"
-                    style={{ fontWeight: 600 }}
-                  >
-                    {dashboardTimeGreetingEs()}
-                    {user?.name?.trim()
-                      ? `, ${user.name.trim().split(/\s+/)[0]}`
-                      : ""}
-                  </h2>
-                  <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-slate-600 sm:text-sm" style={{ fontWeight: 500 }}>
-                    {isAdvisor
-                      ? "Tu desempeño comercial, embudo de leads e inventario del catálogo."
-                      : isGroupLeader
-                        ? "Vista de equipo del pipeline activo: ventas por asesor, conversión, inventario y proyección del mes."
-                        : "Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio."}
-                  </p>
-                </div>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="text-[10px] font-semibold uppercase tracking-[0.22em] text-brand-gold"
+                    >
+                      Panel Viterra
+                    </p>
+                    <h2
+                      className="font-heading mt-2 text-[1.2rem] leading-tight text-brand-navy sm:text-[1.4rem]"
+                      style={{ fontWeight: 600, letterSpacing: "-0.01em" }}
+                    >
+                      {dashboardTimeGreetingEs()}
+                      {user?.name?.trim()
+                        ? `, ${user.name.trim().split(/\s+/)[0]}`
+                        : ""}
+                    </h2>
+                    <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-slate-500 sm:text-sm">
+                      {isAdvisor
+                        ? "Tu desempeño comercial, embudo de leads e inventario del catálogo."
+                        : isGroupLeader
+                          ? "Vista de equipo del pipeline activo: ventas por asesor, conversión, inventario y proyección del mes."
+                          : "Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio."}
+                    </p>
+                  </div>
 
-                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
-                  <Link
-                    to="/"
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-brand-navy"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <Globe2 className="h-4 w-4" strokeWidth={1.8} />
-                    Ir al sitio
-                  </Link>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end sm:gap-2.5">
+                    <Link
+                      to="/"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-sm text-slate-600 shadow-sm transition hover:border-black/[0.14] hover:text-brand-navy"
+                      style={{ fontWeight: 500 }}
+                    >
+                      <Globe2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      Ir al sitio
+                    </Link>
 
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-                    style={{ fontWeight: 600 }}
-                  >
-                    <LogOut className="h-4 w-4" strokeWidth={1.8} />
-                    Cerrar sesión
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-sm text-slate-600 shadow-sm transition hover:border-black/[0.14] hover:text-slate-900"
+                      style={{ fontWeight: 500 }}
+                    >
+                      <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      Cerrar sesión
+                    </button>
+                  </div>
                 </div>
-              </div>
               )}
 
               <div className={cn("relative min-w-0 max-w-xl", (isAdvisor || isGroupLeader) && "mt-4")}>
@@ -3132,11 +3130,9 @@ export function AdminWorkspace() {
           </header>
         )}
 
-        <div className="mb-6 rounded-xl border border-slate-200/90 bg-white p-3 shadow-sm lg:hidden">
-          <p className="px-2 pb-2 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-            Módulos admin
-          </p>
-          <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Navegación del panel admin">
+        {/* Mobile pill-strip nav */}
+        <div className="mb-5 lg:hidden">
+          <nav className="admin-mobile-nav" aria-label="Navegación del panel admin">
             {[
               ...(canAccessDashboard ? [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
               ...(canAccessKpis ? [{ id: "kpis", label: "KPI's", icon: BarChart3 }] : []),
@@ -3147,9 +3143,9 @@ export function AdminWorkspace() {
               ...(canAccessProperties ? [{ id: "properties", label: "Propiedades", icon: Home }] : []),
               ...(canAccessDevelopments ? [{ id: "developments", label: "Desarrollos", icon: Building2 }] : []),
               ...(canAccessActivities ? [{ id: "activities", label: "Actividades", icon: History }] : []),
-              ...(canEditSite ? [{ id: "sitio", label: "Sitio web", icon: Globe2 }] : []),
+              ...(canEditSite ? [{ id: "sitio", label: "Sitio", icon: Globe2 }] : []),
               ...(canAccessCompanyModule
-                ? [{ id: "company", label: isGroupLeader ? "Pipeline de ventas" : "Mi empresa", icon: Briefcase }]
+                ? [{ id: "company", label: isGroupLeader ? "Pipeline" : "Empresa", icon: Briefcase }]
                 : []),
               { id: "messages", label: "Mensajes", icon: MessageSquare },
               { id: "profile", label: "Perfil", icon: UserIcon },
@@ -3164,17 +3160,15 @@ export function AdminWorkspace() {
                     goTab(item.id as TabType);
                   }
                 }}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
-                  activeTab === item.id ? "bg-brand-navy text-white" : "bg-slate-50 text-slate-700"
-                }`}
+                className={cn("admin-mobile-nav-pill", activeTab === item.id && "is-active")}
               >
-                <item.icon className="h-4 w-4" strokeWidth={1.75} />
-                <span className="flex-1">{item.label}</span>
-                {item.id === "messages" && messagesUnreadTotal > 0 ? (
-                  <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white">
+                <item.icon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                {item.label}
+                {item.id === "messages" && messagesUnreadTotal > 0 && (
+                  <span className="admin-unread-badge" style={{ marginLeft: "0.125rem" }}>
                     {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
                   </span>
-                ) : null}
+                )}
               </button>
             ))}
           </nav>
@@ -3250,37 +3244,19 @@ export function AdminWorkspace() {
           (leadsModuleLoading ? (
             <AdminLeadsTabSkeleton />
           ) : (
-          <div className="space-y-6">
-            {/* Leads Header */}
-            <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-              <div
-                className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-                aria-hidden
-              />
-              <div className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl" aria-hidden />
-              <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
-                  <div className="min-w-0 max-w-xl">
-                    <p
-                      className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary"
-                      style={{ fontWeight: 600 }}
-                    >
-                      Pipeline CRM
-                    </p>
-                    <h2
-                      className="font-heading mt-2 text-[1.65rem] leading-tight text-brand-navy md:text-[1.85rem]"
-                      style={{ fontWeight: 600 }}
-                    >
-                      Gestión de leads
-                    </h2>
-                    <p className="mt-2.5 text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
+            <div className="space-y-6">
+              {/* Leads Header */}
+              <div className="relative border-b border-slate-200 bg-transparent mb-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">Gestión de Leads</h2>
+                    <p className="text-sm text-slate-500 max-w-xl">
                       Administra y da seguimiento a tus clientes potenciales con vista Kanban o tabla.
                     </p>
                   </div>
-
-                  <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+                  <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center lg:w-auto">
                     <div
-                      className="inline-flex w-full rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)] sm:w-auto"
+                      className="inline-flex w-full rounded border border-slate-200 bg-white p-0.5 sm:w-auto"
                       role="group"
                       aria-label="Vista de leads"
                     >
@@ -3288,486 +3264,455 @@ export function AdminWorkspace() {
                         type="button"
                         aria-label="Vista Kanban"
                         onClick={() => setLeadsView("kanban")}
-                        className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
-                          leadsView === "kanban"
-                            ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
-                            : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
-                        }`}
+                        className={`inline-flex h-9 flex-1 items-center justify-center rounded-sm transition-colors sm:flex-none sm:w-10 ${leadsView === "kanban"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-500 hover:text-slate-900"
+                          }`}
                       >
-                        <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={2} />
+                        <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                       </button>
                       <button
                         type="button"
                         aria-label="Vista tabla"
                         onClick={() => setLeadsView("table")}
-                        className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
-                          leadsView === "table"
-                            ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
-                            : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
-                        }`}
+                        className={`inline-flex h-9 flex-1 items-center justify-center rounded-sm transition-colors sm:flex-none sm:w-10 ${leadsView === "table"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-500 hover:text-slate-900"
+                          }`}
                       >
-                        <Table2 className="h-4 w-4 shrink-0" strokeWidth={2} />
+                        <Table2 className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                       </button>
                     </div>
-
                     <button
                       type="button"
                       onClick={() => setAddLeadOpen(true)}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:bg-brand-red-hover hover:shadow-xl sm:flex-initial"
-                      style={{ fontWeight: 600 }}
+                      className="flex w-full items-center justify-center gap-2 rounded bg-slate-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
                     >
-                      <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
-                      Nuevo lead
+                      <Plus className="h-4 w-4" strokeWidth={1.5} />
+                      Nuevo Lead
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-                    <div className="relative min-h-[2.75rem] min-w-0 flex-1">
+                <div className="mt-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center p-1.5 gap-2">
+                    <div className="relative flex-1">
                       <Search
-                        className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                        strokeWidth={1.75}
+                        className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.5}
                       />
                       <input
                         type="search"
                         placeholder={
                           leadSearchNameScope === "client"
-                            ? "Buscar por nombre del cliente (contacto)…"
+                            ? "Buscar por nombre del cliente…"
                             : leadSearchNameScope === "advisor"
-                              ? "Buscar por nombre del asesor o líder asignado…"
-                              : "Buscar por contacto, teléfono o asesor / líder…"
+                              ? "Buscar por nombre del asesor…"
+                              : "Buscar por contacto, teléfono o asesor…"
                         }
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-full min-h-[2.75rem] w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-4 text-sm text-brand-navy shadow-sm transition-all placeholder:text-slate-400 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                        style={{ fontWeight: 500 }}
+                        className="w-full border-none bg-transparent py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 font-medium"
                         autoComplete="off"
                       />
                     </div>
-                    <div className="relative min-h-[2.75rem] w-full shrink-0 lg:w-[min(100%,19rem)] lg:max-w-[19rem]">
+                    <div className="hidden sm:block h-8 w-px bg-slate-100" />
+                    <div className="relative sm:w-72">
                       <TextSearch
-                        className="pointer-events-none absolute left-4 top-1/2 z-[1] h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                        strokeWidth={1.75}
+                        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.5}
                       />
                       <select
                         aria-label="Ámbito de búsqueda por nombre"
                         value={leadSearchNameScope}
-                        onChange={(e) =>
-                          setLeadSearchNameScope(e.target.value as "all" | "client" | "advisor")
-                        }
-                        className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                        style={{ fontWeight: 500 }}
+                        onChange={(e) => setLeadSearchNameScope(e.target.value as "all" | "client" | "advisor")}
+                        className="appearance-none w-full border-none bg-transparent py-3 pl-9 pr-8 text-sm font-medium text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-0 cursor-pointer"
                       >
-                        <option value="all">Todo: contacto, tel. y asesor</option>
-                        <option value="client">Nombre del cliente</option>
-                        <option value="advisor">Nombre del asesor / líder</option>
+                        <option value="all">Buscar en todo</option>
+                        <option value="client">Solo en cliente</option>
+                        <option value="advisor">Solo en asesor</option>
                       </select>
-                      <span
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                        aria-hidden
-                      >
-                        <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                      </span>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                     </div>
                   </div>
-                  <div className="flex flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-0.5 sm:gap-3">
-                  <div className="relative min-h-[2.75rem] min-w-[12rem] flex-[2] basis-0">
-                    <Users
-                      className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                      strokeWidth={1.75}
-                    />
-                    <select
-                      id="crm-pipeline-group"
-                      value={activePipelineGroupId}
-                      onChange={(e) => setActivePipelineGroupId(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[22rem]"
-                      style={{ fontWeight: 500 }}
-                    >
-                      {allowedPipelineGroupIds.map((id) => (
-                        <option key={id} value={id}>
-                          Grupo: {pipelineGroupLabel(id)}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
+
+                  <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-2.5 rounded-b-2xl overflow-x-auto">
+                    <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-2">
+                      <Filter className="h-3.5 w-3.5" strokeWidth={2} />
+                      Filtros
                     </span>
+
+                    <div className="relative shrink-0">
+                      <select
+                        id="crm-pipeline-group"
+                        value={activePipelineGroupId}
+                        onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                      >
+                        {allowedPipelineGroupIds.map((id) => (
+                          <option key={id} value={id}>Grupo: {pipelineGroupLabel(id)}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={createdRangeFilter}
+                        onChange={(e) => setCreatedRangeFilter(e.target.value as "all" | "1m" | "3m" | "6m" | "1y" | "custom")}
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                      >
+                        <option value="all">Cualquier fecha</option>
+                        <option value="1m">Último mes</option>
+                        <option value="3m">Últimos 3 meses</option>
+                        <option value="6m">Últimos 6 meses</option>
+                        <option value="1y">Último año</option>
+                        <option value="custom">Personalizada...</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                      >
+                        <option value="all">Todos los estados</option>
+                        {statusSelectOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
                   </div>
-                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
-                    <Calendar
-                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
-                      strokeWidth={1.75}
-                    />
-                    <select
-                      value={createdRangeFilter}
-                      onChange={(e) =>
-                        setCreatedRangeFilter(e.target.value as "all" | "1m" | "3m" | "6m" | "1y" | "custom")
-                      }
-                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[12rem]"
-                      style={{ fontWeight: 500 }}
-                    >
-                      <option value="all">Cualquier fecha</option>
-                      <option value="1m">Ultimo mes</option>
-                      <option value="3m">Ultimos 3 meses</option>
-                      <option value="6m">Ultimos 6 meses</option>
-                      <option value="1y">Ultimo ano</option>
-                      <option value="custom">Fecha personalizada</option>
-                    </select>
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                    </span>
-                  </div>
-                  <div className="relative min-w-[10.5rem] flex-1 basis-0">
-                    <Filter
-                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
-                      strokeWidth={1.75}
-                    />
-                    <select
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="h-full min-h-[2.75rem] w-full min-w-0 appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15 md:min-w-[12rem]"
-                      style={{ fontWeight: 500 }}
-                    >
-                      <option value="all">Todos los estados</option>
-                      {statusSelectOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-                      <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                    </span>
-                  </div>
-                  </div>
+
                   {createdRangeFilter === "custom" && (
-                    <div className="grid gap-3 sm:max-w-[460px] sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                          Desde
-                        </label>
-                        <input
-                          type="date"
-                          value={createdFrom}
-                          onChange={(e) => setCreatedFrom(e.target.value)}
-                          className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                          style={{ fontWeight: 500 }}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                          Hasta
-                        </label>
-                        <input
-                          type="date"
-                          value={createdTo}
-                          onChange={(e) => setCreatedTo(e.target.value)}
-                          className="h-11 w-full rounded-2xl border border-slate-200/90 bg-white px-4 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                          style={{ fontWeight: 500 }}
-                        />
+                    <div className="border-t border-slate-100 bg-white p-4 rounded-b-2xl">
+                      <div className="grid gap-4 sm:max-w-[460px] sm:grid-cols-2">
+                        <div>
+                          <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1 block">Desde</label>
+                          <input
+                            type="date"
+                            value={createdFrom}
+                            onChange={(e) => setCreatedFrom(e.target.value)}
+                            className="w-full rounded-md border border-slate-200 bg-white py-2 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1 block">Hasta</label>
+                          <input
+                            type="date"
+                            value={createdTo}
+                            onChange={(e) => setCreatedTo(e.target.value)}
+                            className="w-full rounded-md border border-slate-200 bg-white py-2 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-0"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
 
-            <AddLeadDialog
-              open={addLeadOpen}
-              onOpenChange={setAddLeadOpen}
-              allLeads={leads}
-              onAddLead={handleAddLead}
-              user={user}
-              customKanbanStages={customKanbanStages}
-              pipelineGroupId={activePipelineGroupId}
-              defaultStageId={defaultLeadStageId}
-              allowedAssigneeUserIds={allowedLeadAssigneeUserIds}
-              properties={properties}
-              developments={developments}
-            />
-
-            {leadsError && (
-              <div
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-                style={{ fontWeight: 500 }}
-                role="alert"
-              >
-                {leadsError}
-              </div>
-            )}
-
-            {!leadsLoading &&
-              leadColumnStatuses.length === 0 &&
-              customKanbanStages.length === 0 &&
-              leadStatusesForRendering.length === 0 && (
-                <div
-                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-                  style={{ fontWeight: 500 }}
-                  role="status"
-                >
-                  Este pipeline no tiene columnas todavía. Crea la primera en{" "}
-                  <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
-                </div>
-              )}
-
-            {!leadsLoading &&
-              effectiveUser &&
-              !canViewAllLeads(effectiveUser.role) &&
-              leads.length > 0 &&
-              leadsForUser.length === 0 && (
-                <div
-                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                  style={{ fontWeight: 500 }}
-                  role="status"
-                >
-                  Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno coincide con tu
-                  usuario ({roleLabelEs(effectiveUser.role)}). En datos Tokko,{" "}
-                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> suele ser el{" "}
-                  <strong>id Tokko del asesor</strong> (no el UUID de Auth): debe coincidir con{" "}
-                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">tokko_users.tokko_user_id</code> o con{" "}
-                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">user_metadata.tokko_user_id</code> en
-                  Auth. Un administrador puede poner{" "}
-                  <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
-                  todos.
-                </div>
-              )}
-
-            {!leadsLoading && leads.length === 0 && (
-              <div
-                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
-                style={{ fontWeight: 500 }}
-              >
-                No hay leads en la base de datos (tabla <code className="text-xs">leads</code>). Si esperabas datos de
-                Tokko, revisa el sync; si es entorno nuevo, crea un lead desde aquí.
-              </div>
-            )}
-
-            {leadsView === "kanban" && (
-              <LeadsKanbanBoard
-                leads={filteredLeadsForBoard}
-                columnStatuses={leadStatusesForRendering}
-                columnHexByStatus={effectiveStageColors}
-                statusLabel={resolveStatusLabel}
-                onStatusChange={handleUpdateLeadStatus}
-                onLeadOpen={(l) => openLeadDetail(l, "view")}
+              <AddLeadDialog
+                open={addLeadOpen}
+                onOpenChange={setAddLeadOpen}
+                allLeads={leads}
+                onAddLead={handleAddLead}
+                user={user}
+                customKanbanStages={customKanbanStages}
+                pipelineGroupId={activePipelineGroupId}
+                defaultStageId={defaultLeadStageId}
+                allowedAssigneeUserIds={allowedLeadAssigneeUserIds}
+                properties={properties}
+                developments={developments}
               />
-            )}
 
-            {/* Leads: vista tabla — agrupada por estado, tarjetas a ancho completo (sin scroll horizontal) */}
-            {leadsView === "table" && (
-            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
-              {filteredLeads.length === 0 ? (
-                <div className="py-16 text-center">
-                  <Users className="mx-auto mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
-                  <p className="text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                    No se encontraron leads
-                  </p>
+              {leadsError && (
+                <div
+                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                  style={{ fontWeight: 500 }}
+                  role="alert"
+                >
+                  {leadsError}
                 </div>
-              ) : (
-                <div className="divide-y divide-slate-200/80">
-                  {leadsTableGroupedByStatus.map(({ statusId, label, leads: sectionLeads }) => {
-                    const sectionCollapsed = leadsTableSectionCollapsed[statusId] === true;
-                    return (
-                    <section key={statusId} className="bg-white">
-                      <button
-                        type="button"
-                        onClick={() => toggleLeadsTableSection(statusId)}
-                        className={LIST_STAGE_HEADER_BUTTON_CLASSES}
-                        style={stageHexToListHeaderStyle(resolveStageHex(statusId))}
-                        aria-expanded={!sectionCollapsed}
-                        aria-label={
-                          sectionCollapsed ? `Expandir sección ${label}, ${sectionLeads.length} leads` : `Contraer sección ${label}`
-                        }
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ease-out",
-                            sectionCollapsed ? "-rotate-90" : "rotate-0",
-                          )}
-                          strokeWidth={2}
-                          aria-hidden
-                        />
-                        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
-                          <h3
-                            className="font-heading inline-block bg-gradient-to-br from-brand-navy via-[#1a2744] to-brand-navy bg-clip-text text-base tracking-tight text-transparent sm:text-[1.125rem]"
-                            style={{ fontWeight: 700 }}
-                          >
-                            {label}
-                          </h3>
-                          <span
-                            className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-bold tabular-nums text-slate-800 shadow-sm ring-1 ring-slate-200/90 backdrop-blur-sm"
-                            style={{ fontWeight: 700 }}
-                          >
-                            {sectionLeads.length}
-                          </span>
-                        </div>
-                      </button>
-                      <div
-                        className={cn(
-                          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-                          sectionCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
-                        )}
-                      >
-                        <div className="min-h-0 overflow-hidden">
-                      <ul className="divide-y divide-slate-100 border-t border-slate-100/90 bg-white">
-                        {sectionLeads.map((lead) => (
-                          <li
-                            key={lead.id}
-                            className="py-1.5 pl-5 pr-3 transition-colors hover:bg-slate-50/90 sm:pl-8 sm:pr-4"
-                          >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-start justify-between gap-1.5 sm:gap-2">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
-                                      <p
-                                        className="text-[13.6px] font-semibold leading-none tracking-tight text-slate-900"
-                                        style={{ fontWeight: 600 }}
-                                      >
-                                        {lead.name}
-                                      </p>
-                                      <span className="text-[10.2px] text-slate-500" style={{ fontWeight: 500 }}>
-                                        {lead.source}
-                                      </span>
-                                    </div>
-                                    <p className="mt-px text-[11.9px] leading-tight text-slate-600">
-                                      <span className="inline break-words">{lead.email}</span>
-                                      <span className="mx-1 text-slate-300">·</span>
-                                      <span>{lead.phone}</span>
-                                    </p>
-                                  </div>
-                                  <div className="flex shrink-0 items-center gap-2 sm:hidden">
-                                    <div className="flex h-8 items-center">
-                                      <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
-                                    </div>
-                                    <div className="flex h-8 items-center gap-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => openLeadDetail(lead, "view")}
-                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                        title="Ver"
-                                      >
-                                        <Eye className="h-6 w-6" strokeWidth={1.5} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => openLeadDetail(lead, "edit")}
-                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                        title="Editar"
-                                      >
-                                        <Edit className="h-6 w-6" strokeWidth={1.5} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (window.confirm("¿Eliminar este lead?")) {
-                                            void handleDeleteLead(lead.id);
-                                          }
-                                        }}
-                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                                        title="Eliminar"
-                                      >
-                                        <Trash2 className="h-6 w-6" strokeWidth={1.5} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <p className="mt-1 min-w-0 text-[11.9px] leading-tight text-slate-600">
-                                  <span className="font-semibold capitalize text-slate-800">{lead.interest}</span>
-                                  <span className="mx-1 text-slate-300">·</span>
-                                  <span>{lead.propertyType}</span>
-                                  <span className="mx-1 text-slate-300">·</span>
-                                  <span className="font-semibold tabular-nums text-slate-900">${lead.budget.toLocaleString()}</span>
-                                  <span className="mx-1 text-slate-300">·</span>
-                                  <span className="text-slate-600">{lead.location}</span>
-                                </p>
-                                <div className="mt-1.5 sm:hidden">
-                                  <select
-                                    id={`lead-status-${lead.id}`}
-                                    value={lead.status}
-                                    onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
-                                    className="h-8 w-full min-w-0 max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm"
-                                    style={{
-                                      fontWeight: 600,
-                                      ...stageHexToChipStyle(resolveStageHex(lead.status)),
-                                    }}
-                                    aria-label={`Cambiar estado de ${lead.name}`}
-                                  >
-                                    {statusSelectOptions.map((opt) => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
+              )}
 
-                              <div className="hidden shrink-0 items-center gap-2 sm:flex">
-                                <div className="flex h-8 items-center">
-                                  <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
-                                </div>
-                                <select
-                                  value={lead.status}
-                                  onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
-                                  className="h-8 min-w-[8.75rem] max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm sm:min-w-[9.25rem]"
-                                  style={{
-                                    fontWeight: 600,
-                                    ...stageHexToChipStyle(resolveStageHex(lead.status)),
-                                  }}
-                                  aria-label={`Cambiar estado de ${lead.name}`}
+              {!leadsLoading &&
+                leadColumnStatuses.length === 0 &&
+                customKanbanStages.length === 0 &&
+                leadStatusesForRendering.length === 0 && (
+                  <div
+                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                    style={{ fontWeight: 500 }}
+                    role="status"
+                  >
+                    Este pipeline no tiene columnas todavía. Crea la primera en{" "}
+                    <code className="text-xs">Mi empresa → Pipeline de ventas</code>.
+                  </div>
+                )}
+
+              {!leadsLoading &&
+                effectiveUser &&
+                !canViewAllLeads(effectiveUser.role) &&
+                leads.length > 0 &&
+                leadsForUser.length === 0 && (
+                  <div
+                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    style={{ fontWeight: 500 }}
+                    role="status"
+                  >
+                    Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno coincide con tu
+                    usuario ({roleLabelEs(effectiveUser.role)}). En datos Tokko,{" "}
+                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> suele ser el{" "}
+                    <strong>id Tokko del asesor</strong> (no el UUID de Auth): debe coincidir con{" "}
+                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">tokko_users.tokko_user_id</code> o con{" "}
+                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">user_metadata.tokko_user_id</code> en
+                    Auth. Un administrador puede poner{" "}
+                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
+                    todos.
+                  </div>
+                )}
+
+              {!leadsLoading && leads.length === 0 && (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                  style={{ fontWeight: 500 }}
+                >
+                  No hay leads en la base de datos (tabla <code className="text-xs">leads</code>). Si esperabas datos de
+                  Tokko, revisa el sync; si es entorno nuevo, crea un lead desde aquí.
+                </div>
+              )}
+
+              {leadsView === "kanban" && (
+                <LeadsKanbanBoard
+                  leads={filteredLeadsForBoard}
+                  columnStatuses={leadStatusesForRendering}
+                  columnHexByStatus={effectiveStageColors}
+                  statusLabel={resolveStatusLabel}
+                  onStatusChange={handleUpdateLeadStatus}
+                  onLeadOpen={(l) => openLeadDetail(l, "view")}
+                />
+              )}
+
+              {/* Leads: vista tabla — agrupada por estado, tarjetas a ancho completo (sin scroll horizontal) */}
+              {leadsView === "table" && (
+                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
+                  {filteredLeads.length === 0 ? (
+                    <div className="py-16 text-center">
+                      <Users className="mx-auto mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
+                      <p className="text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                        No se encontraron leads
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-200/80">
+                      {leadsTableGroupedByStatus.map(({ statusId, label, leads: sectionLeads }) => {
+                        const sectionCollapsed = leadsTableSectionCollapsed[statusId] === true;
+                        return (
+                          <section key={statusId} className="bg-white">
+                            <button
+                              type="button"
+                              onClick={() => toggleLeadsTableSection(statusId)}
+                              className={LIST_STAGE_HEADER_BUTTON_CLASSES}
+                              style={stageHexToListHeaderStyle(resolveStageHex(statusId))}
+                              aria-expanded={!sectionCollapsed}
+                              aria-label={
+                                sectionCollapsed ? `Expandir sección ${label}, ${sectionLeads.length} leads` : `Contraer sección ${label}`
+                              }
+                            >
+                              <ChevronDown
+                                className={cn(
+                                  "h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 ease-out",
+                                  sectionCollapsed ? "-rotate-90" : "rotate-0",
+                                )}
+                                strokeWidth={2}
+                                aria-hidden
+                              />
+                              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+                                <h3
+                                  className="font-heading inline-block bg-gradient-to-br from-brand-navy via-[#1a2744] to-brand-navy bg-clip-text text-base tracking-tight text-transparent sm:text-[1.125rem]"
+                                  style={{ fontWeight: 700 }}
                                 >
-                                  {statusSelectOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </option>
+                                  {label}
+                                </h3>
+                                <span
+                                  className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-bold tabular-nums text-slate-800 shadow-sm ring-1 ring-slate-200/90 backdrop-blur-sm"
+                                  style={{ fontWeight: 700 }}
+                                >
+                                  {sectionLeads.length}
+                                </span>
+                              </div>
+                            </button>
+                            <div
+                              className={cn(
+                                "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                                sectionCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+                              )}
+                            >
+                              <div className="min-h-0 overflow-hidden">
+                                <ul className="divide-y divide-slate-100 border-t border-slate-100/90 bg-white">
+                                  {sectionLeads.map((lead) => (
+                                    <li
+                                      key={lead.id}
+                                      className="py-1.5 pl-5 pr-3 transition-colors hover:bg-slate-50/90 sm:pl-8 sm:pr-4"
+                                    >
+                                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap items-start justify-between gap-1.5 sm:gap-2">
+                                            <div className="min-w-0">
+                                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                                                <p
+                                                  className="text-[13.6px] font-semibold leading-none tracking-tight text-slate-900"
+                                                  style={{ fontWeight: 600 }}
+                                                >
+                                                  {lead.name}
+                                                </p>
+                                                <span className="text-[10.2px] text-slate-500" style={{ fontWeight: 500 }}>
+                                                  {lead.source}
+                                                </span>
+                                              </div>
+                                              <p className="mt-px text-[11.9px] leading-tight text-slate-600">
+                                                <span className="inline break-words">{lead.email}</span>
+                                                <span className="mx-1 text-slate-300">·</span>
+                                                <span>{lead.phone}</span>
+                                              </p>
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-2 sm:hidden">
+                                              <div className="flex h-8 items-center">
+                                                <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
+                                              </div>
+                                              <div className="flex h-8 items-center gap-0.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openLeadDetail(lead, "view")}
+                                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                                  title="Ver"
+                                                >
+                                                  <Eye className="h-6 w-6" strokeWidth={1.5} />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openLeadDetail(lead, "edit")}
+                                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                                  title="Editar"
+                                                >
+                                                  <Edit className="h-6 w-6" strokeWidth={1.5} />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    if (window.confirm("¿Eliminar este lead?")) {
+                                                      void handleDeleteLead(lead.id);
+                                                    }
+                                                  }}
+                                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                                  title="Eliminar"
+                                                >
+                                                  <Trash2 className="h-6 w-6" strokeWidth={1.5} />
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <p className="mt-1 min-w-0 text-[11.9px] leading-tight text-slate-600">
+                                            <span className="font-semibold capitalize text-slate-800">{lead.interest}</span>
+                                            <span className="mx-1 text-slate-300">·</span>
+                                            <span>{lead.propertyType}</span>
+                                            <span className="mx-1 text-slate-300">·</span>
+                                            <span className="font-semibold tabular-nums text-slate-900">${lead.budget.toLocaleString()}</span>
+                                            <span className="mx-1 text-slate-300">·</span>
+                                            <span className="text-slate-600">{lead.location}</span>
+                                          </p>
+                                          <div className="mt-1.5 sm:hidden">
+                                            <select
+                                              id={`lead-status-${lead.id}`}
+                                              value={lead.status}
+                                              onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                              className="h-8 w-full min-w-0 max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm"
+                                              style={{
+                                                fontWeight: 600,
+                                                ...stageHexToChipStyle(resolveStageHex(lead.status)),
+                                              }}
+                                              aria-label={`Cambiar estado de ${lead.name}`}
+                                            >
+                                              {statusSelectOptions.map((opt) => (
+                                                <option key={opt.value} value={opt.value}>
+                                                  {opt.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        </div>
+
+                                        <div className="hidden shrink-0 items-center gap-2 sm:flex">
+                                          <div className="flex h-8 items-center">
+                                            <LeadPriorityBadge stars={lead.priorityStars} size="sm" />
+                                          </div>
+                                          <select
+                                            value={lead.status}
+                                            onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
+                                            className="h-8 min-w-[8.75rem] max-w-full cursor-pointer rounded-md px-2 py-0 text-[11.9px] font-semibold shadow-sm sm:min-w-[9.25rem]"
+                                            style={{
+                                              fontWeight: 600,
+                                              ...stageHexToChipStyle(resolveStageHex(lead.status)),
+                                            }}
+                                            aria-label={`Cambiar estado de ${lead.name}`}
+                                          >
+                                            {statusSelectOptions.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <div className="flex h-8 items-center gap-0.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => openLeadDetail(lead, "view")}
+                                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                              title="Ver"
+                                            >
+                                              <Eye className="h-6 w-6" strokeWidth={1.5} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => openLeadDetail(lead, "edit")}
+                                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                              title="Editar"
+                                            >
+                                              <Edit className="h-6 w-6" strokeWidth={1.5} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (window.confirm("¿Eliminar este lead?")) {
+                                                  void handleDeleteLead(lead.id);
+                                                }
+                                              }}
+                                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                              title="Eliminar"
+                                            >
+                                              <Trash2 className="h-6 w-6" strokeWidth={1.5} />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </li>
                                   ))}
-                                </select>
-                                <div className="flex h-8 items-center gap-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => openLeadDetail(lead, "view")}
-                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                    title="Ver"
-                                  >
-                                    <Eye className="h-6 w-6" strokeWidth={1.5} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openLeadDetail(lead, "edit")}
-                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                    title="Editar"
-                                  >
-                                    <Edit className="h-6 w-6" strokeWidth={1.5} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                          if (window.confirm("¿Eliminar este lead?")) {
-                                            void handleDeleteLead(lead.id);
-                                          }
-                                        }}
-                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                                    title="Eliminar"
-                                  >
-                                    <Trash2 className="h-6 w-6" strokeWidth={1.5} />
-                                  </button>
-                                </div>
+                                </ul>
                               </div>
                             </div>
-                          </li>
-                        ))}
-                      </ul>
-                        </div>
-                      </div>
-                    </section>
-                    );
-                  })}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-            )}
-          </div>
           ))}
 
         {activeTab === "consultas" && (
@@ -3809,23 +3754,23 @@ export function AdminWorkspace() {
           (leadsModuleLoading ? (
             <AdminClientsSkeleton />
           ) : (
-          <div className="space-y-6">
-            <AdminClientsManager
-              currentUser={user}
-              users={users}
-              userGroups={userGroups}
-              clients={clients}
-              onSetClients={(updater) => setClients(updater)}
-              properties={properties}
-              developments={developments}
-              leads={leads}
-              onViewTeamMember={handleViewTeamMember}
-              focusClient={focusClient}
-              onFocusClientConsumed={handleFocusClientConsumed}
-              seedFromLead={seedClientFromLead}
-              onSeedFromLeadConsumed={handleSeedClientFromLeadConsumed}
-            />
-          </div>
+            <div className="space-y-6">
+              <AdminClientsManager
+                currentUser={user}
+                users={users}
+                userGroups={userGroups}
+                clients={clients}
+                onSetClients={(updater) => setClients(updater)}
+                properties={properties}
+                developments={developments}
+                leads={leads}
+                onViewTeamMember={handleViewTeamMember}
+                focusClient={focusClient}
+                onFocusClientConsumed={handleFocusClientConsumed}
+                seedFromLead={seedClientFromLead}
+                onSeedFromLeadConsumed={handleSeedClientFromLeadConsumed}
+              />
+            </div>
           ))}
 
         {activeTab === "agenda" && (
@@ -3860,619 +3805,622 @@ export function AdminWorkspace() {
           (catalogPropertiesLoading ? (
             <AdminPropertiesSkeleton />
           ) : (
-          <div className="space-y-6">
-            {catalogPropertiesError ? (
-              <div
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-                role="alert"
-              >
-                <p className="font-semibold">No se pudo cargar el catálogo</p>
-                <p className="mt-1">{catalogPropertiesError}</p>
-                <button
-                  type="button"
-                  className="mt-2 font-medium text-red-900 underline"
-                  onClick={() => void reloadProperties()}
+            <div className="space-y-6">
+              {catalogPropertiesError ? (
+                <div
+                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                  role="alert"
                 >
-                  Reintentar
-                </button>
-              </div>
-            ) : null}
-            {catalogSchemaWarning ? (
-              <div
-                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                role="status"
-              >
-                {catalogSchemaWarning}
-              </div>
-            ) : null}
-            {/* Properties Header */}
-            <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-              <div
-                className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-                aria-hidden
-              />
-              <div className="p-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900 mb-1" style={{ fontWeight: 600 }}>Gestión de Propiedades</h2>
-                  <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                    Filtra, edita y publica propiedades del catálogo.
-                  </p>
-                  <p className="mt-2 text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                    Portada (inicio):{" "}
-                    <span className="font-semibold text-brand-navy">
-                      {propertyFeaturedCount}/{MAX_FEATURED_PROPERTIES}
-                    </span>{" "}
-                    destacadas (máximo {MAX_FEATURED_PROPERTIES}). Usa la estrella en la imagen, en la lista o el checkbox al editar.
-                  </p>
-                </div>
-                <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
-                  <div
-                    className="inline-flex w-full flex-wrap rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-[inset_0_1px_2px_rgba(20,28,46,0.06)] sm:w-auto"
-                    role="group"
-                    aria-label="Vista del inventario"
+                  <p className="font-semibold">No se pudo cargar el catálogo</p>
+                  <p className="mt-1">{catalogPropertiesError}</p>
+                  <button
+                    type="button"
+                    className="mt-2 font-medium text-red-900 underline"
+                    onClick={() => void reloadProperties()}
                   >
-                    <button
-                      type="button"
-                      aria-label="Vista de tarjetas"
-                      onClick={() => setPropertyInventoryView("cards")}
-                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
-                        propertyInventoryView === "cards"
-                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
-                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
-                      }`}
-                    >
-                      <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Vista de lista"
-                      onClick={() => setPropertyInventoryView("list")}
-                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
-                        propertyInventoryView === "list"
-                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
-                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
-                      }`}
-                    >
-                      <Table2 className="h-4 w-4 shrink-0" strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Vista de mapa"
-                      onClick={() => setPropertyInventoryView("map")}
-                      className={`inline-flex h-11 flex-1 items-center justify-center rounded-xl transition-all sm:h-10 sm:flex-none sm:w-10 ${
-                        propertyInventoryView === "map"
-                          ? "bg-brand-navy text-white shadow-md shadow-brand-navy/25"
-                          : "text-slate-600 hover:bg-white/80 hover:text-brand-navy"
-                      }`}
-                    >
-                      <MapIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                    </button>
-                  </div>
-                  {canManageInventory && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewPropertyDraftId(crypto.randomUUID());
-                        setPropertyForm({ mode: "create", property: null });
-                      }}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8102E] px-5 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25] sm:w-auto"
-                      style={{ fontWeight: 600 }}
-                    >
-                      <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-                      Nueva Propiedad
-                    </button>
-                  )}
+                    Reintentar
+                  </button>
                 </div>
-              </div>
-              <div className="mt-4 relative">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-5">
-                  <select
-                    value={propertyFeaturedFilter}
-                    onChange={(e) =>
-                      setPropertyFeaturedFilter(e.target.value as "all" | "featured" | "normal")
-                    }
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                    aria-label="Filtrar por propiedades destacadas en la portada"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="featured">Solo destacadas</option>
-                    <option value="normal">No destacadas</option>
-                  </select>
-                  <select
-                    value={propertyOperationFilter}
-                    onChange={(e) => setPropertyOperationFilter(e.target.value)}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                  >
-                    <option value="all">Operación</option>
-                    <option value="venta">Venta</option>
-                    <option value="alquiler">Alquiler</option>
-                  </select>
-                  <select
-                    value={propertyTypeFilter}
-                    onChange={(e) => setPropertyTypeFilter(e.target.value)}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                  >
-                    <option value="all">Tipo de propiedad</option>
-                    {propertyTypeOptions.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={propertyLocationFilter}
-                    onChange={(e) => setPropertyLocationFilter(e.target.value)}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                  >
-                    <option value="all">Ubicación</option>
-                    {propertyLocationOptions.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={propertyCatalogSort}
-                    onChange={(e) =>
-                      setPropertyCatalogSort(e.target.value as CatalogPropertySortKey)
-                    }
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
-                    aria-label="Ordenar inventario"
-                  >
-                    {CATALOG_PROPERTY_SORT_OPTIONS.map(({ value, label }) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+              ) : null}
+              {catalogSchemaWarning ? (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                  role="status"
+                >
+                  {catalogSchemaWarning}
                 </div>
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="relative min-w-0">
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.75}
-                  />
-                  <input
-                    type="search"
-                    value={propertySearchQuery}
-                    onChange={(e) => setPropertySearchQuery(e.target.value)}
-                    placeholder="Buscar por título, zona, tipo…"
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="relative min-w-0">
-                  <Hash
-                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
-                    strokeWidth={2}
-                    aria-hidden
-                  />
-                  <input
-                    type="search"
-                    value={propertyReferenceCodeQuery}
-                    onChange={(e) => setPropertyReferenceCodeQuery(e.target.value)}
-                    placeholder="Código de referencia…"
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-brand-navy tabular-nums placeholder:text-slate-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                    autoComplete="off"
-                    spellCheck={false}
-                    aria-label="Filtrar por código de referencia"
-                  />
-                </div>
-              </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-primary to-brand-burgundy opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                    Total propiedades
-                  </p>
-                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  {totalProperties}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                  Inventario en el panel
-                </p>
-              </div>
-
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-burgundy to-brand-gold opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                    En venta
-                  </p>
-                  <Activity className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  {propertiesForSale}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                  Listadas como venta
-                </p>
-              </div>
-
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-navy to-slate-600 opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                    En alquiler
-                  </p>
-                  <Briefcase className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  {propertiesForRent}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                  Listadas como alquiler
-                </p>
-              </div>
-
-              <div className="group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_-8px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02] transition-all hover:shadow-[0_12px_40px_-10px_rgba(20,28,46,0.14)]">
-                <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-brand-gold to-primary opacity-90" aria-hidden />
-                <div className="mb-1.5 flex items-start justify-between gap-2 pl-1">
-                  <p className="font-heading min-w-0 text-[11px] uppercase tracking-[0.14em] text-slate-500" style={{ fontWeight: 600 }}>
-                    Valor promedio
-                  </p>
-                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-gold/90" strokeWidth={1.5} />
-                </div>
-                <p className="font-heading pl-1 text-2xl leading-tight text-brand-navy" style={{ fontWeight: 700 }}>
-                  ${Math.round(avgPropertyPriceNum).toLocaleString("es-MX")}
-                </p>
-                <p className="mt-1 pl-1 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                  Por propiedad (precio listado)
-                </p>
-              </div>
-            </div>
-
-            {/* Properties: tarjetas, lista o mapa */}
-            {propertyInventoryView === "map" && filteredProperties.length > 0 && (
-              <div className="space-y-3">
-                {filteredProperties.some((p) => p.coordinates) ? (
-                  <Suspense fallback={adminModuleFallback("h-[min(60vh,560px)] min-h-[320px]")}>
-                    <PropertyMap
-                      properties={filteredProperties}
-                      mapHeightClassName="h-[min(60vh,560px)] min-h-[320px]"
-                    />
-                  </Suspense>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                    Ninguna propiedad del listado tiene coordenadas. Edita una ficha y guarda ubicación para verla en el mapa.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {propertyInventoryView === "cards" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProperties.map((property) => (
-                <div key={property.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all group">
-                  {canManageInventory ? (
-                    <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setPropertyForm({ mode: "edit", property })}
-                      className="relative block h-48 w-full cursor-pointer overflow-hidden bg-slate-100 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
-                      aria-label={`Abrir ficha: ${property.title}`}
-                    >
-                      <img
-                        src={property.image}
-                        alt=""
-                        className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="pointer-events-none absolute top-3 right-3">
-                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
-                          {property.status.toUpperCase()}
-                        </span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      title={property.featured ? "Quitar de la portada (inicio)" : "Destacar en la portada"}
-                      aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
-                      aria-pressed={Boolean(property.featured)}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void handleTogglePropertyFeatured(property);
-                      }}
-                      className={`absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border shadow-sm backdrop-blur-sm transition-colors ${
-                        property.featured
-                          ? "border-amber-300/90 bg-amber-400/95 text-amber-950 hover:bg-amber-400"
-                          : "border-slate-200/90 bg-white/95 text-slate-500 hover:border-amber-200 hover:text-amber-700"
-                      }`}
-                    >
-                      <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
-                    </button>
-                  </div>
-                  ) : (
-                    <div className="relative block h-48 w-full overflow-hidden bg-slate-100 p-0 text-left">
-                      <img
-                        src={property.image}
-                        alt=""
-                        className="pointer-events-none h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="pointer-events-none absolute top-3 right-3">
-                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/95 backdrop-blur-sm text-slate-900 border border-slate-200" style={{ fontWeight: 600 }}>
-                          {property.status.toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="p-5">
-                    <span className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-2 block" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>
-                      {property.type}
-                    </span>
-                    <h3 className="font-semibold text-slate-900 mb-2" style={{ fontWeight: 600 }}>{property.title}</h3>
-                    <p className="text-sm text-slate-600 mb-4 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                      {property.location}
+              ) : null}
+              {/* Properties Header */}
+              <div className="relative border-b border-slate-200 bg-transparent mb-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">Propiedades</h2>
+                    <p className="text-sm text-slate-500 max-w-xl">
+                      Filtra, edita y publica propiedades del catálogo.
                     </p>
-                    
-                    <div className="flex items-center gap-4 mb-4 pb-4 border-b border-slate-200">
-                      <div className="flex items-center gap-1.5 text-slate-600">
-                        <Bed className="w-4 h-4 text-slate-400" strokeWidth={1.5} />
-                        <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{property.bedrooms}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-600">
-                        <Bath className="w-4 h-4 text-slate-400" strokeWidth={1.5} />
-                        <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{property.bathrooms}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-600">
-                        <Square className="w-4 h-4 text-slate-400" strokeWidth={1.5} />
-                        <span className="text-sm font-medium" style={{ fontWeight: 500 }}>{property.area}m²</span>
-                      </div>
+                    <p className="mt-2 text-xs text-slate-400">
+                      Portada: <span className="font-medium text-slate-900">{propertyFeaturedCount}/{MAX_FEATURED_PROPERTIES}</span> destacadas.
+                    </p>
+                  </div>
+                  <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center lg:w-auto">
+                    <div
+                      className="inline-flex w-full rounded border border-slate-200 bg-white p-0.5 sm:w-auto"
+                      role="group"
+                      aria-label="Vista del inventario"
+                    >
+                      <button
+                        type="button"
+                        aria-label="Vista de tarjetas"
+                        onClick={() => setPropertyInventoryView("cards")}
+                        className={`inline-flex h-9 flex-1 items-center justify-center rounded-sm transition-colors sm:flex-none sm:w-10 ${propertyInventoryView === "cards"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-500 hover:text-slate-900"
+                          }`}
+                      >
+                        <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Vista de lista"
+                        onClick={() => setPropertyInventoryView("list")}
+                        className={`inline-flex h-9 flex-1 items-center justify-center rounded-sm transition-colors sm:flex-none sm:w-10 ${propertyInventoryView === "list"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-500 hover:text-slate-900"
+                          }`}
+                      >
+                        <Table2 className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Vista de mapa"
+                        onClick={() => setPropertyInventoryView("map")}
+                        className={`inline-flex h-9 flex-1 items-center justify-center rounded-sm transition-colors sm:flex-none sm:w-10 ${propertyInventoryView === "map"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-500 hover:text-slate-900"
+                          }`}
+                      >
+                        <MapIcon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                      </button>
                     </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs text-slate-500 mb-0.5 uppercase tracking-wide" style={{ letterSpacing: '0.05em', fontWeight: 500 }}>Precio</p>
-                        <p className="text-xl font-semibold text-slate-900" style={{ fontWeight: 700 }}>
-                          ${property.price.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                          title="Copiar enlace público"
-                          aria-label="Copiar enlace público"
-                        >
-                          <Link2 className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
-                        <PdfDownloadDropdown data={property} type="property" />
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/propiedades/${property.id}`)}
-                          className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                          title="Ver en el sitio"
-                        >
-                          <Eye className="h-4 w-4" strokeWidth={1.5} />
-                        </button>
-                        {canManageInventory && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setPropertyForm({ mode: "edit", property })}
-                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                              title="Editar"
-                            >
-                              <Edit className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => requestDeleteProperty(property.id)}
-                              className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                            </button>
-                          </>
-                        )}
-                      </div>
+                    {canManageInventory && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewPropertyDraftId(crypto.randomUUID());
+                          setPropertyForm({ mode: "create", property: null });
+                        }}
+                        className="flex w-full items-center justify-center gap-2 rounded bg-slate-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-black sm:w-auto"
+                      >
+                        <Plus className="h-4 w-4" strokeWidth={1.5} />
+                        Nueva Propiedad
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] mt-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center p-1.5 gap-2">
+                    <div className="relative flex-1">
+                      <Search
+                        className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.5}
+                      />
+                      <input
+                        type="search"
+                        value={propertySearchQuery}
+                        onChange={(e) => setPropertySearchQuery(e.target.value)}
+                        placeholder="Buscar por título, zona, tipo…"
+                        className="w-full border-none bg-transparent py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 font-medium"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="hidden sm:block h-8 w-px bg-slate-100" />
+                    <div className="relative sm:w-72">
+                      <span
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold tracking-widest text-slate-400"
+                        aria-hidden
+                      >
+                        REF
+                      </span>
+                      <input
+                        type="search"
+                        value={propertyReferenceCodeQuery}
+                        onChange={(e) => setPropertyReferenceCodeQuery(e.target.value)}
+                        placeholder="Código de referencia…"
+                        className="w-full border-none bg-transparent py-3 pl-11 pr-4 text-sm tabular-nums text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 font-medium"
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-label="Filtrar por código de referencia"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-2.5 rounded-b-2xl overflow-x-auto">
+                    <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-2">
+                      <Filter className="h-3.5 w-3.5" strokeWidth={2} />
+                      Filtros
+                    </span>
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={propertyFeaturedFilter}
+                        onChange={(e) =>
+                          setPropertyFeaturedFilter(e.target.value as "all" | "featured" | "normal")
+                        }
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                        aria-label="Filtrar por propiedades destacadas"
+                      >
+                        <option value="all">Todos</option>
+                        <option value="featured">Destacadas</option>
+                        <option value="normal">No destacadas</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={propertyOperationFilter}
+                        onChange={(e) => setPropertyOperationFilter(e.target.value)}
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                      >
+                        <option value="all">Operación</option>
+                        <option value="venta">Venta</option>
+                        <option value="alquiler">Alquiler</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={propertyTypeFilter}
+                        onChange={(e) => setPropertyTypeFilter(e.target.value)}
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                      >
+                        <option value="all">Tipo de propiedad</option>
+                        {propertyTypeOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={propertyLocationFilter}
+                        onChange={(e) => setPropertyLocationFilter(e.target.value)}
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                      >
+                        <option value="all">Ubicación</option>
+                        {propertyLocationOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0 ml-auto" />
+
+                    <div className="relative shrink-0">
+                      <select
+                        value={propertyCatalogSort}
+                        onChange={(e) =>
+                          setPropertyCatalogSort(e.target.value as CatalogPropertySortKey)
+                        }
+                        className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+                        aria-label="Ordenar inventario"
+                      >
+                        {CATALOG_PROPERTY_SORT_OPTIONS.map(({ value, label }) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-            )}
+              </div>
 
-            {propertyInventoryView === "list" && filteredProperties.length > 0 && (
-              <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[800px]">
-                    <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
-                      <tr>
-                        <th
-                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Propiedad
-                        </th>
-                        <th
-                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Tipo
-                        </th>
-                        <th
-                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Ubicación
-                        </th>
-                        <th
-                          className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Operación
-                        </th>
-                        <th
-                          className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Precio
-                        </th>
-                        <th
-                          className="font-heading px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Inicio
-                        </th>
-                        <th
-                          className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
-                          style={{ fontWeight: 600 }}
-                        >
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {filteredProperties.map((property) => (
-                        <tr key={property.id} className="transition-colors hover:bg-slate-50">
-                          <td className="px-4 py-3 sm:px-6 sm:py-4">
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={property.image}
-                                alt=""
-                                className="h-12 w-16 shrink-0 rounded-lg object-cover"
-                              />
-                              <div className="min-w-0">
-                                <p className="line-clamp-2 text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>
-                                  {property.title}
-                                </p>
-                                <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>
-                                  {property.bedrooms} rec · {property.bathrooms} baños · {property.area} m²
-                                </p>
-                              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                <div className="flex flex-col border border-slate-200 bg-white p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Inventario
+                    </p>
+                    <TrendingUp className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-3xl font-light text-slate-900">
+                    {totalProperties}
+                  </p>
+                </div>
+
+                <div className="flex flex-col border border-slate-200 bg-white p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      En venta
+                    </p>
+                    <Activity className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-3xl font-light text-slate-900">
+                    {propertiesForSale}
+                  </p>
+                </div>
+
+                <div className="flex flex-col border border-slate-200 bg-white p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      En alquiler
+                    </p>
+                    <Briefcase className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-3xl font-light text-slate-900">
+                    {propertiesForRent}
+                  </p>
+                </div>
+
+                <div className="flex flex-col border border-slate-200 bg-white p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Valor prom.
+                    </p>
+                    <TrendingUp className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-3xl font-light text-slate-900">
+                    ${Math.round(avgPropertyPriceNum).toLocaleString("es-MX")}
+                  </p>
+                </div>
+              </div>
+
+              {/* Properties: tarjetas, lista o mapa */}
+              {propertyInventoryView === "map" && filteredProperties.length > 0 && (
+                <div className="space-y-3">
+                  {filteredProperties.some((p) => p.coordinates) ? (
+                    <Suspense fallback={adminModuleFallback("h-[min(60vh,560px)] min-h-[320px]")}>
+                      <PropertyMap
+                        properties={filteredProperties}
+                        mapHeightClassName="h-[min(60vh,560px)] min-h-[320px]"
+                      />
+                    </Suspense>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                      Ninguna propiedad del listado tiene coordenadas. Edita una ficha y guarda ubicación para verla en el mapa.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {propertyInventoryView === "cards" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {filteredProperties.map((property) => (
+                    <div key={property.id} className="group relative flex flex-col border border-slate-200 bg-white transition-colors hover:border-slate-400">
+                      {canManageInventory ? (
+                        <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => setPropertyForm({ mode: "edit", property })}
+                            className="absolute inset-0 block h-full w-full cursor-pointer p-0 text-left focus:outline-none"
+                            aria-label={`Abrir ficha: ${property.title}`}
+                          >
+                            <img
+                              src={property.image}
+                              alt=""
+                              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                            />
+                            <div className="absolute top-4 right-4">
+                              <span className="bg-white/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-900 shadow-sm">
+                                {property.status}
+                              </span>
                             </div>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
-                            {property.type}
-                          </td>
-                          <td className="max-w-[12rem] px-4 py-3 text-sm text-slate-600 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
-                            <span className="line-clamp-2">{property.location}</span>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4">
-                            <span
-                              className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${
-                                property.status === "venta"
+                          </button>
+                          <button
+                            type="button"
+                            title={property.featured ? "Quitar de la portada (inicio)" : "Destacar en la portada"}
+                            aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                            aria-pressed={Boolean(property.featured)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleTogglePropertyFeatured(property);
+                            }}
+                            className={`absolute left-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full transition-colors ${property.featured
+                              ? "bg-slate-900 text-white hover:bg-black"
+                              : "bg-white/90 text-slate-400 shadow-sm hover:text-slate-900"
+                              }`}
+                          >
+                            <Star className="h-3.5 w-3.5" strokeWidth={1.5} fill={property.featured ? "currentColor" : "none"} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+                          <img
+                            src={property.image}
+                            alt=""
+                            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                          />
+                          <div className="absolute top-4 right-4">
+                            <span className="bg-white/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-900 shadow-sm">
+                              {property.status}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-1 flex-col p-6">
+                        <span className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                          {property.type}
+                        </span>
+                        <h3 className="mb-2 text-lg font-medium leading-tight text-slate-900">{property.title}</h3>
+                        <p className="mb-5 flex items-center gap-1.5 text-sm text-slate-500">
+                          <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          {property.location}
+                        </p>
+
+                        <div className="mb-5 flex items-center gap-5 border-y border-slate-100 py-4">
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Bed className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                            <span className="text-sm font-medium">{property.bedrooms}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Bath className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                            <span className="text-sm font-medium">{property.bathrooms}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Square className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
+                            <span className="text-sm font-medium">{property.area}m²</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-auto flex items-end justify-between">
+                          <div>
+                            <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">Precio</p>
+                            <p className="text-xl font-light tracking-tight text-slate-900">
+                              ${property.price.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
+                              className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                              title="Copiar enlace público"
+                              aria-label="Copiar enlace público"
+                            >
+                              <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                            <PdfDownloadDropdown data={property} type="property" />
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/propiedades/${property.id}`)}
+                              className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                              title="Ver en el sitio"
+                            >
+                              <Eye className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                            {canManageInventory && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setPropertyForm({ mode: "edit", property })}
+                                  className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                                  title="Editar"
+                                >
+                                  <Edit className="h-4 w-4" strokeWidth={1.5} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => requestDeleteProperty(property.id)}
+                                  className="rounded p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {propertyInventoryView === "list" && filteredProperties.length > 0 && (
+                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_32px_-10px_rgba(20,28,46,0.1)] ring-1 ring-black/[0.02]">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[800px]">
+                      <thead className="border-b border-slate-200/90 bg-gradient-to-r from-slate-50/95 to-white">
+                        <tr>
+                          <th
+                            className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Propiedad
+                          </th>
+                          <th
+                            className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Tipo
+                          </th>
+                          <th
+                            className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Ubicación
+                          </th>
+                          <th
+                            className="font-heading px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Operación
+                          </th>
+                          <th
+                            className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Precio
+                          </th>
+                          <th
+                            className="font-heading px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Inicio
+                          </th>
+                          <th
+                            className="font-heading px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy/75 sm:px-6 sm:py-4"
+                            style={{ fontWeight: 600 }}
+                          >
+                            Acciones
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {filteredProperties.map((property) => (
+                          <tr key={property.id} className="transition-colors hover:bg-slate-50">
+                            <td className="px-4 py-3 sm:px-6 sm:py-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={property.image}
+                                  alt=""
+                                  className="h-12 w-16 shrink-0 rounded-lg object-cover"
+                                />
+                                <div className="min-w-0">
+                                  <p className="line-clamp-2 text-sm font-medium text-slate-900" style={{ fontWeight: 600 }}>
+                                    {property.title}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-slate-500" style={{ fontWeight: 500 }}>
+                                    {property.bedrooms} rec · {property.bathrooms} baños · {property.area} m²
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
+                              {property.type}
+                            </td>
+                            <td className="max-w-[12rem] px-4 py-3 text-sm text-slate-600 sm:px-6 sm:py-4" style={{ fontWeight: 500 }}>
+                              <span className="line-clamp-2">{property.location}</span>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4">
+                              <span
+                                className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${property.status === "venta"
                                   ? "bg-red-50 text-red-800 ring-1 ring-red-200/80"
                                   : "bg-slate-100 text-slate-800 ring-1 ring-slate-200/80"
-                              }`}
-                              style={{ fontWeight: 600 }}
-                            >
-                              {property.status === "venta" ? "Venta" : "Alquiler"}
-                            </span>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
-                            ${property.price.toLocaleString()}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-center sm:px-6 sm:py-4">
-                            <button
-                              type="button"
-                              title={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
-                              aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
-                              aria-pressed={Boolean(property.featured)}
-                              onClick={() => void handleTogglePropertyFeatured(property)}
-                              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
-                                property.featured
+                                  }`}
+                                style={{ fontWeight: 600 }}
+                              >
+                                {property.status === "venta" ? "Venta" : "Alquiler"}
+                              </span>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900 sm:px-6 sm:py-4" style={{ fontWeight: 700 }}>
+                              ${property.price.toLocaleString()}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-center sm:px-6 sm:py-4">
+                              <button
+                                type="button"
+                                title={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                                aria-label={property.featured ? "Quitar de la portada" : "Destacar en la portada"}
+                                aria-pressed={Boolean(property.featured)}
+                                onClick={() => void handleTogglePropertyFeatured(property)}
+                                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${property.featured
                                   ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
                                   : "border-slate-200 bg-white text-slate-400 hover:border-amber-200 hover:text-amber-700"
-                              }`}
-                            >
-                              <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
-                            </button>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
-                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                title="Copiar enlace público"
-                                aria-label="Copiar enlace público"
+                                  }`}
                               >
-                                <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                                <Star className="h-4 w-4" strokeWidth={2} fill={property.featured ? "currentColor" : "none"} />
                               </button>
-                              <PdfDownloadDropdown data={property} type="property" />
-                              <button
-                                type="button"
-                                onClick={() => navigate(`/propiedades/${property.id}`)}
-                                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                title="Ver en el sitio"
-                              >
-                                <Eye className="h-4 w-4" strokeWidth={1.5} />
-                              </button>
-                              {canManageInventory && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setPropertyForm({ mode: "edit", property })}
-                                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
-                                    title="Editar"
-                                  >
-                                    <Edit className="h-4 w-4" strokeWidth={1.5} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => requestDeleteProperty(property.id)}
-                                    className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                                    title="Eliminar"
-                                  >
-                                    <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {filteredProperties.length === 0 && (
-              <div className="bg-white border border-slate-200 rounded-lg p-20 text-center">
-                <div className="max-w-sm mx-auto">
-                  <div className="w-16 h-16 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center mx-auto mb-6">
-                    <Home className="w-8 h-8 text-slate-400" strokeWidth={1.5} />
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6 sm:py-4">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => copyPublicPageUrl(`/propiedades/${property.id}`)}
+                                  className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                  title="Copiar enlace público"
+                                  aria-label="Copiar enlace público"
+                                >
+                                  <Link2 className="h-4 w-4" strokeWidth={1.5} />
+                                </button>
+                                <PdfDownloadDropdown data={property} type="property" />
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/propiedades/${property.id}`)}
+                                  className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                  title="Ver en el sitio"
+                                >
+                                  <Eye className="h-4 w-4" strokeWidth={1.5} />
+                                </button>
+                                {canManageInventory && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPropertyForm({ mode: "edit", property })}
+                                      className="rounded-lg p-2 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                                      title="Editar"
+                                    >
+                                      <Edit className="h-4 w-4" strokeWidth={1.5} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => requestDeleteProperty(property.id)}
+                                      className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2" style={{ fontWeight: 600 }}>
-                    {properties.length === 0 ? "No hay propiedades" : "Sin resultados"}
-                  </h3>
-                  <p className="text-sm text-slate-600 mb-6" style={{ fontWeight: 500 }}>
-                    {properties.length === 0
-                      ? "Comienza agregando tu primera propiedad al catálogo"
-                      : "Prueba con otro término de búsqueda."}
-                  </p>
-                  {properties.length === 0 && canManageInventory && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                      setNewPropertyDraftId(crypto.randomUUID());
-                      setPropertyForm({ mode: "create", property: null });
-                    }}
-                      className="inline-flex items-center gap-2 rounded-lg bg-[#C8102E] px-6 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
-                      style={{ fontWeight: 600 }}
-                    >
-                      <Plus className="h-4.5 w-4.5" strokeWidth={2} />
-                      Nueva Propiedad
-                    </button>
-                  )}
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+
+              {filteredProperties.length === 0 && (
+                <div className="bg-white border border-slate-200 rounded-lg p-20 text-center">
+                  <div className="max-w-sm mx-auto">
+                    <div className="w-16 h-16 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center mx-auto mb-6">
+                      <Home className="w-8 h-8 text-slate-400" strokeWidth={1.5} />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2" style={{ fontWeight: 600 }}>
+                      {properties.length === 0 ? "No hay propiedades" : "Sin resultados"}
+                    </h3>
+                    <p className="text-sm text-slate-600 mb-6" style={{ fontWeight: 500 }}>
+                      {properties.length === 0
+                        ? "Comienza agregando tu primera propiedad al catálogo"
+                        : "Prueba con otro término de búsqueda."}
+                    </p>
+                    {properties.length === 0 && canManageInventory && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewPropertyDraftId(crypto.randomUUID());
+                          setPropertyForm({ mode: "create", property: null });
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[#C8102E] px-6 py-2.5 font-medium text-white transition-all hover:bg-[#a00d25]"
+                        style={{ fontWeight: 600 }}
+                      >
+                        <Plus className="h-4.5 w-4.5" strokeWidth={2} />
+                        Nueva Propiedad
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
 
         {activeTab === "developments" &&
@@ -4489,7 +4437,7 @@ export function AdminWorkspace() {
               onSave={handleSaveDevelopment}
               onDelete={handleDeleteDevelopment}
               onEditProperty={(property) => {
-                setActiveTab("properties");
+                goTab("properties");
                 setPropertyForm({ mode: "edit", property });
               }}
             />
@@ -4500,646 +4448,646 @@ export function AdminWorkspace() {
           (companyModuleLoading ? (
             <AdminCompanySkeleton />
           ) : (
-          <div className="space-y-5">
-            <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-              <div
-                className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-                aria-hidden
-              />
-              <div
-                className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-                aria-hidden
-              />
-              <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-                <p
-                  className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
-                  style={{ fontWeight: 600 }}
-                >
-                  Centro de administración
-                </p>
-                <h2 className="font-heading mt-2 text-2xl tracking-tight text-brand-navy sm:text-3xl" style={{ fontWeight: 700 }}>
-                  {isGroupLeader ? "Pipeline de ventas" : "Mi empresa"}
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-                  {isGroupLeader
-                    ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
-                    : isAdmin
-                      ? "Equipo, sitio, embudo comercial y ajustes. Como administrador puedes abrir el pipeline de cada grupo y ajustar columnas, orden y colores."
-                      : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
-                </p>
-              </div>
-            </div>
-
-            {!isGroupLeader && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
-              {(
-                [
-                  {
-                    id: "users" as const,
-                    title: "Equipo y accesos",
-                    desc: "Usuarios del CRM, roles y permisos.",
-                    icon: Users,
-                  },
-                  {
-                    id: "leadStages" as const,
-                    title: "Pipeline de ventas",
-                    desc: "Como administrador, revisa y edita el embudo de cada equipo; el líder solo el suyo.",
-                    icon: LayoutGrid,
-                  },
-                  {
-                    id: "settings" as const,
-                    title: "Configuración",
-                    desc: "Espacio de trabajo, respaldos y accesos.",
-                    icon: Settings,
-                  },
-                ] as const
-              ).map((item) => {
-                const active = companySubtab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => goTab("company", item.id)}
-                    className={cn(
-                      "group flex w-full flex-row items-center gap-3 rounded-xl border px-3 py-2 text-left transition-all duration-200",
-                      active
-                        ? "border-primary/35 bg-gradient-to-br from-primary/[0.07] via-white to-white shadow-[0_12px_32px_-16px_rgba(200,16,46,0.25)] ring-2 ring-primary/15"
-                        : "border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-md",
-                    )}
+            <div className="space-y-5">
+              <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
+                <div
+                  className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
+                  aria-hidden
+                />
+                <div
+                  className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
+                  aria-hidden
+                />
+                <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
+                  <p
+                    className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
+                    style={{ fontWeight: 600 }}
                   >
-                    <div
+                    Centro de administración
+                  </p>
+                  <h2 className="font-heading mt-2 text-2xl tracking-tight text-brand-navy sm:text-3xl" style={{ fontWeight: 700 }}>
+                    {isGroupLeader ? "Pipeline de ventas" : "Mi empresa"}
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
+                    {isGroupLeader
+                      ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
+                      : isAdmin
+                        ? "Equipo, sitio, embudo comercial y ajustes. Como administrador puedes abrir el pipeline de cada grupo y ajustar columnas, orden y colores."
+                        : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
+                  </p>
+                </div>
+              </div>
+
+              {!isGroupLeader && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
+                {(
+                  [
+                    {
+                      id: "users" as const,
+                      title: "Equipo y accesos",
+                      desc: "Usuarios del CRM, roles y permisos.",
+                      icon: Users,
+                    },
+                    {
+                      id: "leadStages" as const,
+                      title: "Pipeline de ventas",
+                      desc: "Como administrador, revisa y edita el embudo de cada equipo; el líder solo el suyo.",
+                      icon: LayoutGrid,
+                    },
+                    {
+                      id: "settings" as const,
+                      title: "Configuración",
+                      desc: "Espacio de trabajo, respaldos y accesos.",
+                      icon: Settings,
+                    },
+                  ] as const
+                ).map((item) => {
+                  const active = companySubtab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => goTab("company", item.id)}
                       className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                        "group flex w-full flex-row items-center gap-3 rounded-xl border px-3 py-2 text-left transition-all duration-200",
                         active
-                          ? "border-primary/25 bg-primary/10 text-primary"
-                          : "border-slate-200/90 bg-slate-50 text-slate-600 group-hover:border-slate-300 group-hover:bg-white",
+                          ? "border-primary/35 bg-gradient-to-br from-primary/[0.07] via-white to-white shadow-[0_12px_32px_-16px_rgba(200,16,46,0.25)] ring-2 ring-primary/15"
+                          : "border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-md",
                       )}
                     >
-                      <item.icon className="h-4 w-4" strokeWidth={active ? 2 : 1.75} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p
+                      <div
                         className={cn(
-                          "font-heading text-sm leading-tight",
-                          active ? "text-brand-navy" : "text-slate-900",
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                          active
+                            ? "border-primary/25 bg-primary/10 text-primary"
+                            : "border-slate-200/90 bg-slate-50 text-slate-600 group-hover:border-slate-300 group-hover:bg-white",
                         )}
-                        style={{ fontWeight: 600 }}
                       >
-                        {item.title}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                        {item.desc}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>}
+                        <item.icon className="h-4 w-4" strokeWidth={active ? 2 : 1.75} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            "font-heading text-sm leading-tight",
+                            active ? "text-brand-navy" : "text-slate-900",
+                          )}
+                          style={{ fontWeight: 600 }}
+                        >
+                          {item.title}
+                        </p>
+                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
+                          {item.desc}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>}
 
-            <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
-              {companySubtab === "users" && user && (
-                <div className="p-5 md:p-8">
-                  <AdminUsersManager
-                    currentUser={user}
-                    users={users}
-                    leads={leads}
-                    properties={properties}
-                    developments={developments}
-                    customKanbanStages={customKanbanStages}
-                    userGroups={userGroups}
-                    onUserGroupsChange={handleUserGroupsChange}
-                    onViewLead={(lead) => {
-                      goTab("leads");
-                      openLeadDetail(lead, "view");
-                    }}
-                    onCreateUser={(input) => createUser(input, user.name)}
-                    onUpdateUser={(id, input) => updateUser(id, input, user.name)}
-                    onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
-                    onUpdatePermissions={(id, role, permissions) =>
-                      updateUserPermissions(id, role, permissions, user.name)
-                    }
-                    onArchive={(id) => archiveUser(id, user.name)}
-                    onReactivate={(id) => reactivateUser(id, user.name)}
-                    onDelete={(id) => deleteUser(id, user.name)}
-                    onSendMessageNavigate={goToMessagesWith}
-                    focusUser={usersPanelFocus}
-                    onFocusUserConsumed={handleUsersPanelFocusConsumed}
-                    onUserDetailClosed={handleUserDetailClosed}
-                  />
-                </div>
-              )}
-              {companySubtab === "site" && canEditSite && (
-                <div className="flex h-[calc(100dvh-1.25rem)] max-h-[calc(100dvh-1.25rem)] min-h-0 w-full flex-col overflow-hidden p-2 sm:p-2.5 md:p-3 lg:h-[calc(100dvh-0.75rem)] lg:max-h-[calc(100dvh-0.75rem)]">
-                  <Suspense fallback={adminModuleFallback()}>
-                    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-                      <AdminSiteEditor />
-                    </div>
-                  </Suspense>
-                </div>
-              )}
-              {companySubtab === "settings" && (
-                <AdminCompanySettings
-                  counts={{
-                    leads: leads.length,
-                    properties: properties.length,
-                    developments: developments.length,
-                    users: users.length,
-                    agenda: (() => {
-                      try {
-                        const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
-                        if (!raw) return 0;
-                        const p = JSON.parse(raw) as unknown;
-                        return Array.isArray(p) ? p.length : 0;
-                      } catch {
-                        return 0;
+              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
+                {companySubtab === "users" && user && (
+                  <div className="p-5 md:p-8">
+                    <AdminUsersManager
+                      currentUser={user}
+                      users={users}
+                      leads={leads}
+                      properties={properties}
+                      developments={developments}
+                      customKanbanStages={customKanbanStages}
+                      userGroups={userGroups}
+                      onUserGroupsChange={handleUserGroupsChange}
+                      onViewLead={(lead) => {
+                        goTab("leads");
+                        openLeadDetail(lead, "view");
+                      }}
+                      onCreateUser={(input) => createUser(input, user.name)}
+                      onUpdateUser={(id, input) => updateUser(id, input, user.name)}
+                      onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
+                      onUpdatePermissions={(id, role, permissions) =>
+                        updateUserPermissions(id, role, permissions, user.name)
                       }
-                    })(),
-                  }}
-                  onNavigate={(spec) => {
-                    if (spec.type === "tab") {
-                      goTab(spec.tab);
-                    } else {
-                      goTab("company", spec.sub);
-                    }
-                  }}
-                />
-              )}
-              {companySubtab === "leadStages" && (
-                <div className="flex flex-col gap-6 p-5 md:p-8">
-                  {isAdmin && (
-                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
-                      <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4 md:px-6">
-                        <h4
-                          className="flex items-center gap-2 text-base text-brand-navy"
-                          style={{ fontWeight: 700 }}
-                        >
-                          <LayoutGrid className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
-                          Organización del pipeline por equipo
-                        </h4>
-                        <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                          Selecciona el grupo cuyo embudo quieres revisar o editar. Los cambios se guardan para ese
-                          equipo y se reflejan en el CRM cuando ese grupo está activo en la vista de leads.
-                        </p>
+                      onArchive={(id) => archiveUser(id, user.name)}
+                      onReactivate={(id) => reactivateUser(id, user.name)}
+                      onDelete={(id) => deleteUser(id, user.name)}
+                      onSendMessageNavigate={goToMessagesWith}
+                      focusUser={usersPanelFocus}
+                      onFocusUserConsumed={handleUsersPanelFocusConsumed}
+                      onUserDetailClosed={handleUserDetailClosed}
+                    />
+                  </div>
+                )}
+                {companySubtab === "site" && canEditSite && (
+                  <div className="flex h-[calc(100dvh-1.25rem)] max-h-[calc(100dvh-1.25rem)] min-h-0 w-full flex-col overflow-hidden p-2 sm:p-2.5 md:p-3 lg:h-[calc(100dvh-0.75rem)] lg:max-h-[calc(100dvh-0.75rem)]">
+                    <Suspense fallback={adminModuleFallback()}>
+                      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+                        <AdminSiteEditor />
                       </div>
-                      <div className="p-5 md:px-6 md:pb-6">
-                        <label
-                          htmlFor="admin-pipeline-group-context"
-                          className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
-                        >
-                          Equipo / contexto del embudo
-                        </label>
-                        <div className="relative min-h-[2.75rem]">
-                          <Users
-                            className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                            strokeWidth={1.75}
-                          />
-                          <select
-                            id="admin-pipeline-group-context"
-                            value={activePipelineGroupId}
-                            onChange={(e) => setActivePipelineGroupId(e.target.value)}
-                            className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                            style={{ fontWeight: 500 }}
+                    </Suspense>
+                  </div>
+                )}
+                {companySubtab === "settings" && (
+                  <AdminCompanySettings
+                    counts={{
+                      leads: leads.length,
+                      properties: properties.length,
+                      developments: developments.length,
+                      users: users.length,
+                      agenda: (() => {
+                        try {
+                          const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
+                          if (!raw) return 0;
+                          const p = JSON.parse(raw) as unknown;
+                          return Array.isArray(p) ? p.length : 0;
+                        } catch {
+                          return 0;
+                        }
+                      })(),
+                    }}
+                    onNavigate={(spec) => {
+                      if (spec.type === "tab") {
+                        goTab(spec.tab);
+                      } else {
+                        goTab("company", spec.sub);
+                      }
+                    }}
+                  />
+                )}
+                {companySubtab === "leadStages" && (
+                  <div className="flex flex-col gap-6 p-5 md:p-8">
+                    {isAdmin && (
+                      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
+                        <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4 md:px-6">
+                          <h4
+                            className="flex items-center gap-2 text-base text-brand-navy"
+                            style={{ fontWeight: 700 }}
                           >
-                            {allowedPipelineGroupIds.map((id) => (
-                              <option key={id} value={id}>
-                                Grupo: {pipelineGroupLabel(id)}
-                              </option>
-                            ))}
-                          </select>
-                          <span
-                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                            aria-hidden
-                          >
-                            <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                          </span>
+                            <LayoutGrid className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                            Organización del pipeline por equipo
+                          </h4>
+                          <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                            Selecciona el grupo cuyo embudo quieres revisar o editar. Los cambios se guardan para ese
+                            equipo y se reflejan en el CRM cuando ese grupo está activo en la vista de leads.
+                          </p>
                         </div>
-                      </div>
-                    </section>
-                  )}
+                        <div className="p-5 md:px-6 md:pb-6">
+                          <label
+                            htmlFor="admin-pipeline-group-context"
+                            className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                          >
+                            Equipo / contexto del embudo
+                          </label>
+                          <div className="relative min-h-[2.75rem]">
+                            <Users
+                              className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                              strokeWidth={1.75}
+                            />
+                            <select
+                              id="admin-pipeline-group-context"
+                              value={activePipelineGroupId}
+                              onChange={(e) => setActivePipelineGroupId(e.target.value)}
+                              className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                              style={{ fontWeight: 500 }}
+                            >
+                              {allowedPipelineGroupIds.map((id) => (
+                                <option key={id} value={id}>
+                                  Grupo: {pipelineGroupLabel(id)}
+                                </option>
+                              ))}
+                            </select>
+                            <span
+                              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                              aria-hidden
+                            >
+                              <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                            </span>
+                          </div>
+                        </div>
+                      </section>
+                    )}
 
-                  {isAdmin && pipelineCopyDestOptions.length > 0 && (
-                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
-                      <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4 md:px-6">
-                        <h4
-                          className="flex items-center gap-2 text-base text-brand-navy"
-                          style={{ fontWeight: 700 }}
-                        >
-                          <Copy className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
-                          Duplicar pipeline entre equipos
-                        </h4>
-                        <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                          Copia etapas, orden y colores de un embudo a otro. Reemplaza la configuración del pipeline del
-                          equipo de destino; no mueve ni cambia los leads.
-                        </p>
-                      </div>
-                      <div className="space-y-4 p-5 md:px-6 md:pb-6">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-1.5">
-                            <label
-                              htmlFor="pipeline-copy-from"
-                              className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
-                            >
-                              Copiar pipeline desde
-                            </label>
-                            <div className="relative min-h-[2.75rem]">
-                              <Copy
-                                className="pointer-events-none absolute left-4 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
-                                strokeWidth={1.75}
-                                aria-hidden
-                              />
-                              <select
-                                id="pipeline-copy-from"
-                                value={pipelineCopyFrom}
-                                onChange={(e) => setPipelineCopyFrom(e.target.value)}
-                                className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                style={{ fontWeight: 500 }}
+                    {isAdmin && pipelineCopyDestOptions.length > 0 && (
+                      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_-12px_rgba(20,28,46,0.12)] ring-1 ring-black/[0.03]">
+                        <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4 md:px-6">
+                          <h4
+                            className="flex items-center gap-2 text-base text-brand-navy"
+                            style={{ fontWeight: 700 }}
+                          >
+                            <Copy className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                            Duplicar pipeline entre equipos
+                          </h4>
+                          <p className="mt-1 text-sm text-slate-500" style={{ fontWeight: 500 }}>
+                            Copia etapas, orden y colores de un embudo a otro. Reemplaza la configuración del pipeline del
+                            equipo de destino; no mueve ni cambia los leads.
+                          </p>
+                        </div>
+                        <div className="space-y-4 p-5 md:px-6 md:pb-6">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <label
+                                htmlFor="pipeline-copy-from"
+                                className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
                               >
-                                <option value="">— Elige el equipo de origen —</option>
-                                {pipelineCopySourceOptions.map((id) => (
-                                  <option key={id} value={id}>
-                                    {pipelineGroupLabel(id)}
-                                  </option>
-                                ))}
-                              </select>
-                              <span
-                                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                                aria-hidden
+                                Copiar pipeline desde
+                              </label>
+                              <div className="relative min-h-[2.75rem]">
+                                <Copy
+                                  className="pointer-events-none absolute left-4 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-400"
+                                  strokeWidth={1.75}
+                                  aria-hidden
+                                />
+                                <select
+                                  id="pipeline-copy-from"
+                                  value={pipelineCopyFrom}
+                                  onChange={(e) => setPipelineCopyFrom(e.target.value)}
+                                  className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                  style={{ fontWeight: 500 }}
+                                >
+                                  <option value="">— Elige el equipo de origen —</option>
+                                  {pipelineCopySourceOptions.map((id) => (
+                                    <option key={id} value={id}>
+                                      {pipelineGroupLabel(id)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span
+                                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                  aria-hidden
+                                >
+                                  <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label
+                                htmlFor="pipeline-copy-to"
+                                className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
                               >
-                                <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                              </span>
+                                Aplicar en (destino)
+                              </label>
+                              <div className="relative min-h-[2.75rem]">
+                                <Users
+                                  className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
+                                  strokeWidth={1.75}
+                                />
+                                <select
+                                  id="pipeline-copy-to"
+                                  value={pipelineCopyTo}
+                                  onChange={(e) => setPipelineCopyTo(e.target.value)}
+                                  className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                  style={{ fontWeight: 500 }}
+                                >
+                                  <option value="">— Elige el equipo de destino —</option>
+                                  {pipelineCopyDestOptions.map((id) => (
+                                    <option key={id} value={id}>
+                                      {pipelineGroupLabel(id)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span
+                                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                  aria-hidden
+                                >
+                                  <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                                </span>
+                              </div>
                             </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <label
-                              htmlFor="pipeline-copy-to"
-                              className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                            <button
+                              type="button"
+                              onClick={handleDuplicatePipelineToTeam}
+                              disabled={!canSubmitPipelineCopy}
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                              style={{ fontWeight: 600 }}
                             >
-                              Aplicar en (destino)
-                            </label>
-                            <div className="relative min-h-[2.75rem]">
-                              <Users
-                                className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400"
-                                strokeWidth={1.75}
-                              />
-                              <select
-                                id="pipeline-copy-to"
-                                value={pipelineCopyTo}
-                                onChange={(e) => setPipelineCopyTo(e.target.value)}
-                                className="h-full min-h-[2.75rem] w-full appearance-none rounded-2xl border border-slate-200/90 bg-white py-3 pl-12 pr-10 text-sm text-brand-navy shadow-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                style={{ fontWeight: 500 }}
-                              >
-                                <option value="">— Elige el equipo de destino —</option>
-                                {pipelineCopyDestOptions.map((id) => (
-                                  <option key={id} value={id}>
-                                    {pipelineGroupLabel(id)}
-                                  </option>
-                                ))}
-                              </select>
-                              <span
-                                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                                aria-hidden
-                              >
-                                <ChevronDown className="h-4 w-4" strokeWidth={2} />
-                              </span>
-                            </div>
+                              <Copy className="h-4 w-4" strokeWidth={2} />
+                              Duplicar pipeline
+                            </button>
+                            {canSubmitPipelineCopy && (
+                              <p className="text-xs text-slate-500 sm:pb-0.5" style={{ fontWeight: 500 }}>
+                                Se reemplaza el embudo de «{pipelineGroupLabel(pipelineCopyTo)}».
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                      </section>
+                    )}
+
+                    {isGroupLeader && (
+                      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_24px_50px_-24px_rgba(20,28,46,0.26)]">
+                        <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4">
+                          <h4 className="flex items-center gap-2 text-base text-brand-navy" style={{ fontWeight: 700 }}>
+                            <Users className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
+                            Tus grupos y asesores
+                          </h4>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Selecciona un asesor para abrir su detalle o cambia de grupo para configurar su pipeline.
+                          </p>
+                        </div>
+                        {pipelineGroupsVisibleToLeader.length === 0 ? (
+                          <div className="p-5">
+                            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                              No tienes grupos asignados por ahora. Contacta a un administrador para vincular grupos.
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid gap-3 p-5">
+                            {pipelineGroupsVisibleToLeader.map((group) => {
+                              const advisors = advisorsByGroupId[group.id] ?? [];
+                              const isActiveGroup = activePipelineGroupId === group.id;
+                              const isExpanded = expandedLeaderGroupId === group.id;
+                              return (
+                                <article
+                                  key={group.id}
+                                  className={cn(
+                                    "rounded-xl border bg-white p-4 transition-shadow",
+                                    isActiveGroup
+                                      ? "border-primary/40 shadow-[0_14px_30px_-20px_rgba(199,34,56,0.7)] ring-1 ring-primary/20"
+                                      : "border-slate-200/80 shadow-[0_8px_24px_-16px_rgba(20,28,46,0.2)]"
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedLeaderGroupId((prev) => (prev === group.id ? null : group.id))
+                                      }
+                                      className="flex min-w-0 items-center gap-2 text-left"
+                                    >
+                                      <ChevronDown
+                                        className={cn("h-4 w-4 text-slate-500 transition-transform", isExpanded && "rotate-180")}
+                                        strokeWidth={1.9}
+                                      />
+                                      <p className="truncate text-lg text-brand-navy" style={{ fontWeight: 700 }}>
+                                        {group.name}
+                                      </p>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActivePipelineGroupId(group.id)}
+                                      className={cn(
+                                        "shrink-0 rounded-md border px-2.5 py-1 text-[11px] transition",
+                                        isActiveGroup
+                                          ? "border-primary/35 bg-primary/10 text-primary"
+                                          : "border-slate-200 bg-slate-50 text-slate-600 hover:border-primary/25 hover:text-primary"
+                                      )}
+                                      style={{ fontWeight: 600 }}
+                                    >
+                                      {isActiveGroup ? "Grupo activo" : "Activar grupo"}
+                                    </button>
+                                  </div>
+
+                                  {isExpanded ? (
+                                    <div className="mt-3 border-t border-slate-200/80 pt-3">
+                                      <p className="mb-2 text-xs text-slate-500" style={{ fontWeight: 600 }}>
+                                        {advisors.length} asesor{advisors.length === 1 ? "" : "es"}
+                                      </p>
+                                      {advisors.length > 0 ? (
+                                        <div className="space-y-2">
+                                          {advisors.map((advisor) => (
+                                            <button
+                                              type="button"
+                                              key={advisor.id}
+                                              onClick={() => handleViewTeamMember(advisor.id, advisor.name)}
+                                              className="flex w-full items-center gap-2 rounded-lg border border-slate-200/90 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                                            >
+                                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/12 text-[11px] text-primary">
+                                                {(advisor.name || advisor.email || "?").trim().charAt(0).toUpperCase()}
+                                              </span>
+                                              <span className="truncate" style={{ fontWeight: 600 }}>
+                                                {advisor.name || advisor.email}
+                                              </span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-slate-500">Sin asesores activos en este grupo.</span>
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </article>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {!activePipelineGroupId ? (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600">
+                        No hay un grupo de trabajo asignado para configurar pipeline.
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                        <div className="max-w-2xl">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-primary" style={{ fontWeight: 600 }}>
+                            Embudo comercial
+                          </p>
+                          <h3 className="mt-1 text-2xl text-brand-navy" style={{ fontWeight: 600 }}>
+                            Pipeline de leads
+                          </h3>
+                          <p className="mt-2 text-sm text-slate-600" style={{ fontWeight: 500 }}>
+                            Cada equipo tiene sus propias columnas. El administrador puede crearlas, ordenarlas y colorearlas
+                            en cualquier grupo; el líder de grupo solo en los suyos. Los cambios aplican al tablero cuando
+                            ese grupo está seleccionado en el CRM (o aquí arriba, si eres administrador).
+                          </p>
+                        </div>
+                        <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:max-w-xl">
+                          <input
+                            type="text"
+                            value={stageDraftLabel}
+                            onChange={(e) => setStageDraftLabel(e.target.value)}
+                            placeholder="Nueva columna del pipeline"
+                            className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                            disabled={!canConfigureActivePipeline}
+                          />
                           <button
                             type="button"
-                            onClick={handleDuplicatePipelineToTeam}
-                            disabled={!canSubmitPipelineCopy}
-                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => {
+                              const label = stageDraftLabel.trim();
+                              if (!label) return;
+                              handleAddKanbanStage(label);
+                              setStageDraftLabel("");
+                            }}
+                            disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm text-white transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
                             style={{ fontWeight: 600 }}
                           >
-                            <Copy className="h-4 w-4" strokeWidth={2} />
-                            Duplicar pipeline
+                            <Plus className="h-4 w-4" strokeWidth={2} />
+                            Agregar columna
                           </button>
-                          {canSubmitPipelineCopy && (
-                            <p className="text-xs text-slate-500 sm:pb-0.5" style={{ fontWeight: 500 }}>
-                              Se reemplaza el embudo de «{pipelineGroupLabel(pipelineCopyTo)}».
-                            </p>
-                          )}
                         </div>
                       </div>
-                    </section>
-                  )}
+                    )}
 
-                  {isGroupLeader && (
-                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_24px_50px_-24px_rgba(20,28,46,0.26)]">
-                      <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 px-5 py-4">
-                        <h4 className="flex items-center gap-2 text-base text-brand-navy" style={{ fontWeight: 700 }}>
-                          <Users className="h-4 w-4 text-primary" strokeWidth={1.9} aria-hidden />
-                          Tus grupos y asesores
-                        </h4>
+                    {activePipelineGroupId && <section className="rounded-2xl border border-slate-200/70 bg-slate-50/40 p-5">
+                      <div>
+                        <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
                         <p className="mt-1 text-sm text-slate-500">
-                          Selecciona un asesor para abrir su detalle o cambia de grupo para configurar su pipeline.
+                          Arrastra desde el ícono ⋮⋮ de cada fila para ordenar las columnas del Kanban (los botones y el selector de color no inician el arrastre). Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
                         </p>
                       </div>
-                      {pipelineGroupsVisibleToLeader.length === 0 ? (
-                        <div className="p-5">
-                          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
-                            No tienes grupos asignados por ahora. Contacta a un administrador para vincular grupos.
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="grid gap-3 p-5">
-                          {pipelineGroupsVisibleToLeader.map((group) => {
-                            const advisors = advisorsByGroupId[group.id] ?? [];
-                            const isActiveGroup = activePipelineGroupId === group.id;
-                            const isExpanded = expandedLeaderGroupId === group.id;
-                            return (
-                              <article
-                                key={group.id}
-                                className={cn(
-                                  "rounded-xl border bg-white p-4 transition-shadow",
-                                  isActiveGroup
-                                    ? "border-primary/40 shadow-[0_14px_30px_-20px_rgba(199,34,56,0.7)] ring-1 ring-primary/20"
-                                    : "border-slate-200/80 shadow-[0_8px_24px_-16px_rgba(20,28,46,0.2)]"
-                                )}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setExpandedLeaderGroupId((prev) => (prev === group.id ? null : group.id))
-                                    }
-                                    className="flex min-w-0 items-center gap-2 text-left"
-                                  >
-                                    <ChevronDown
-                                      className={cn("h-4 w-4 text-slate-500 transition-transform", isExpanded && "rotate-180")}
-                                      strokeWidth={1.9}
-                                    />
-                                    <p className="truncate text-lg text-brand-navy" style={{ fontWeight: 700 }}>
-                                      {group.name}
-                                    </p>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActivePipelineGroupId(group.id)}
-                                    className={cn(
-                                      "shrink-0 rounded-md border px-2.5 py-1 text-[11px] transition",
-                                      isActiveGroup
-                                        ? "border-primary/35 bg-primary/10 text-primary"
-                                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-primary/25 hover:text-primary"
-                                    )}
-                                    style={{ fontWeight: 600 }}
-                                  >
-                                    {isActiveGroup ? "Grupo activo" : "Activar grupo"}
-                                  </button>
-                                </div>
 
-                                {isExpanded ? (
-                                  <div className="mt-3 border-t border-slate-200/80 pt-3">
-                                    <p className="mb-2 text-xs text-slate-500" style={{ fontWeight: 600 }}>
-                                      {advisors.length} asesor{advisors.length === 1 ? "" : "es"}
-                                    </p>
-                                    {advisors.length > 0 ? (
-                                      <div className="space-y-2">
-                                        {advisors.map((advisor) => (
-                                          <button
-                                            type="button"
-                                            key={advisor.id}
-                                            onClick={() => handleViewTeamMember(advisor.id, advisor.name)}
-                                            className="flex w-full items-center gap-2 rounded-lg border border-slate-200/90 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
-                                          >
-                                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/12 text-[11px] text-primary">
-                                              {(advisor.name || advisor.email || "?").trim().charAt(0).toUpperCase()}
-                                            </span>
-                                            <span className="truncate" style={{ fontWeight: 600 }}>
-                                              {advisor.name || advisor.email}
-                                            </span>
-                                          </button>
-                                        ))}
+                      <DndProvider backend={HTML5Backend}>
+                        <div className="mt-4 space-y-3">
+                          {leadColumnStatuses.map((stageId, index) => {
+                            const stageLabel = resolveStatusLabel(stageId);
+                            const isEditing = editingStageId === stageId;
+                            const leadsInStage = leads.filter(
+                              (lead) =>
+                                lead.status === stageId && lead.pipelineGroupId === activePipelineGroupId
+                            ).length;
+
+                            return (
+                              <PipelineStageReorderRow
+                                key={stageId}
+                                index={index}
+                                moveRow={handleReorderPipelineRows}
+                                canDrag={canConfigureActivePipeline}
+                              >
+                                {(connectDragHandle) => (
+                                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4">
+                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                      {canConfigureActivePipeline && (
+                                        <div
+                                          ref={connectDragHandle}
+                                          className="flex shrink-0 cursor-grab touch-none items-center justify-center rounded-lg py-1 text-slate-400 hover:bg-slate-200/60 hover:text-slate-600 active:cursor-grabbing lg:pt-0.5"
+                                          title="Arrastrar para reordenar columnas"
+                                          aria-label={`Arrastrar para reordenar: ${stageLabel}`}
+                                        >
+                                          <GripVertical className="h-5 w-5" strokeWidth={1.75} />
+                                        </div>
+                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        {isEditing ? (
+                                          <input
+                                            type="text"
+                                            value={stageDraftLabel}
+                                            onChange={(e) => setStageDraftLabel(e.target.value)}
+                                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                                            disabled={!canConfigureActivePipeline}
+                                          />
+                                        ) : (
+                                          <>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <p className="text-sm text-brand-navy" style={{ fontWeight: 600 }}>
+                                                {stageLabel}
+                                              </p>
+                                            </div>
+                                            <p className="mt-1 text-xs text-slate-500">
+                                              Clave: {stageId} · {leadsInStage} lead{leadsInStage === 1 ? "" : "s"} en esta etapa
+                                            </p>
+                                          </>
+                                        )}
                                       </div>
-                                    ) : (
-                                      <span className="text-xs text-slate-500">Sin asesores activos en este grupo.</span>
-                                    )}
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {canConfigureActivePipeline && !isEditing && (
+                                          <label className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm">
+                                            Color columna
+                                            <input
+                                              type="color"
+                                              value={resolveStageHex(stageId)}
+                                              onChange={(e) => {
+                                                const hex = e.target.value;
+                                                const colorKey = normalizeLeadPipelineStatus(stageId);
+                                                setPipelineByGroup((map) => {
+                                                  const cur =
+                                                    map[activePipelineGroupId] ??
+                                                    createEmptyGroupPipelineSnapshot();
+                                                  const nextColors = { ...cur.stageColors };
+                                                  for (const k of Object.keys(nextColors)) {
+                                                    if (
+                                                      k !== colorKey &&
+                                                      k.toLowerCase() === colorKey.toLowerCase()
+                                                    ) {
+                                                      delete nextColors[k];
+                                                    }
+                                                  }
+                                                  nextColors[colorKey] = hex;
+                                                  return {
+                                                    ...map,
+                                                    [activePipelineGroupId]: {
+                                                      ...cur,
+                                                      stageColors: nextColors,
+                                                    },
+                                                  };
+                                                });
+                                              }}
+                                              className="h-8 w-11 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+                                              title="Acento visual en Kanban, vista lista y chips de estado"
+                                              aria-label={`Color de columna para ${stageLabel}`}
+                                            />
+                                          </label>
+                                        )}
+                                        {isEditing ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const label = stageDraftLabel.trim();
+                                                if (!label) return;
+                                                handleUpdateKanbanStage(stageId, label);
+                                                setEditingStageId(null);
+                                                setStageDraftLabel("");
+                                              }}
+                                              disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
+                                              className="inline-flex items-center rounded-lg bg-brand-navy px-3 py-2 text-xs text-white transition hover:bg-[#1e2a45] disabled:cursor-not-allowed disabled:opacity-50"
+                                              style={{ fontWeight: 600 }}
+                                            >
+                                              Guardar
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingStageId(null);
+                                                setStageDraftLabel("");
+                                              }}
+                                              className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50"
+                                              style={{ fontWeight: 600 }}
+                                            >
+                                              Cancelar
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingStageId(stageId);
+                                                setStageDraftLabel(stageLabel);
+                                              }}
+                                              disabled={!canConfigureActivePipeline}
+                                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                              style={{ fontWeight: 600 }}
+                                            >
+                                              <Edit className="h-3.5 w-3.5" strokeWidth={1.8} />
+                                              Editar
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => requestDeletePipelineStage(stageId, stageLabel)}
+                                              disabled={!canConfigureActivePipeline}
+                                              className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                              style={{ fontWeight: 600 }}
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                                              Eliminar
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                ) : null}
-                              </article>
+                                )}
+                              </PipelineStageReorderRow>
                             );
                           })}
                         </div>
-                      )}
-                    </section>
-                  )}
-
-                  {!activePipelineGroupId ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600">
-                      No hay un grupo de trabajo asignado para configurar pipeline.
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="max-w-2xl">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-primary" style={{ fontWeight: 600 }}>
-                        Embudo comercial
-                      </p>
-                      <h3 className="mt-1 text-2xl text-brand-navy" style={{ fontWeight: 600 }}>
-                        Pipeline de leads
-                      </h3>
-                      <p className="mt-2 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                        Cada equipo tiene sus propias columnas. El administrador puede crearlas, ordenarlas y colorearlas
-                        en cualquier grupo; el líder de grupo solo en los suyos. Los cambios aplican al tablero cuando
-                        ese grupo está seleccionado en el CRM (o aquí arriba, si eres administrador).
-                      </p>
-                    </div>
-                    <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:max-w-xl">
-                      <input
-                        type="text"
-                        value={stageDraftLabel}
-                        onChange={(e) => setStageDraftLabel(e.target.value)}
-                        placeholder="Nueva columna del pipeline"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm text-brand-navy placeholder:text-slate-400 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                        disabled={!canConfigureActivePipeline}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const label = stageDraftLabel.trim();
-                          if (!label) return;
-                          handleAddKanbanStage(label);
-                          setStageDraftLabel("");
-                        }}
-                        disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm text-white transition hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-50"
-                        style={{ fontWeight: 600 }}
-                      >
-                        <Plus className="h-4 w-4" strokeWidth={2} />
-                        Agregar columna
-                      </button>
-                    </div>
-                    </div>
-                  )}
-
-                  {activePipelineGroupId && <section className="rounded-2xl border border-slate-200/70 bg-slate-50/40 p-5">
-                    <div>
-                      <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>Orden de columnas del pipeline</h4>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Arrastra desde el ícono ⋮⋮ de cada fila para ordenar las columnas del Kanban (los botones y el selector de color no inician el arrastre). Usa el selector de color para el acento de cada columna en el tablero y la vista lista.
-                      </p>
-                    </div>
-
-                    <DndProvider backend={HTML5Backend}>
-                    <div className="mt-4 space-y-3">
-                      {leadColumnStatuses.map((stageId, index) => {
-                        const stageLabel = resolveStatusLabel(stageId);
-                        const isEditing = editingStageId === stageId;
-                        const leadsInStage = leads.filter(
-                          (lead) =>
-                            lead.status === stageId && lead.pipelineGroupId === activePipelineGroupId
-                        ).length;
-
-                        return (
-                          <PipelineStageReorderRow
-                            key={stageId}
-                            index={index}
-                            moveRow={handleReorderPipelineRows}
-                            canDrag={canConfigureActivePipeline}
-                          >
-                            {(connectDragHandle) => (
-                          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                              {canConfigureActivePipeline && (
-                                <div
-                                  ref={connectDragHandle}
-                                  className="flex shrink-0 cursor-grab touch-none items-center justify-center rounded-lg py-1 text-slate-400 hover:bg-slate-200/60 hover:text-slate-600 active:cursor-grabbing lg:pt-0.5"
-                                  title="Arrastrar para reordenar columnas"
-                                  aria-label={`Arrastrar para reordenar: ${stageLabel}`}
-                                >
-                                  <GripVertical className="h-5 w-5" strokeWidth={1.75} />
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={stageDraftLabel}
-                                    onChange={(e) => setStageDraftLabel(e.target.value)}
-                                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-navy focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-primary/15"
-                                    disabled={!canConfigureActivePipeline}
-                                  />
-                                ) : (
-                                  <>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <p className="text-sm text-brand-navy" style={{ fontWeight: 600 }}>
-                                        {stageLabel}
-                                      </p>
-                                    </div>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      Clave: {stageId} · {leadsInStage} lead{leadsInStage === 1 ? "" : "s"} en esta etapa
-                                    </p>
-                                  </>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                {canConfigureActivePipeline && !isEditing && (
-                                  <label className="flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm">
-                                    Color columna
-                                    <input
-                                      type="color"
-                                      value={resolveStageHex(stageId)}
-                                      onChange={(e) => {
-                                        const hex = e.target.value;
-                                        const colorKey = normalizeLeadPipelineStatus(stageId);
-                                        setPipelineByGroup((map) => {
-                                          const cur =
-                                            map[activePipelineGroupId] ??
-                                            createEmptyGroupPipelineSnapshot();
-                                          const nextColors = { ...cur.stageColors };
-                                          for (const k of Object.keys(nextColors)) {
-                                            if (
-                                              k !== colorKey &&
-                                              k.toLowerCase() === colorKey.toLowerCase()
-                                            ) {
-                                              delete nextColors[k];
-                                            }
-                                          }
-                                          nextColors[colorKey] = hex;
-                                          return {
-                                            ...map,
-                                            [activePipelineGroupId]: {
-                                              ...cur,
-                                              stageColors: nextColors,
-                                            },
-                                          };
-                                        });
-                                      }}
-                                      className="h-8 w-11 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
-                                      title="Acento visual en Kanban, vista lista y chips de estado"
-                                      aria-label={`Color de columna para ${stageLabel}`}
-                                    />
-                                  </label>
-                                )}
-                                {isEditing ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const label = stageDraftLabel.trim();
-                                        if (!label) return;
-                                        handleUpdateKanbanStage(stageId, label);
-                                        setEditingStageId(null);
-                                        setStageDraftLabel("");
-                                      }}
-                                      disabled={!canConfigureActivePipeline || !stageDraftLabel.trim()}
-                                      className="inline-flex items-center rounded-lg bg-brand-navy px-3 py-2 text-xs text-white transition hover:bg-[#1e2a45] disabled:cursor-not-allowed disabled:opacity-50"
-                                      style={{ fontWeight: 600 }}
-                                    >
-                                      Guardar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingStageId(null);
-                                        setStageDraftLabel("");
-                                      }}
-                                      className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50"
-                                      style={{ fontWeight: 600 }}
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingStageId(stageId);
-                                        setStageDraftLabel(stageLabel);
-                                      }}
-                                      disabled={!canConfigureActivePipeline}
-                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                      style={{ fontWeight: 600 }}
-                                    >
-                                      <Edit className="h-3.5 w-3.5" strokeWidth={1.8} />
-                                      Editar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => requestDeletePipelineStage(stageId, stageLabel)}
-                                      disabled={!canConfigureActivePipeline}
-                                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                      style={{ fontWeight: 600 }}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                                      Eliminar
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                            )}
-                          </PipelineStageReorderRow>
-                        );
-                      })}
-                    </div>
-                    </DndProvider>
-                  </section>}
-                </div>
-              )}
-            </section>
-          </div>
+                      </DndProvider>
+                    </section>}
+                  </div>
+                )}
+              </section>
+            </div>
           ))}
 
         {/* Messages Tab */}

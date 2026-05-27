@@ -134,3 +134,327 @@ body.admin-crm-montserrat .viterra-preview-canvas [data-viterra-editor-field] {
   color: var(--primary, #c8102e);
   text-decoration: underline;
 }
+
+/* ─── Admin Shell Design Tokens ──────────────────────────────────────────── */
+
+.viterra-admin-shell {
+  --admin-sidebar-bg: #0d1117;
+  --admin-sidebar-border: rgba(255, 255, 255, 0.05);
+  --admin-sidebar-text: rgba(255, 255, 255, 0.55);
+  --admin-sidebar-text-active: #f5f0e8;
+  --admin-sidebar-text-hover: rgba(255, 255, 255, 0.85);
+  --admin-sidebar-accent: #9a7b4f;
+  --admin-sidebar-section-label: rgba(255, 255, 255, 0.28);
+  --admin-canvas-bg: #f5f2ed;
+  --admin-canvas-bg-end: #ede9e2;
+  --admin-nav-item-height: 2.5rem;
+  --admin-sidebar-width: 15rem;
+}
+
+/* ─── Admin Sidebar Nav Item Staggered Fade-in ───────────────────────────── */
+
+@keyframes admin-nav-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .viterra-admin-shell .admin-nav-item {
+    animation: admin-nav-item-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .viterra-admin-shell .admin-nav-item:nth-child(1)  { animation-delay: 0.04s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(2)  { animation-delay: 0.07s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(3)  { animation-delay: 0.10s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(4)  { animation-delay: 0.13s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(5)  { animation-delay: 0.16s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(6)  { animation-delay: 0.19s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(7)  { animation-delay: 0.22s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(8)  { animation-delay: 0.25s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(9)  { animation-delay: 0.28s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(10) { animation-delay: 0.31s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(11) { animation-delay: 0.34s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(12) { animation-delay: 0.37s; }
+  .viterra-admin-shell .admin-nav-item:nth-child(13) { animation-delay: 0.40s; }
+}
+
+/* ─── Admin Nav Item Active Left-Bar ─────────────────────────────────────── */
+
+.viterra-admin-shell .admin-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.625rem;
+  padding: 0 1rem;
+  height: var(--admin-nav-item-height);
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 450;
+  letter-spacing: 0.012em;
+  color: var(--admin-sidebar-text);
+  border-radius: 0;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  outline: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.viterra-admin-shell .admin-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 2px;
+  height: 60%;
+  background: var(--admin-sidebar-accent);
+  border-radius: 0 2px 2px 0;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.viterra-admin-shell .admin-nav-item:hover {
+  color: var(--admin-sidebar-text-hover);
+  background-color: rgba(255, 255, 255, 0.04);
+  transform: translateX(2px);
+}
+
+.viterra-admin-shell .admin-nav-item:hover::before {
+  transform: translateY(-50%) scaleY(0.4);
+}
+
+.viterra-admin-shell .admin-nav-item.is-active {
+  color: var(--admin-sidebar-text-active);
+  background-color: rgba(255, 255, 255, 0.06);
+  transform: translateX(0);
+  font-weight: 500;
+}
+
+.viterra-admin-shell .admin-nav-item.is-active::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
+/* Glow behind active item */
+.viterra-admin-shell .admin-nav-item.is-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(154, 123, 79, 0.1) 0%, transparent 60%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ─── Admin Sidebar Toggle Button ────────────────────────────────────────── */
+
+.viterra-admin-shell .admin-sidebar-toggle {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 48px;
+  background: rgba(13, 17, 23, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  backdrop-filter: blur(8px);
+}
+
+@media (min-width: 1024px) {
+  .viterra-admin-shell .admin-sidebar-toggle {
+    display: flex;
+  }
+}
+
+.viterra-admin-shell .admin-sidebar-toggle:hover {
+  background: rgba(13, 17, 23, 0.98);
+  color: var(--admin-sidebar-accent);
+  border-color: rgba(154, 123, 79, 0.3);
+}
+
+.viterra-admin-shell .admin-sidebar-toggle--open {
+  border-radius: 0 6px 6px 0;
+  left: 0;
+}
+
+.viterra-admin-shell .admin-sidebar-toggle--close {
+  border-radius: 6px 0 0 6px;
+}
+
+/* ─── Admin Logo Wordmark ─────────────────────────────────────────────────── */
+
+.viterra-admin-shell .admin-logo-wordmark {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 300;
+  font-size: 1.0625rem;
+  letter-spacing: 0.26em;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.viterra-admin-shell .admin-logo-subtitle {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-style: italic;
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 0.3rem;
+  line-height: 1;
+}
+
+/* ─── Admin Section Label ─────────────────────────────────────────────────── */
+
+.viterra-admin-shell .admin-section-label {
+  padding: 0 1rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--admin-sidebar-section-label);
+}
+
+/* ─── Admin User Card ─────────────────────────────────────────────────────── */
+
+.viterra-admin-shell .admin-user-card {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.viterra-admin-shell .admin-user-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.viterra-admin-shell .admin-user-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid rgba(154, 123, 79, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  transition: border-color 0.15s;
+}
+
+.viterra-admin-shell .admin-user-card:hover .admin-user-avatar,
+.viterra-admin-shell .admin-user-avatar.is-active-profile {
+  border-color: rgba(154, 123, 79, 0.7);
+}
+
+.viterra-admin-shell .admin-user-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.viterra-admin-shell .admin-user-role {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(154, 123, 79, 0.8);
+  margin-top: 0.15rem;
+  line-height: 1;
+}
+
+/* ─── Admin Unread Badge ──────────────────────────────────────────────────── */
+
+.viterra-admin-shell .admin-unread-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.3rem;
+  border-radius: 9999px;
+  background: #c8102e;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+/* ─── Admin Mobile Nav Pill Strip ─────────────────────────────────────────── */
+
+.viterra-admin-shell .admin-mobile-nav {
+  display: flex;
+  gap: 0.375rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.viterra-admin-shell .admin-mobile-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.viterra-admin-shell .admin-mobile-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.875rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.viterra-admin-shell .admin-mobile-nav-pill.is-active {
+  background: #0d1117;
+  color: #f5f0e8;
+  border-color: transparent;
+}
+
+.viterra-admin-shell .admin-mobile-nav-pill:not(.is-active) {
+  background: rgba(0, 0, 0, 0.04);
+  color: #555;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.viterra-admin-shell .admin-mobile-nav-pill:not(.is-active):hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #111;
+}
+
+/* ─── Admin Divider Between Section Groups ────────────────────────────────── */
+
+.viterra-admin-shell .admin-nav-divider {
+  height: 1px;
+  margin: 0.625rem 1rem;
+  background: rgba(255, 255, 255, 0.06);
+}

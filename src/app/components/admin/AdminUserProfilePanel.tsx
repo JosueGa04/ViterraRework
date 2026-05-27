@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AdminProfileSkeleton } from "../../pages/admin/AdminSectionSkeletons";
 import { useAuth, type User, type UserPermission } from "../../contexts/AuthContext";
 import { getSupabaseClient } from "../../lib/supabaseClient";
+import { withTimeout } from "../../lib/withTimeout";
 import {
   fetchTokkoUserRow,
   updateAuthUserProfileMetadata,
@@ -121,7 +122,17 @@ export function AdminUserProfilePanel({
       return;
     }
     setLoading(true);
-    const { data, error } = await fetchTokkoUserRow(client, user.id);
+    let fetchRes;
+    try {
+      fetchRes = await withTimeout(
+        fetchTokkoUserRow(client, user.id, user.email),
+        5000,
+        "Cargar fila de usuario"
+      );
+    } catch (e) {
+      fetchRes = { data: null, error: { message: e instanceof Error ? e.message : String(e) } };
+    }
+    const { data, error } = fetchRes;
     if (error) {
       toast.error(error.message);
       setRow(null);

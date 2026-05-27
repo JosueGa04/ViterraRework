@@ -112,36 +112,36 @@ export function AdminLeadsTabSkeleton() {
   const columnAccents = ["#C8102E", "#2563eb", "#16a34a", "#ea580c", "#64748b"];
   return (
     <div className="space-y-6" aria-busy aria-label="Cargando leads">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
-        <div className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl" aria-hidden />
-        <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
-            <div className="min-w-0 max-w-xl space-y-3">
-              <ShimmerBlock className="h-3 w-32" />
-              <ShimmerBlock className="h-9 w-72 max-w-full" />
-              <ShimmerBlock className="h-4 w-full max-w-lg" />
-            </div>
-            <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
-              <div className="inline-flex h-11 w-full rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 sm:w-auto">
-                <ShimmerBlock className="h-9 flex-1 rounded-xl sm:w-10 sm:flex-none" />
-                <ShimmerBlock className="h-9 flex-1 rounded-xl sm:w-10 sm:flex-none" />
-              </div>
-              <ShimmerBlock className="h-11 w-full rounded-2xl sm:w-40" />
-            </div>
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <ShimmerBlock className="h-9 w-48 max-w-full" />
+            <ShimmerBlock className="h-4 w-full max-w-lg" />
           </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:w-auto">
+            <div className="flex gap-2">
+              <ShimmerBlock className="h-10 w-24 rounded-xl" />
+              <ShimmerBlock className="h-10 w-24 rounded-xl" />
+            </div>
+            <ShimmerBlock className="h-10 w-40 rounded-xl" />
+          </div>
+        </div>
+      </div>
 
-          <div className="mt-8 flex flex-col gap-3 border-t border-slate-200/80 pt-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-              <ShimmerBlock className="h-11 min-h-[2.75rem] w-full flex-1 rounded-2xl" />
-              <ShimmerBlock className="h-11 min-h-[2.75rem] w-full rounded-2xl lg:max-w-[19rem] lg:shrink-0" />
-            </div>
-            <div className="flex flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-0.5 sm:gap-3">
-              <ShimmerBlock className="h-11 min-h-[2.75rem] min-w-[12rem] flex-[2] rounded-2xl" />
-              <ShimmerBlock className="h-11 min-h-[2.75rem] min-w-[10.5rem] flex-1 rounded-2xl" />
-              <ShimmerBlock className="h-11 min-h-[2.75rem] min-w-[10.5rem] flex-1 rounded-2xl" />
-            </div>
+      <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center p-2 gap-2">
+          <div className="relative flex-1 p-2">
+            <ShimmerBlock className="h-6 w-1/3" />
           </div>
+        </div>
+        <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-3 rounded-b-2xl overflow-x-auto">
+          <ShimmerBlock className="h-4 w-20 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-32 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-28 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0 ml-auto" />
+          <ShimmerBlock className="h-4 w-36 shrink-0" />
         </div>
       </div>
 
@@ -251,18 +251,36 @@ export function AdminConsultasSkeleton() {
 function AdminInventoryCardsSkeleton({ ariaLabel }: { ariaLabel: string }) {
   return (
     <div className="space-y-6" aria-busy aria-label={ariaLabel}>
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 p-6 shadow-md ring-1 ring-slate-900/[0.04]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
-            <ShimmerBlock className="h-8 w-56" />
+            <ShimmerBlock className="h-9 w-56" />
             <ShimmerBlock className="h-4 w-96 max-w-full" />
-            <ShimmerBlock className="h-3 w-72 max-w-full" />
           </div>
           <div className="flex flex-wrap gap-2">
             <ShimmerBlock className="h-10 w-28 rounded-xl" />
             <ShimmerBlock className="h-10 w-28 rounded-xl" />
-            <ShimmerBlock className="h-10 w-28 rounded-xl" />
+            <ShimmerBlock className="h-10 w-36 rounded-xl" />
           </div>
+        </div>
+      </div>
+
+      <div className="mb-8 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center p-2 gap-2">
+          <div className="relative flex-1 p-2">
+            <ShimmerBlock className="h-6 w-1/3" />
+          </div>
+          <div className="hidden sm:block h-8 w-px bg-slate-100" />
+          <div className="relative sm:w-72 p-2">
+             <ShimmerBlock className="h-6 w-1/2" />
+          </div>
+        </div>
+        <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-3 rounded-b-2xl overflow-x-auto">
+          <ShimmerBlock className="h-4 w-20 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-24 shrink-0" />
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+          <ShimmerBlock className="h-4 w-28 shrink-0" />
         </div>
       </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -562,61 +580,61 @@ export function AdminProfileSkeleton() {
 export function AdminWorkspaceAuthLoadingShell() {
   return (
     <div
-      className="viterra-page viterra-crm min-h-screen bg-gradient-to-b from-[#f7f5f2] via-slate-50 to-slate-100"
+      className="viterra-page viterra-crm viterra-admin-shell min-h-screen"
+      style={{ background: "linear-gradient(160deg, #f5f2ed 0%, #ede9e2 100%)" }}
       aria-busy
       aria-label="Cargando panel"
     >
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[14.5rem] lg:flex-col lg:border-r lg:border-brand-gold/20 lg:bg-brand-navy lg:text-white">
-        <div className="border-b border-white/15 px-5 py-5">
-          <a
-            href="/"
-            className="group block rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10"
-            aria-label="Ir al inicio del sitio público"
-          >
-            <span className="font-heading block font-light leading-tight tracking-[0.22em] text-white sm:text-lg">
-              VITERRA
-            </span>
-            <span className="relative my-2 block h-px w-[11rem] overflow-hidden rounded-full" aria-hidden>
-              <span className="absolute inset-0 bg-white/50" />
-              <span
-                className="absolute inset-0 origin-left bg-[#C8102E]"
-                style={{ transform: "scaleX(0.55)" }}
-              />
-            </span>
-            <p
-              className="text-[10px] font-normal uppercase tracking-[0.26em] text-white/72"
-              style={{
-                fontFamily: 'Perpetua, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif',
-              }}
-            >
-              CRM System
-            </p>
+      <aside
+        className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[15rem] lg:flex-col"
+        style={{ backgroundColor: "#0d1117", borderRight: "1px solid rgba(255,255,255,0.05)" }}
+      >
+        {/* Logo */}
+        <div style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "1.25rem 1.25rem 1.125rem" }}>
+          <a href="/" aria-label="Ir al inicio del sitio público" className="block opacity-90">
+            <span className="admin-logo-wordmark">VITERRA</span>
+            <div className="admin-logo-subtitle">CRM System</div>
           </a>
         </div>
-        <div className="flex-1 overflow-hidden px-4 py-5">
-          <p className="px-2 pb-2 text-[11px] uppercase tracking-[0.14em] text-white/55" style={{ fontWeight: 600 }}>
-            Módulos admin
-          </p>
-          <nav className="space-y-1.5" aria-hidden>
+        {/* Nav skeleton */}
+        <div className="flex-1 overflow-hidden" style={{ padding: "1.25rem 0 0" }}>
+          <div className="admin-section-label">Módulos</div>
+          <nav aria-hidden>
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="h-10 w-full rounded-lg bg-white/10 viterra-admin-skeleton-shimmer"
+                className="viterra-admin-skeleton-shimmer"
+                style={{
+                  height: "2.5rem",
+                  margin: "0 0 2px",
+                  background: "rgba(255,255,255,0.07)",
+                }}
               />
             ))}
           </nav>
         </div>
-      </aside>
-      <div className="lg:pl-[14.5rem]">
-        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur-md lg:px-8">
-          <div className="flex items-center justify-between gap-4">
-            <ShimmerBlock className="h-9 w-48 max-w-[55vw]" />
-            <ShimmerBlock className="h-9 w-32 shrink-0" />
+        {/* User card skeleton */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.625rem",
+            padding: "0.875rem 1rem",
+            borderTop: "1px solid rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <ShimmerBlock className="h-9 w-9 shrink-0 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }} />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <ShimmerBlock className="h-3 w-28" style={{ background: "rgba(255,255,255,0.12)" }} />
+            <ShimmerBlock className="h-2.5 w-16" style={{ background: "rgba(255,255,255,0.07)" }} />
           </div>
-        </header>
-        <main className="px-4 py-6 lg:px-8 lg:py-8">
+        </div>
+      </aside>
+      <div className="lg:pl-[15rem]">
+        <div className="px-4 py-4 sm:px-6 lg:pr-8">
           <AdminDashboardSkeleton />
-        </main>
+        </div>
       </div>
     </div>
   );

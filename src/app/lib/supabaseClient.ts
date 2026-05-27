@@ -45,9 +45,14 @@ export async function syncSupabaseAuthSession(client: SupabaseClient): Promise<{
     return { hasSession: false, userId: null };
   }
   try {
-    const { data, error } = await client.auth.refreshSession();
-    if (error) {
-      if (import.meta.env.DEV) {
+    // Only refresh when the JWT expires within the next 5 minutes — avoids an
+    // unnecessary network round-trip on every page load / tab switch when the
+    // token is still valid for a long time.
+    const expiresAt = session.expires_at ?? 0;
+    const secsLeft = expiresAt - Math.floor(Date.now() / 1000);
+    if (secsLeft < 300) {
+      const { error } = await client.auth.refreshSession();
+      if (error && import.meta.env.DEV) {
         console.warn("[Viterra] refreshSession:", error.message);
       }
     }
@@ -56,6 +61,5 @@ export async function syncSupabaseAuthSession(client: SupabaseClient): Promise<{
       console.warn("[Viterra] refreshSession exception:", e);
     }
   }
-  const { data: { session: s2 } } = await client.auth.getSession();
-  return { hasSession: !!s2, userId: s2?.user?.id ?? null };
+  return { hasSession: true, userId: session.user?.id ?? null };
 }
