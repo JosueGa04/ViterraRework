@@ -108,7 +108,9 @@ export function SearchBar({
   const isCatalogOperationLocked = defaultStatus === "venta" || defaultStatus === "alquiler";
   const showStatusFilter = !showPriceOperationToggle && !isCatalogOperationLocked;
 
-  const showCatalogPriceRange = effectiveCatalogPrices.length > 0;
+  const showCatalogPriceRange =
+    (catalogPrices !== undefined) ||
+    (catalogPriceSlices !== undefined);
   const catalogRangeRef = useRef<SearchBarCatalogPriceRangeHandle>(null);
 
   useEffect(() => {

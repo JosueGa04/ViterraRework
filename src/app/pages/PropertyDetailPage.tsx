@@ -26,7 +26,6 @@ import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "../components/ui/utils";
 import { FeatureSection } from "../components/FeatureSectionBlocks";
-import { PublicDetailContactBlock } from "../components/PublicDetailContactBlock";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { PropertyVideoPlayer } from "../components/PropertyVideoPlayer";
 import { propertyTours3dList, propertyVideosList, type Property } from "../components/PropertyCard";
@@ -37,12 +36,27 @@ import {
 } from "../lib/propertyTours3d";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
-import { propertyMediaPublicUrl } from "../lib/supabasePropertyMedia";
-import { resolveWhatsappHref } from "../lib/whatsappLink";
-import { resolveTelHref } from "../lib/phoneLink";
+import { resolveWhatsappHref, whatsappDisplayLabel } from "../lib/whatsappLink";
+import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
 import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS } from "../lib/propertyDescription";
 import { orientationLabel } from "../lib/propertyOrientation";
 
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
+const T = {
+  canvas:    "#f4f2ef",   // warm cream — brand-canvas
+  white:     "#ffffff",
+  navy:      "#141c2e",   // brand-navy
+  navyLight: "#1e2d47",
+  gold:      "#9a7b4f",   // brand-gold
+  goldLight: "#b8975e",
+  goldFaint: "rgba(154,123,79,0.12)",
+  border:    "rgba(20,28,46,0.1)",
+  borderGold:"rgba(154,123,79,0.22)",
+  muted:     "rgba(20,28,46,0.45)",
+  body:      "rgba(20,28,46,0.72)",
+} as const;
+
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
 function listingActivityLabel(iso: string | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -73,143 +87,146 @@ function isMeaningfulText(s: string | undefined): boolean {
   return t.length > 0 && t.toUpperCase() !== "EMPTY";
 }
 
+/* ─── Tiny atoms ─────────────────────────────────────────────────────────── */
+function GoldRule({ className }: { className?: string }) {
+  return (
+    <div
+      className={className}
+      style={{
+        height: 1,
+        background: `linear-gradient(90deg, transparent, ${T.gold}55, transparent)`,
+      }}
+    />
+  );
+}
+
+function EyebrowLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{
+      fontSize: "0.6rem",
+      textTransform: "uppercase",
+      letterSpacing: "0.2em",
+      fontWeight: 700,
+      color: T.gold,
+    }}>
+      {children}
+    </p>
+  );
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.12em", color: T.muted, fontWeight: 600 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: "0.8rem", fontWeight: 600, color: T.navy, textAlign: "right" }}>
+        {children}
+      </span>
+    </div>
+  );
+}
+
+/* ─── Main page ──────────────────────────────────────────────────────────── */
 export function PropertyDetailPage() {
   const { id } = useParams();
   const location = useLocation();
   const { properties, loading } = useCatalogProperties();
   const { content } = useSiteContent();
   const contactSite = mergeSiteSection("contact", content.contact);
+
   const seededProperty = useMemo(() => {
     const maybe = (location.state as { property?: Property } | null)?.property;
     return maybe?.id === id ? maybe : undefined;
   }, [location.state, id]);
-  const property = useMemo(() => properties.find((p) => p.id === id) ?? seededProperty, [properties, id, seededProperty]);
+
+  const property = useMemo(
+    () => properties.find((p) => p.id === id) ?? seededProperty,
+    [properties, id, seededProperty],
+  );
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState("descripcion");
+  const [activeTab, setActiveTab]   = useState("descripcion");
   const [mapViewMode, setMapViewMode] = useState<"map" | "satellite">("map");
   const reduceMotion = useReducedMotion();
-  const mapRef = useRef<HTMLDivElement>(null);
+  const mapRef         = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
-  const [linkedDevelopment, setLinkedDevelopment] = useState<Development | null>(null);
+  const [linkedDevelopment, setLinkedDevelopment]   = useState<Development | null>(null);
   const [developmentLoading, setDevelopmentLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    message: "",
-  });
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ name: "", email: "", phone: "", message: "" });
+  const [submitted,    setSubmitted]   = useState(false);
+  const [submitting,   setSubmitting]  = useState(false);
+  const [submitError,  setSubmitError] = useState<string | null>(null);
 
+  /* images */
   const propertyImages = useMemo(() => {
     if (!property) return [];
     const unitUrls =
       property.galleryImages && property.galleryImages.length > 0
         ? [...property.galleryImages]
         : [property.image].filter((u) => typeof u === "string" && u.trim() !== "");
-
     const seen = new Set(unitUrls.map((u) => u.trim()));
     const merged: string[] = [...unitUrls];
     const devUrls = linkedDevelopment?.images?.filter((u) => typeof u === "string" && u.trim() !== "") ?? [];
     for (const u of devUrls) {
       const t = u.trim();
-      if (!seen.has(t)) {
-        seen.add(t);
-        merged.push(u);
-      }
+      if (!seen.has(t)) { seen.add(t); merged.push(u); }
     }
     if (merged.length > 0) return merged;
-
-    const alternatives = properties
-      .filter((p) => p.id !== property.id)
-      .slice(0, 3)
-      .map((p) => p.image);
-    return [property.image, ...alternatives].filter(Boolean);
+    const alt = properties.filter((p) => p.id !== property.id).slice(0, 3).map((p) => p.image);
+    return [property.image, ...alt].filter(Boolean);
   }, [property, properties, linkedDevelopment]);
 
   const displayTitle = property?.publicationTitle?.trim() || property?.title || "";
+
+  /* maps */
   const googleMapsUrl = useMemo(() => {
     if (!property) return null;
-    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null)
       return `https://www.google.com/maps/search/?api=1&query=${property.coordinates.lat},${property.coordinates.lng}`;
-    }
-    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
-    return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : null;
+    const q = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : null;
   }, [property]);
   const appleMapsUrl = useMemo(() => {
     if (!property) return null;
-    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null)
       return `https://maps.apple.com/?ll=${property.coordinates.lat},${property.coordinates.lng}&q=${encodeURIComponent(displayTitle || "Propiedad")}`;
-    }
-    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
-    return query ? `https://maps.apple.com/?q=${encodeURIComponent(query)}` : null;
+    const q = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return q ? `https://maps.apple.com/?q=${encodeURIComponent(q)}` : null;
   }, [property, displayTitle]);
   const wazeUrl = useMemo(() => {
     if (!property) return null;
-    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
+    if (property.coordinates?.lat != null && property.coordinates?.lng != null)
       return `https://www.waze.com/ul?ll=${property.coordinates.lat}%2C${property.coordinates.lng}&navigate=yes`;
-    }
-    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
-    return query ? `https://www.waze.com/ul?q=${encodeURIComponent(query)}&navigate=yes` : null;
-  }, [property]);
-  const googleMapsSatelliteUrl = useMemo(() => {
-    if (!property) return null;
-    if (property.coordinates?.lat != null && property.coordinates?.lng != null) {
-      return `https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}&t=k`;
-    }
-    const query = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
-    return query ? `https://www.google.com/maps?q=${encodeURIComponent(query)}&t=k` : null;
+    const q = [property.fullAddress, property.colony, property.location].filter(Boolean).join(", ").trim();
+    return q ? `https://www.waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes` : null;
   }, [property]);
 
-  useEffect(() => {
-    setCurrentImageIndex(0);
-  }, [property?.id, linkedDevelopment?.id]);
-
-  useEffect(() => {
-    setMapViewMode("map");
-  }, [property?.id]);
+  useEffect(() => { setCurrentImageIndex(0); }, [property?.id, linkedDevelopment?.id]);
+  useEffect(() => { setMapViewMode("map"); }, [property?.id]);
 
   const hasCatalogFeatureLists = useMemo(() => {
     if (!property) return false;
-    const a = property.amenities?.length ?? 0;
-    const s = property.services?.length ?? 0;
-    const f = property.additionalFeatures?.length ?? 0;
-    return a + s + f > 0;
+    return (property.amenities?.length ?? 0) + (property.services?.length ?? 0) + (property.additionalFeatures?.length ?? 0) > 0;
   }, [property]);
 
   const hasLinkedProject = Boolean(property?.developmentTokkoId?.trim());
-
-  const resolvedVideos = useMemo(() => {
-    if (!property) return [];
-    const client = getSupabaseClient();
-    return resolveAllPropertyVideoUrls(propertyVideosList(property), client);
-  }, [property]);
-
-  const resolvedTours3d = useMemo(() => {
-    if (!property) return [];
-    return resolvePropertyTour3dUrls(propertyTours3dList(property));
-  }, [property]);
-
-  const hasVideo = resolvedVideos.length > 0;
+  const resolvedVideos   = useMemo(() => { if (!property) return []; const c = getSupabaseClient(); return resolveAllPropertyVideoUrls(propertyVideosList(property), c); }, [property]);
+  const resolvedTours3d  = useMemo(() => { if (!property) return []; return resolvePropertyTour3dUrls(propertyTours3dList(property)); }, [property]);
+  const hasVideo  = resolvedVideos.length > 0;
   const hasTour3d = resolvedTours3d.length > 0;
 
   const whatsappInterestMessage = `Hola, me interesa la propiedad ${property?.publicationTitle?.trim() || property?.title || ""}.`;
-
   const telHref = useMemo(() => {
     const fromProp = resolveTelHref(property?.contactPhone);
     if (fromProp) return fromProp;
     const phoneItem = contactSite.infoItems?.find((i) => i.icon === "phone");
     return resolveTelHref(phoneItem?.body?.split("\n")[0]);
   }, [property?.contactPhone, contactSite.infoItems]);
-
   const whatsappHref = useMemo(() => {
-    const stored = property?.contactWhatsapp?.trim();
+    const stored  = property?.contactWhatsapp?.trim();
     const fallback = contactSite.quickWhatsappHref || "https://wa.me/523318878494";
-    if (stored) {
-      return resolveWhatsappHref(stored, fallback, whatsappInterestMessage);
-    }
-    return resolveWhatsappHref(undefined, fallback, whatsappInterestMessage);
+    return resolveWhatsappHref(stored ?? undefined, fallback, whatsappInterestMessage);
   }, [property?.contactWhatsapp, contactSite.quickWhatsappHref, whatsappInterestMessage]);
 
   const propertyTags = useMemo(
@@ -218,24 +235,9 @@ export function PropertyDetailPage() {
   );
 
   const propertyDetailTabs = useMemo(() => {
-    const core: Array<{ id: string; label: string }> = [
-      { id: "descripcion", label: "Descripción" },
-    ];
-    if (hasVideo) {
-      core.push({
-        id: "video",
-        label: resolvedVideos.length > 1 ? `Videos (${resolvedVideos.length})` : "Video",
-      });
-    }
-    if (hasTour3d) {
-      core.push({
-        id: "tour3d",
-        label:
-          resolvedTours3d.length > 1
-            ? `Recorridos 3D (${resolvedTours3d.length})`
-            : "Recorrido 3D",
-      });
-    }
+    const core: Array<{ id: string; label: string }> = [{ id: "descripcion", label: "Descripción" }];
+    if (hasVideo) core.push({ id: "video", label: resolvedVideos.length > 1 ? `Videos (${resolvedVideos.length})` : "Video" });
+    if (hasTour3d) core.push({ id: "tour3d", label: resolvedTours3d.length > 1 ? `Recorridos 3D (${resolvedTours3d.length})` : "Recorrido 3D" });
     if (hasLinkedProject) core.push({ id: "desarrollo", label: "Proyecto" });
     core.push({ id: "unidad", label: "Esta publicación" });
     core.push({ id: "ubicacion", label: "Ubicación" });
@@ -243,44 +245,30 @@ export function PropertyDetailPage() {
   }, [hasLinkedProject, hasVideo, hasTour3d, resolvedVideos.length, resolvedTours3d.length]);
 
   useEffect(() => {
-    if (!hasLinkedProject && activeTab === "desarrollo") {
-      setActiveTab("descripcion");
-    }
-    if (!hasVideo && activeTab === "video") setActiveTab("descripcion");
+    if (!hasLinkedProject && activeTab === "desarrollo") setActiveTab("descripcion");
+    if (!hasVideo  && activeTab === "video")  setActiveTab("descripcion");
     if (!hasTour3d && activeTab === "tour3d") setActiveTab("descripcion");
   }, [hasLinkedProject, hasVideo, hasTour3d, activeTab, property?.id]);
 
+  /* fetch linked development */
   useEffect(() => {
     const tokko = property?.developmentTokkoId?.trim();
-    if (!tokko) {
-      setLinkedDevelopment(null);
-      setDevelopmentLoading(false);
-      return;
-    }
+    if (!tokko) { setLinkedDevelopment(null); setDevelopmentLoading(false); return; }
     let cancelled = false;
-    setDevelopmentLoading(true);
-    setLinkedDevelopment(null);
+    setDevelopmentLoading(true); setLinkedDevelopment(null);
     void (async () => {
       const client = getSupabaseClient();
-      if (!client) {
-        if (!cancelled) setDevelopmentLoading(false);
-        return;
-      }
+      if (!client) { if (!cancelled) setDevelopmentLoading(false); return; }
       await syncSupabaseAuthSession(client);
       const { data, error } = await fetchDevelopmentByTokkoId(client, tokko, { publicOnly: false });
       if (cancelled) return;
       setDevelopmentLoading(false);
-      if (error) {
-        setLinkedDevelopment(null);
-        return;
-      }
-      setLinkedDevelopment(data);
+      setLinkedDevelopment(error ? null : data);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [property?.developmentTokkoId]);
 
+  /* leaflet map */
   useEffect(() => {
     const initMap = async () => {
       if (!property?.coordinates || !mapRef.current || mapInstanceRef.current) return;
@@ -288,125 +276,82 @@ export function PropertyDetailPage() {
         const L = await import("leaflet");
         await import("leaflet/dist/leaflet.css");
         const map = L.map(mapRef.current).setView([property.coordinates.lat, property.coordinates.lng], 15);
-        const streetLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        const street = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          subdomains: "abcd",
-          maxZoom: 20,
+          subdomains: "abcd", maxZoom: 20,
         });
-        const satelliteLayer = L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          {
-            attribution:
-              'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-            maxZoom: 20,
-          }
-        );
-        if (mapViewMode === "satellite") {
-          satelliteLayer.addTo(map);
-        } else {
-          streetLayer.addTo(map);
-        }
+        const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+          attribution: "Tiles &copy; Esri", maxZoom: 20,
+        });
+        (mapViewMode === "satellite" ? satellite : street).addTo(map);
         const marker = L.divIcon({
           className: "custom-marker",
-          html: `
-            <div style="position: relative; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));">
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="20" cy="20" r="18" fill="#141c2e" stroke="white" stroke-width="3"/>
-                <path d="M20 13L14 17V25H26V17L20 13Z" fill="white"/>
-              </svg>
-            </div>
-          `,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
+          html: `<div style="filter:drop-shadow(0 4px 10px rgba(20,28,46,0.35))"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="18" fill="#141c2e" stroke="#9a7b4f" stroke-width="2"/><path d="M20 13L14 17V25H26V17L20 13Z" fill="#9a7b4f"/></svg></div>`,
+          iconSize: [40, 40], iconAnchor: [20, 20],
         });
         const mapMarker = L.marker([property.coordinates.lat, property.coordinates.lng], { icon: marker }).addTo(map);
-        mapMarker.on("click", () => {
-          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${property.coordinates!.lat},${property.coordinates!.lng}`;
-          window.open(mapsUrl, "_blank", "noopener,noreferrer");
-        });
+        mapMarker.on("click", () => window.open(`https://www.google.com/maps/search/?api=1&query=${property.coordinates!.lat},${property.coordinates!.lng}`, "_blank", "noopener,noreferrer"));
         mapInstanceRef.current = map;
-      } catch (error) {
-        console.error("Error initializing property map:", error);
-      }
+      } catch (err) { console.error("Error initializing property map:", err); }
     };
-
     if (activeTab !== "ubicacion") {
-      try {
-        mapInstanceRef.current?.remove();
-      } catch (error) {
-        console.error("Error removing property map:", error);
-      }
-      mapInstanceRef.current = null;
-      return;
+      try { mapInstanceRef.current?.remove(); } catch (_) {}
+      mapInstanceRef.current = null; return;
     }
-
-    // Si cambia entre Mapa/Satélite, reinicializamos para aplicar la capa seleccionada.
-    try {
-      mapInstanceRef.current?.remove();
-    } catch (error) {
-      console.error("Error resetting property map:", error);
-    }
+    try { mapInstanceRef.current?.remove(); } catch (_) {}
     mapInstanceRef.current = null;
-
-    let cancelled = false;
-    let rafId: number | null = null;
-    let invalidateId: number | null = null;
-
-    const mountWhenReady = () => {
+    let cancelled = false, rafId: number | null = null, invalidateId: number | null = null;
+    const mount = () => {
       if (cancelled) return;
-      if (!mapRef.current) {
-        rafId = requestAnimationFrame(mountWhenReady);
-        return;
-      }
+      if (!mapRef.current) { rafId = requestAnimationFrame(mount); return; }
       void initMap();
       invalidateId = window.setTimeout(() => mapInstanceRef.current?.invalidateSize(), 180);
     };
-
-    mountWhenReady();
-    return () => {
-      cancelled = true;
-      if (rafId != null) cancelAnimationFrame(rafId);
-      if (invalidateId != null) window.clearTimeout(invalidateId);
-    };
+    mount();
+    return () => { cancelled = true; if (rafId != null) cancelAnimationFrame(rafId); if (invalidateId != null) window.clearTimeout(invalidateId); };
   }, [activeTab, property, mapViewMode]);
 
-  useEffect(() => {
-    return () => {
-      try {
-        mapInstanceRef.current?.remove();
-      } catch (error) {
-        console.error("Error removing property map:", error);
-      }
-      mapInstanceRef.current = null;
-    };
-  }, []);
+  useEffect(() => () => { try { mapInstanceRef.current?.remove(); } catch (_) {} mapInstanceRef.current = null; }, []);
 
+  /* form */
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setSubmitError(null);
+    const client = getSupabaseClient();
+    if (!client) { setSubmitError("No hay conexión al servidor."); return; }
+    setSubmitting(true);
+    try {
+      const { error } = await submitCatalogLeadViaRpc(client, { name: formData.name, email: formData.email, phone: formData.phone, message: formData.message, propertyId: property!.id });
+      if (error) { setSubmitError(messageForCatalogLeadRpcError(error.message)); return; }
+      setSubmitted(true); setFormData({ name: "", email: "", phone: "", message: "" });
+      window.setTimeout(() => setSubmitted(false), 4000);
+    } finally { setSubmitting(false); }
+  };
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const nextImage = () => { if (propertyImages.length <= 1) return; setCurrentImageIndex((p) => (p === propertyImages.length - 1 ? 0 : p + 1)); };
+  const prevImage = () => { if (propertyImages.length <= 1) return; setCurrentImageIndex((p) => (p === 0 ? propertyImages.length - 1 : p - 1)); };
+
+  /* ── Loading / not-found ─────────────────────────────────────────────── */
   if (loading && !property) {
     return (
-      <div className="viterra-page flex min-h-screen flex-col">
+      <div className="viterra-page flex min-h-screen flex-col" style={{ background: T.canvas }}>
         <Header />
         <div data-reveal className="flex flex-1 items-center justify-center">
-          <p className="text-slate-600" style={{ fontWeight: 500 }}>
-            Cargando…
-          </p>
+          <p className="text-sm tracking-widest uppercase" style={{ color: T.muted }}>Cargando…</p>
         </div>
         <Footer />
       </div>
     );
   }
-
   if (!property) {
     return (
-      <div className="viterra-page min-h-screen flex flex-col" >
+      <div className="viterra-page min-h-screen flex flex-col" style={{ background: T.canvas }}>
         <Header />
         <div data-reveal className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl font-semibold text-slate-900 mb-4 tracking-tight" style={{ fontWeight: 600 }}>
-              Propiedad no encontrada
-            </h2>
-            <Link to="/renta" className="text-slate-900 hover:text-slate-700 font-medium" style={{ fontWeight: 500 }}>
-              Volver a propiedades
-            </Link>
+            <h2 className="text-2xl font-semibold mb-4" style={{ color: T.navy }}>Propiedad no encontrada</h2>
+            <Link to="/renta" className="font-medium transition-colors" style={{ color: T.gold }}>Volver a propiedades</Link>
           </div>
         </div>
         <Footer />
@@ -414,350 +359,356 @@ export function PropertyDetailPage() {
     );
   }
 
-  const statusBadgeClass =
-    property.status === "venta"
-      ? "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
-      : "border border-black/15 bg-white text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]";
-
-  const nextImage = () => {
-    if (propertyImages.length <= 1) return;
-    setCurrentImageIndex((prev) => (prev === propertyImages.length - 1 ? 0 : prev + 1));
-  };
-
-  const prevImage = () => {
-    if (propertyImages.length <= 1) return;
-    setCurrentImageIndex((prev) => (prev === 0 ? propertyImages.length - 1 : prev - 1));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitError(null);
-    const client = getSupabaseClient();
-    if (!client) {
-      setSubmitError("No hay conexión al servidor (revisa la configuración del sitio).");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const { error } = await submitCatalogLeadViaRpc(client, {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        message: formData.message,
-        propertyId: property.id,
-      });
-      if (error) {
-        setSubmitError(messageForCatalogLeadRpcError(error.message));
-        return;
-      }
-      setSubmitted(true);
-      setFormData({ name: "", email: "", phone: "", message: "" });
-      window.setTimeout(() => setSubmitted(false), 4000);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
+  /* ── Render ──────────────────────────────────────────────────────────── */
   return (
-    <div className="viterra-page min-h-screen flex flex-col bg-slate-50">
+    <div className="viterra-page min-h-screen flex flex-col" style={{ background: T.canvas }}>
+      <style>{`
+        .pd-custom-marker { background: none; border: none; }
+        .pd-tab-btn { position: relative; transition: color .2s; }
+        .pd-tab-btn::after {
+          content: "";
+          position: absolute;
+          bottom: -1px; left: 16px; right: 16px;
+          height: 2px;
+          background: ${T.gold};
+          border-radius: 99px;
+          transform: scaleX(0);
+          transition: transform .25s cubic-bezier(.22,1,.36,1);
+        }
+        .pd-tab-btn.pd-tab-active::after { transform: scaleX(1); }
+        .pd-film-thumb { transition: opacity .2s, box-shadow .2s; }
+        .pd-film-thumb:not(.active) { opacity: .55; }
+        .pd-film-thumb:not(.active):hover { opacity: .85; }
+        .pd-film-thumb.active { box-shadow: 0 0 0 2px ${T.gold}; }
+        .pd-input {
+          width: 100%;
+          padding: 10px 14px;
+          font-size: .875rem;
+          border: 1.5px solid ${T.border};
+          border-radius: 6px;
+          background: ${T.white};
+          color: ${T.navy};
+          outline: none;
+          transition: border-color .2s, box-shadow .2s;
+        }
+        .pd-input::placeholder { color: rgba(20,28,46,0.3); }
+        .pd-input:focus { border-color: ${T.gold}; box-shadow: 0 0 0 3px ${T.goldFaint}; }
+        .pd-rich-desc p { color: ${T.body}; line-height: 1.8; margin-bottom: 1rem; }
+        .pd-rich-desc ul, .pd-rich-desc ol { color: ${T.body}; padding-left: 1.5rem; margin-bottom: 1rem; }
+        .pd-rich-desc li { margin-bottom: .35rem; }
+        .pd-rich-desc h2, .pd-rich-desc h3 { color: ${T.navy}; margin: 1.5rem 0 .5rem; }
+        .pd-features-light .divide-y > li { border-color: rgba(20,28,46,0.06); background: ${T.white}; color: ${T.navy}; }
+        .pd-features-light .rounded-xl.border { background: ${T.white}; border-color: ${T.border}; }
+        .pd-features-light h4 { color: ${T.navy}; }
+        .pd-features-light svg { color: ${T.gold} !important; }
+      `}</style>
+
       <Header />
 
-      <div className="bg-white border-b border-slate-200">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+      {/* ── Breadcrumb bar ───────────────────────────────────────────────── */}
+      <div style={{ background: T.white, borderBottom: `1px solid ${T.border}` }}>
+        <div className="mx-auto max-w-7xl px-4 py-3.5 sm:px-6 lg:px-8">
           <Link
             to={property.status === "venta" ? "/venta" : "/renta"}
-            className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium"
-            style={{ fontWeight: 500 }}
+            className="inline-flex items-center gap-2 text-xs transition-colors"
+            style={{ color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = T.navy)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = T.muted)}
           >
-            <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-            Volver a Propiedades
+            <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
+            Volver a propiedades
           </Link>
         </div>
       </div>
 
-      <div data-reveal className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="min-w-0 space-y-5 lg:col-span-2">
-            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200">
-              <div className="relative h-[250px] bg-slate-200 group sm:h-[320px] md:h-[360px] lg:h-[400px]">
-                <ImageWithFallback
-                  src={propertyImages[currentImageIndex] ?? property.image}
-                  alt={displayTitle}
-                  className="w-full h-full object-cover"
-                />
+      {/* ── Main grid ───────────────────────────────────────────────────── */}
+      <div data-reveal className="mx-auto max-w-7xl w-full px-3 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+        <div className="grid gap-6 lg:grid-cols-3 lg:gap-8">
 
+          {/* ════════════════════ LEFT COLUMN ════════════════════════════ */}
+          <div className="min-w-0 space-y-5 lg:col-span-2">
+
+            {/* Gallery */}
+            <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 24px rgba(20,28,46,0.10)" }}>
+
+              {/* Hero image */}
+              <div
+                className="relative group"
+                style={{ height: "clamp(220px, 44vw, 510px)", background: "#e8e4de" }}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={currentImageIndex}
+                    initial={reduceMotion ? false : { opacity: 0, scale: 1.015 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={reduceMotion ? undefined : { opacity: 0 }}
+                    transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute inset-0"
+                  >
+                    <ImageWithFallback
+                      src={propertyImages[currentImageIndex] ?? property.image}
+                      alt={displayTitle}
+                      className="w-full h-full object-cover"
+                    />
+                    {/* Bottom vignette for badges legibility */}
+                    <div style={{
+                      position: "absolute", inset: 0,
+                      background: "linear-gradient(to top, rgba(20,28,46,0.45) 0%, transparent 40%)",
+                      pointerEvents: "none",
+                    }} />
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Arrows */}
                 {propertyImages.length > 1 && (
                   <>
                     <button
                       onClick={prevImage}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all opacity-0 group-hover:opacity-100"
+                      aria-label="Imagen anterior"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                      style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}`, boxShadow: "0 2px 8px rgba(20,28,46,0.15)" }}
                     >
-                      <ChevronLeft className="w-5 h-5 text-slate-900" strokeWidth={2} />
+                      <ChevronLeft className="w-4 h-4" style={{ color: T.navy }} strokeWidth={2} />
                     </button>
                     <button
                       onClick={nextImage}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all opacity-0 group-hover:opacity-100"
+                      aria-label="Imagen siguiente"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                      style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}`, boxShadow: "0 2px 8px rgba(20,28,46,0.15)" }}
                     >
-                      <ChevronRight className="w-5 h-5 text-slate-900" strokeWidth={2} />
+                      <ChevronRight className="w-4 h-4" style={{ color: T.navy }} strokeWidth={2} />
                     </button>
                   </>
                 )}
 
-                <div className="absolute top-4 left-4 flex flex-wrap gap-2">
-                  <span className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${statusBadgeClass}`}>
+                {/* Status badges — top left */}
+                <div className="absolute top-4 left-4 flex flex-wrap gap-1.5">
+                  <span style={{
+                    padding: "4px 11px", borderRadius: 4,
+                    background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)",
+                    border: `1px solid ${T.borderGold}`,
+                    fontSize: "0.62rem", letterSpacing: "0.14em", fontWeight: 700,
+                    color: T.gold, textTransform: "uppercase",
+                  }}>
                     {property.status === "venta" ? "En venta" : "En alquiler"}
                   </span>
-                  <span className="rounded-lg border border-black/15 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-950 shadow-[0_1px_3px_rgba(0,0,0,0.12)]">
+                  <span style={{
+                    padding: "4px 11px", borderRadius: 4,
+                    background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)",
+                    border: `1px solid ${T.border}`,
+                    fontSize: "0.62rem", letterSpacing: "0.1em", fontWeight: 600,
+                    color: T.navy, textTransform: "uppercase",
+                  }}>
                     {property.type}
                   </span>
                   {property.featured ? (
-                    <span className="rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-950 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                    <span style={{
+                      padding: "4px 11px", borderRadius: 4,
+                      background: T.gold, border: `1px solid ${T.gold}`,
+                      fontSize: "0.62rem", letterSpacing: "0.1em", fontWeight: 700,
+                      color: "#fff", textTransform: "uppercase",
+                    }}>
                       Destacada
                     </span>
                   ) : null}
-                  {propertyTags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-lg border border-slate-200/90 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
                 </div>
 
-                <div className="absolute top-4 right-4 flex gap-2">
-                  <button className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all">
-                    <Share2 className="w-5 h-5 text-slate-700" strokeWidth={1.5} />
-                  </button>
-                </div>
+                {/* Share — top right */}
+                <button
+                  aria-label="Compartir"
+                  className="absolute top-4 right-4 flex items-center justify-center"
+                  style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${T.border}` }}
+                >
+                  <Share2 className="w-3.5 h-3.5" style={{ color: T.navy }} strokeWidth={1.5} />
+                </button>
 
-                <div className="absolute bottom-4 right-4 px-3 py-1.5 bg-brand-navy/80 backdrop-blur-sm rounded-lg text-white text-xs font-medium">
-                  {currentImageIndex + 1} / {propertyImages.length}
+                {/* Counter — bottom right (over vignette) */}
+                <div style={{
+                  position: "absolute", bottom: 14, right: 14,
+                  padding: "3px 10px", borderRadius: 4,
+                  background: "rgba(20,28,46,0.65)", backdropFilter: "blur(6px)",
+                  fontFamily: "'IBM Plex Mono', 'Space Mono', monospace",
+                  fontSize: "0.68rem", letterSpacing: "0.08em",
+                  color: "rgba(255,255,255,0.85)",
+                }}>
+                  {String(currentImageIndex + 1).padStart(2, "0")} / {String(propertyImages.length).padStart(2, "0")}
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-50 border-t border-slate-200">
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {propertyImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] ${
-                        idx === currentImageIndex
-                          ? "border-slate-900 ring-2 ring-slate-900 sm:ring-offset-2"
-                          : "border-slate-200 hover:border-slate-400"
-                      }`}
-                    >
-                      <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
+              {/* Filmstrip */}
+              {propertyImages.length > 1 && (
+                <div style={{ background: T.white, borderTop: `1px solid ${T.border}`, padding: "10px 12px" }}>
+                  <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                    {propertyImages.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentImageIndex(idx)}
+                        aria-label={`Ver imagen ${idx + 1}`}
+                        className={cn("pd-film-thumb flex-shrink-0 overflow-hidden", idx === currentImageIndex ? "active" : "")}
+                        style={{ width: 52, height: 40, borderRadius: 5, border: `1.5px solid ${idx === currentImageIndex ? T.gold : T.border}` }}
+                      >
+                        <ImageWithFallback src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="border-b border-slate-200">
-                <div className="flex overflow-x-auto">
-                  {propertyDetailTabs.map((tab) => (
+            {/* ── Tabs panel ───────────────────────────────────────────── */}
+            <div style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", overflow: "hidden" }}>
+
+              {/* Tab nav */}
+              <div style={{ borderBottom: `1px solid ${T.border}` }} className="flex overflow-x-auto">
+                {propertyDetailTabs.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex min-w-[8.8rem] items-center justify-center px-3 py-4 text-xs font-medium transition-all sm:min-w-0 sm:flex-1 sm:px-5 sm:text-sm ${
-                        activeTab === tab.id
-                          ? "border-b-2 border-slate-900 bg-slate-50 text-slate-900"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
-                      style={{ fontWeight: activeTab === tab.id ? 600 : 500 }}
                       type="button"
+                      className={cn("pd-tab-btn flex-shrink-0 px-5 py-4 text-xs", isActive ? "pd-tab-active" : "")}
+                      style={{
+                        minWidth: "7rem",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        fontWeight: 700,
+                        color: isActive ? T.gold : T.muted,
+                        background: "transparent",
+                        transition: "color .2s",
+                      }}
                     >
                       <span className="truncate">{tab.label}</span>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
-              <div className="p-4 sm:p-6">
+              {/* Tab content */}
+              <div className="p-5 sm:p-7">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={activeTab}
                     initial={reduceMotion ? false : { opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+                    exit={reduceMotion ? undefined : { opacity: 0, y: -5 }}
                     transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
                   >
+
+                    {/* Descripción */}
                     {activeTab === "descripcion" && (
                       <div className="space-y-4">
                         {hasRichDescription(property.richDescription) ? (
                           <>
                             {property.description?.trim() ? (
-                              <p
-                                className="whitespace-pre-line text-base text-slate-600 leading-relaxed"
-                                style={{ fontWeight: 400 }}
-                              >
+                              <p className="whitespace-pre-line text-[15px] leading-relaxed" style={{ color: T.body, lineHeight: 1.8 }}>
                                 {property.description.trim()}
                               </p>
                             ) : null}
-                            <div
-                              className={RICH_DESCRIPTION_HTML_CLASS}
-                              dangerouslySetInnerHTML={{ __html: property.richDescription! }}
-                            />
+                            <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "pd-rich-desc")} dangerouslySetInnerHTML={{ __html: property.richDescription! }} />
                           </>
                         ) : property.description?.trim() ? (
-                          <p
-                            className="whitespace-pre-line text-base text-slate-700 leading-relaxed"
-                            style={{ fontWeight: 400 }}
-                          >
+                          <p className="whitespace-pre-line text-[15px]" style={{ color: T.body, lineHeight: 1.8 }}>
                             {property.description.trim()}
                           </p>
                         ) : (
                           <>
-                            <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
-                              {displayTitle} es una oportunidad excelente para quienes buscan una propiedad con distribución
-                              funcional, buena iluminación natural y acabados modernos.
+                            <p className="text-[15px]" style={{ color: T.body, lineHeight: 1.8 }}>
+                              {displayTitle} es una oportunidad excelente para quienes buscan una propiedad con distribución funcional, buena iluminación natural y acabados modernos.
                             </p>
-                            <p className="text-base text-slate-700 leading-relaxed" style={{ fontWeight: 400 }}>
-                              Ubicada en {property.location}, esta propiedad combina conectividad, plusvalía y comodidad para
-                              vivir o invertir con visión de largo plazo.
+                            <p className="text-[15px]" style={{ color: T.body, lineHeight: 1.8 }}>
+                              Ubicada en {property.location}, esta propiedad combina conectividad, plusvalía y comodidad para vivir o invertir con visión de largo plazo.
                             </p>
                           </>
                         )}
                       </div>
                     )}
 
+                    {/* Desarrollo */}
                     {activeTab === "desarrollo" && hasLinkedProject && (
-                      <div className="space-y-6">
+                      <div className="space-y-5">
                         {developmentLoading ? (
-                          <p className="text-sm text-slate-500" style={{ fontWeight: 500 }}>
-                            Cargando datos del proyecto…
-                          </p>
+                          <p className="text-sm" style={{ color: T.muted }}>Cargando datos del proyecto…</p>
                         ) : linkedDevelopment ? (
-                          <section className="space-y-6 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/90 to-white p-5 shadow-sm md:p-7">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xl font-semibold text-slate-900" style={{ fontWeight: 700 }}>
-                                    {linkedDevelopment.name}
+                          <div className="space-y-5 p-5 md:p-6" style={{ borderRadius: 10, border: `1px solid ${T.borderGold}`, background: T.goldFaint }}>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xl font-semibold" style={{ color: T.navy, fontWeight: 700 }}>{linkedDevelopment.name}</p>
+                                {isMeaningfulText(linkedDevelopment.type) ? (
+                                  <p className="mt-1 text-sm" style={{ color: T.muted }}>
+                                    {linkedDevelopment.type}{isMeaningfulText(linkedDevelopment.location) ? ` · ${linkedDevelopment.location}` : ""}
                                   </p>
-                                  {isMeaningfulText(linkedDevelopment.type) ? (
-                                    <p className="mt-1 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                                      {linkedDevelopment.type}
-                                      {isMeaningfulText(linkedDevelopment.location) ? ` · ${linkedDevelopment.location}` : ""}
-                                    </p>
-                                  ) : isMeaningfulText(linkedDevelopment.location) ? (
-                                    <p className="mt-1 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                                      {linkedDevelopment.location}
-                                    </p>
-                                  ) : null}
-                                  <p className="mt-2 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                                    <span className="text-slate-500">Estado del proyecto:</span>{" "}
-                                    <span className="font-medium text-slate-900">{linkedDevelopment.status}</span>
-                                  </p>
-                                </div>
-                                <Link
-                                  to={`/desarrollos/${linkedDevelopment.id}`}
-                                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-50"
-                                  style={{ fontWeight: 600 }}
-                                >
-                                  Ver ficha del proyecto
-                                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                                </Link>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
-                                <Calendar className="h-4 w-4 text-slate-500" strokeWidth={1.5} />
-                                <span className="text-slate-600" style={{ fontWeight: 500 }}>
-                                  Entrega estimada:
-                                </span>
-                                <span className="text-slate-900" style={{ fontWeight: 600 }}>
-                                  {formatDeliveryDateEs(linkedDevelopment.deliveryDate) ||
-                                    displayDeliveryDate(linkedDevelopment.deliveryDate)}
-                                </span>
-                              </div>
-
-                              {isMeaningfulText(linkedDevelopment.priceRange) ? (
-                                <p className="text-sm text-slate-700" style={{ fontWeight: 500 }}>
-                                  <span className="text-slate-500">Rango referencial: </span>
-                                  {linkedDevelopment.priceRange}
+                                ) : isMeaningfulText(linkedDevelopment.location) ? (
+                                  <p className="mt-1 text-sm" style={{ color: T.muted }}>{linkedDevelopment.location}</p>
+                                ) : null}
+                                <p className="mt-1.5 text-sm" style={{ color: T.muted }}>
+                                  <span style={{ color: T.gold, fontWeight: 600 }}>Estado: </span>
+                                  <span style={{ color: T.navy }}>{linkedDevelopment.status}</span>
                                 </p>
-                              ) : null}
-
-                              <div className="space-y-8 border-t border-slate-200/80 pt-6">
-                                <FeatureSection
-                                  variant="amenity"
-                                  title="Amenidades"
-                                  items={linkedDevelopment.amenities}
-                                  keyPrefix="dev-am"
-                                />
-                                <FeatureSection
-                                  variant="service"
-                                  title="Servicios"
-                                  items={linkedDevelopment.services}
-                                  keyPrefix="dev-sv"
-                                />
-                                <FeatureSection
-                                  variant="extra"
-                                  title="Características adicionales"
-                                  items={linkedDevelopment.additionalFeatures}
-                                  keyPrefix="dev-af"
-                                />
                               </div>
-                            </section>
+                              <Link
+                                to={`/desarrollos/${linkedDevelopment.id}`}
+                                className="inline-flex shrink-0 items-center justify-center gap-2 text-xs transition-colors"
+                                style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${T.gold}`, background: T.white, color: T.gold, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}
+                              >
+                                Ver ficha <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
+                              </Link>
+                            </div>
+                            <GoldRule />
+                            <div className="flex flex-wrap items-center gap-3 text-sm" style={{ color: T.muted }}>
+                              <Calendar className="h-4 w-4" style={{ color: T.gold }} strokeWidth={1.5} />
+                              <span style={{ color: T.gold, fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Entrega estimada:</span>
+                              <span style={{ color: T.navy, fontWeight: 600 }}>{formatDeliveryDateEs(linkedDevelopment.deliveryDate) || displayDeliveryDate(linkedDevelopment.deliveryDate)}</span>
+                            </div>
+                            {isMeaningfulText(linkedDevelopment.priceRange) ? (
+                              <p className="text-sm" style={{ color: T.muted }}>
+                                <span style={{ color: T.gold, fontWeight: 600 }}>Rango referencial: </span>
+                                <span style={{ color: T.navy }}>{linkedDevelopment.priceRange}</span>
+                              </p>
+                            ) : null}
+                            <GoldRule />
+                            <div className="space-y-7 pd-features-light">
+                              <FeatureSection variant="amenity" title="Amenidades" items={linkedDevelopment.amenities} keyPrefix="dev-am" />
+                              <FeatureSection variant="service" title="Servicios" items={linkedDevelopment.services} keyPrefix="dev-sv" />
+                              <FeatureSection variant="extra" title="Características adicionales" items={linkedDevelopment.additionalFeatures} keyPrefix="dev-af" />
+                            </div>
+                          </div>
                         ) : (
-                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                            Hay un vínculo a desarrollo (Tokko {property.developmentTokkoId}), pero no encontramos la ficha en
-                            la tabla <span className="font-mono">developments</span>. Revisa que exista la misma fila con{" "}
-                            <span className="font-mono">tokko_id</span> coincidente.
+                          <div className="px-4 py-3 text-sm" style={{ borderRadius: 8, border: "1px solid rgba(251,191,36,0.3)", background: "rgba(251,191,36,0.06)", color: "#92650a" }}>
+                            Hay un vínculo a desarrollo (Tokko {property.developmentTokkoId}), pero no encontramos la ficha en la tabla <span className="font-mono">developments</span>.
                           </div>
                         )}
                       </div>
                     )}
 
+                    {/* Video */}
                     {activeTab === "video" && hasVideo && (
                       <div className="space-y-8">
                         {resolvedVideos.map(({ entry, playbackUrl }, index) => {
-                          const heading = propertyVideoDisplayTitle(
-                            entry,
-                            index,
-                            resolvedVideos.length,
-                          );
+                          const heading = propertyVideoDisplayTitle(entry, index, resolvedVideos.length);
                           return (
                             <div key={entry.id} className="space-y-2">
-                              {heading ? (
-                                <h3 className="text-base font-semibold text-slate-800">{heading}</h3>
-                              ) : null}
-                              <PropertyVideoPlayer
-                                url={playbackUrl}
-                                title={heading ?? displayTitle}
-                              />
+                              {heading ? <h3 className="text-base font-semibold" style={{ color: T.navy }}>{heading}</h3> : null}
+                              <PropertyVideoPlayer url={playbackUrl} title={heading ?? displayTitle} />
                             </div>
                           );
                         })}
                       </div>
                     )}
 
+                    {/* Tour 3D */}
                     {activeTab === "tour3d" && hasTour3d && (
                       <div className="space-y-8">
                         {resolvedTours3d.map(({ entry, embedUrl }, index) => {
-                          const heading = propertyTour3dDisplayTitle(
-                            entry,
-                            index,
-                            resolvedTours3d.length,
-                          );
+                          const heading = propertyTour3dDisplayTitle(entry, index, resolvedTours3d.length);
                           return (
                             <div key={entry.id} className="space-y-2">
-                              {heading ? (
-                                <h3 className="text-base font-semibold text-slate-800">{heading}</h3>
-                              ) : null}
+                              {heading ? <h3 className="text-base font-semibold" style={{ color: T.navy }}>{heading}</h3> : null}
                               <iframe
                                 title={heading ?? "Recorrido virtual 3D"}
                                 src={embedUrl}
-                                className="h-[min(70vh,520px)] w-full rounded-xl border border-slate-200 bg-slate-100"
+                                className="h-[min(70vh,520px)] w-full"
+                                style={{ borderRadius: 8, border: `1px solid ${T.border}`, background: "#e8e4de" }}
                                 allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer"
                               />
                             </div>
@@ -766,448 +717,425 @@ export function PropertyDetailPage() {
                       </div>
                     )}
 
+                    {/* Unidad */}
                     {activeTab === "unidad" && (
                       <div className="space-y-6">
                         {hasCatalogFeatureLists ? (
-                          <div className="space-y-8">
-                            <FeatureSection
-                              variant="amenity"
-                              title="Amenidades"
-                              items={property.amenities ?? []}
-                              keyPrefix="u-am"
-                              layout="list"
-                            />
-                            <FeatureSection
-                              variant="service"
-                              title="Servicios"
-                              items={property.services ?? []}
-                              keyPrefix="u-sv"
-                              layout="list"
-                            />
-                            <FeatureSection
-                              variant="extra"
-                              title="Características adicionales"
-                              items={property.additionalFeatures ?? []}
-                              keyPrefix="u-af"
-                              layout="list"
-                            />
-                          </div>
-                        ) : property.developmentTokkoId ? (
-                          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-5 py-8 text-center">
-                            <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                              No hay listas de amenidades, servicios ni extras solo para esta publicación.
-                            </p>
+                          <div className="space-y-7 pd-features-light">
+                            <FeatureSection variant="amenity" title="Amenidades" items={property.amenities ?? []} keyPrefix="u-am" layout="list" />
+                            <FeatureSection variant="service" title="Servicios" items={property.services ?? []} keyPrefix="u-sv" layout="list" />
+                            <FeatureSection variant="extra" title="Características adicionales" items={property.additionalFeatures ?? []} keyPrefix="u-af" layout="list" />
                           </div>
                         ) : (
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-8 text-center">
-                            <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                              No hay listas de amenidades, servicios ni extras registradas para esta publicación.
-                            </p>
+                          <div className="px-5 py-10 text-center" style={{ borderRadius: 8, border: `1px dashed ${T.border}`, background: T.canvas }}>
+                            <p className="text-sm" style={{ color: T.muted }}>No hay listas de amenidades, servicios ni extras registradas para esta publicación.</p>
                           </div>
                         )}
                       </div>
                     )}
 
+                    {/* Ubicación */}
                     {activeTab === "ubicacion" && (
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-slate-900" style={{ fontWeight: 600 }}>
-                          Ubicación
-                        </h3>
-                        {property.colony ? (
-                          <p className="text-sm text-slate-800" style={{ fontWeight: 600 }}>
-                            Colonia: {property.colony}
-                          </p>
-                        ) : null}
-                        {property.fullAddress ? (
-                          <div className="flex items-start gap-2">
-                            {googleMapsUrl ? (
-                              <a
-                                href={googleMapsUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="Abrir dirección en Google Maps"
-                                className="mt-0.5 inline-flex text-slate-500 transition-colors hover:text-slate-900"
-                              >
-                                <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
-                              </a>
-                            ) : null}
-                            <p className="text-sm text-slate-700" style={{ fontWeight: 500 }}>
-                              {property.fullAddress}
-                            </p>
-                          </div>
-                        ) : null}
-                        <p className="text-sm text-slate-600" style={{ fontWeight: 400 }}>
-                          {property.location}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {googleMapsUrl ? (
-                            <a
-                              href={googleMapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
-                              style={{ fontWeight: 600 }}
-                            >
-                              <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
-                              Google Maps
-                            </a>
+                      <div className="space-y-5">
+                        <div>
+                          {property.colony ? <p className="text-sm font-semibold mb-1" style={{ color: T.navy }}>Colonia: {property.colony}</p> : null}
+                          {property.fullAddress ? (
+                            <div className="flex items-start gap-2 mb-1">
+                              {googleMapsUrl ? (
+                                <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" aria-label="Abrir en Google Maps" className="mt-0.5" style={{ color: T.gold }}>
+                                  <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                                </a>
+                              ) : null}
+                              <p className="text-sm" style={{ color: T.body }}>{property.fullAddress}</p>
+                            </div>
                           ) : null}
-                          {appleMapsUrl ? (
-                            <a
-                              href={appleMapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
-                              style={{ fontWeight: 600 }}
-                            >
-                              Apple Maps
-                            </a>
-                          ) : null}
-                          {wazeUrl ? (
-                            <a
-                              href={wazeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
-                              style={{ fontWeight: 600 }}
-                            >
-                              Waze
-                            </a>
-                          ) : null}
+                          <p className="text-sm" style={{ color: T.muted }}>{property.location}</p>
                         </div>
 
+                        {/* Nav links */}
                         <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setMapViewMode("map")}
-                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                              mapViewMode === "map"
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                            }`}
-                            style={{ fontWeight: 600 }}
-                          >
-                            Mapa
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMapViewMode("satellite")}
-                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                              mapViewMode === "satellite"
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                            }`}
-                            style={{ fontWeight: 600 }}
-                          >
-                            Satélite
-                          </button>
+                          {[
+                            googleMapsUrl && { label: "Google Maps", href: googleMapsUrl, icon: true },
+                            appleMapsUrl && { label: "Apple Maps", href: appleMapsUrl, icon: false },
+                            wazeUrl && { label: "Waze", href: wazeUrl, icon: false },
+                          ].filter(Boolean).map((link: any) => (
+                            <a
+                              key={link.label}
+                              href={link.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs transition-colors"
+                              style={{ padding: "6px 13px", borderRadius: 5, border: `1px solid ${T.border}`, background: T.white, color: T.navy, fontWeight: 600, letterSpacing: "0.06em" }}
+                            >
+                              {link.icon ? <MapPin className="h-3.5 w-3.5" style={{ color: T.gold }} strokeWidth={1.5} /> : null}
+                              {link.label}
+                            </a>
+                          ))}
                         </div>
-                        <style>{`
-                          .custom-marker {
-                            background: none;
-                            border: none;
-                          }
-                        `}</style>
-                        <div
-                          ref={mapRef}
-                          className="h-[360px] w-full rounded-lg overflow-hidden border border-slate-200"
-                        />
+
+                        {/* Map/Satellite toggle */}
+                        <div className="flex gap-2">
+                          {(["map", "satellite"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => setMapViewMode(mode)}
+                              className="text-xs transition-all"
+                              style={{
+                                padding: "5px 14px", borderRadius: 5, fontWeight: 700,
+                                letterSpacing: "0.1em", textTransform: "uppercase",
+                                border: mapViewMode === mode ? `1px solid ${T.gold}` : `1px solid ${T.border}`,
+                                background: mapViewMode === mode ? T.goldFaint : T.white,
+                                color: mapViewMode === mode ? T.gold : T.muted,
+                              }}
+                            >
+                              {mode === "map" ? "Mapa" : "Satélite"}
+                            </button>
+                          ))}
+                        </div>
+
+                        <style>{`.custom-marker { background: none; border: none; }`}</style>
+                        <div ref={mapRef} style={{ height: 360, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.border}` }} />
                       </div>
                     )}
+
                   </motion.div>
                 </AnimatePresence>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <PublicDetailContactBlock
-                embedded
-                title="¿Te interesa esta propiedad?"
-                intro="Llama, escribe por WhatsApp o déjanos tus datos y un asesor te contacta."
-                phone={property.contactPhone}
-                whatsappStored={property.contactWhatsapp}
+            {/* Contact — mobile only */}
+            <div className="lg:hidden" style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", padding: 20 }}>
+              <ContactSection
+                property={property}
                 telHref={telHref}
                 whatsappHref={whatsappHref}
-                callButtonLabel="Llamar"
+                formData={formData}
+                handleChange={handleChange}
+                handleSubmit={handleSubmit}
+                submitting={submitting}
+                submitted={submitted}
+                submitError={submitError}
                 showGlobalWhatsappHint={!property?.contactWhatsapp?.trim()}
-                phoneInvalidHint={
-                  property?.contactPhone?.trim() && !telHref
-                    ? "El teléfono guardado no tiene suficientes dígitos para llamar; usa al menos 10 con lada."
-                    : undefined
-                }
+                phoneInvalidHint={property?.contactPhone?.trim() && !telHref ? "El teléfono guardado no tiene suficientes dígitos." : undefined}
               />
+            </div>
+          </div>
 
-              <div className="relative py-6">
-                <div className="absolute inset-0 flex items-center" aria-hidden>
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="bg-white px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    O completa el formulario
+          {/* ════════════════ RIGHT COLUMN — sticky ══════════════════════ */}
+          <div className="min-w-0 lg:col-span-1">
+            <div className="space-y-4 lg:sticky lg:top-24">
+
+              {/* ── Title + price ──────────────────────────────────────── */}
+              <motion.div
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
+                style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 20px rgba(20,28,46,0.08)", padding: "22px 20px" }}
+              >
+                <h1
+                  className="break-words leading-tight mb-2"
+                  style={{ fontSize: "clamp(1.15rem, 2.2vw, 1.5rem)", fontWeight: 700, color: T.navy, letterSpacing: "-0.01em" }}
+                >
+                  {displayTitle}
+                </h1>
+
+                {/* Location */}
+                <div className="flex items-start gap-1.5 mb-4">
+                  {googleMapsUrl ? (
+                    <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" aria-label="Ver en mapa" className="mt-0.5 shrink-0" style={{ color: T.gold }}>
+                      <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </a>
+                  ) : (
+                    <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: T.gold }} strokeWidth={1.5} />
+                  )}
+                  <span className="text-sm break-words" style={{ color: T.muted, fontWeight: 400 }}>
+                    {property.location}{property.colony ? `, ${property.colony}` : ""}
                   </span>
                 </div>
-              </div>
 
-              {submitError && (
-                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-center">
-                  <p className="text-sm font-semibold text-red-900" style={{ fontWeight: 600 }}>
-                    {submitError}
-                  </p>
-                </div>
-              )}
+                <GoldRule className="mb-4" />
 
-              {submitted && (
-                <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-center">
-                  <p className="text-sm font-semibold text-green-900" style={{ fontWeight: 600 }}>
-                    ¡Mensaje enviado!
-                  </p>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    type="text"
-                    name="name"
-                    required
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
-                    placeholder="Nombre"
-                    autoComplete="name"
-                  />
-                  <input
-                    type="tel"
-                    name="phone"
-                    required
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
-                    placeholder="Tu teléfono"
-                    autoComplete="tel"
-                  />
-                </div>
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
-                  placeholder="Correo"
-                  autoComplete="email"
-                />
-                <textarea
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  rows={3}
-                  className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
-                  placeholder="Mensaje (opcional)"
-                />
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-red-hover disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ fontWeight: 600 }}
-                >
-                  <Send className="h-4 w-4" strokeWidth={2} />
-                  {submitting ? "Enviando…" : "Enviar consulta"}
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <div className="min-w-0 lg:col-span-1">
-            <div className="space-y-6 lg:sticky lg:top-24">
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                <div className="mb-4">
-                  <h1
-                    className="mb-2 break-words text-[1.75rem] font-semibold leading-tight tracking-tight text-brand-navy sm:text-2xl md:text-3xl"
-                    style={{ fontWeight: 700 }}
+                {/* Price */}
+                <div className="mb-5">
+                  <EyebrowLabel>{property.status === "venta" ? "Precio" : "Renta mensual"}</EyebrowLabel>
+                  <p
+                    className="mt-1"
+                    style={{
+                      fontFamily: "'Poppins', sans-serif",
+                      fontSize: "clamp(1.7rem, 3.4vw, 2.4rem)",
+                      fontWeight: 700,
+                      color: T.navy,
+                      lineHeight: 1.1, letterSpacing: "-0.02em",
+                    }}
                   >
-                    {displayTitle}
-                  </h1>
-                  <div className="mb-2">
-                    <p
-                      className="mb-1 text-xs uppercase tracking-wide text-slate-500"
-                      style={{ letterSpacing: "0.05em", fontWeight: 500 }}
+                    ${property.price.toLocaleString()}
+                  </p>
+                  {property.expenses != null && property.expenses > 0 ? (
+                    <p className="mt-1 text-xs" style={{ color: T.muted }}>
+                      + ${property.expenses.toLocaleString()}{" "}
+                      {property.status === "alquiler" ? "mantenimiento" : "expensas"}
+                    </p>
+                  ) : null}
+                </div>
+
+                {/* Stats bar */}
+                <div
+                  className="grid grid-cols-3"
+                  style={{ border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden", background: T.canvas }}
+                >
+                  {[
+                    { icon: <Bed className="w-4 h-4" strokeWidth={1.4} />, value: property.bedrooms, label: "Recámaras" },
+                    { icon: <Bath className="w-4 h-4" strokeWidth={1.4} />, value: property.bathrooms, label: "Baños" },
+                    { icon: <Square className="w-4 h-4" strokeWidth={1.4} />, value: `${property.area.toLocaleString()} m²`, label: "Cubierta" },
+                  ].map((stat, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col items-center py-4 px-2"
+                      style={{ borderRight: i < 2 ? `1px solid ${T.borderGold}` : undefined }}
                     >
-                      {property.status === "venta" ? "Precio" : "Renta mensual"}
-                    </p>
-                    <p className="text-xl font-semibold text-brand-navy md:text-2xl" style={{ fontWeight: 700 }}>
-                      ${property.price.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="mb-2 flex items-start gap-2 text-slate-600">
-                    {googleMapsUrl ? (
-                      <a
-                        href={googleMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Abrir ubicación en Google Maps"
-                        className="inline-flex text-slate-600 transition-colors hover:text-slate-900"
+                      <span style={{ color: T.gold, marginBottom: 5 }}>{stat.icon}</span>
+                      <span
+                        style={{
+                          fontFamily: "'Poppins', sans-serif",
+                          fontSize: "1.05rem", fontWeight: 700, color: T.navy,
+                          lineHeight: 1, marginBottom: 3,
+                        }}
                       >
-                        <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
-                      </a>
-                    ) : (
-                      <MapPin className="h-4 w-4 shrink-0" strokeWidth={1.5} />
-                    )}
-                    <span className="break-words text-sm font-medium" style={{ fontWeight: 500 }}>
-                      {property.location}
-                    </span>
-                  </div>
-                  {property.colony ? (
-                    <p className="text-sm text-slate-600" style={{ fontWeight: 500 }}>
-                      <span className="text-slate-500">Colonia:</span>{" "}
-                      <span className="text-slate-900">{property.colony}</span>
-                    </p>
-                  ) : null}
+                        {stat.value}
+                      </span>
+                      <span style={{ fontSize: "0.58rem", textTransform: "uppercase", letterSpacing: "0.1em", color: T.muted, fontWeight: 600 }}>
+                        {stat.label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
+              </motion.div>
 
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:gap-4 md:p-4">
-                  <div className="text-center">
-                    <Bed className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
-                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
-                      {property.bedrooms}
-                    </p>
-                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                      Recámaras
-                    </p>
-                  </div>
-                  <div className="border-x border-slate-200 text-center">
-                    <Bath className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
-                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
-                      {property.bathrooms}
-                    </p>
-                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                      Baños
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <Square className="mx-auto mb-1 h-5 w-5 text-slate-600" strokeWidth={1.5} />
-                    <p className="text-base font-semibold text-slate-900 md:text-lg" style={{ fontWeight: 600 }}>
-                      {property.area.toLocaleString()} m²
-                    </p>
-                    <p className="text-xs text-slate-600" style={{ fontWeight: 500 }}>
-                      Cubierta
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                <div className="space-y-2.5 text-[13px]">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>Referencia:</span>
-                    <span className="text-right text-slate-900 break-all" style={{ fontWeight: 600 }}>
-                      {property.referenceCode ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600" style={{ fontWeight: 500 }}>Tipo:</span>
-                    <span className="text-slate-900 capitalize" style={{ fontWeight: 600 }}>{property.type}</span>
-                  </div>
+              {/* ── Details card ────────────────────────────────────────── */}
+              <motion.div
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1], delay: 0.12 }}
+                style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", padding: "16px 20px" }}
+              >
+                <EyebrowLabel>Detalles</EyebrowLabel>
+                <div className="mt-3" style={{ borderTop: `1px solid ${T.border}` }}>
+                  <DetailRow label="Referencia">{property.referenceCode ?? "—"}</DetailRow>
+                  <div style={{ height: 1, background: T.border }} />
+                  <DetailRow label="Tipo"><span className="capitalize">{property.type}</span></DetailRow>
                   {orientationLabel(property.orientation) ? (
-                    <div className="flex justify-between">
-                      <span className="text-slate-600" style={{ fontWeight: 500 }}>
-                        Orientación:
-                      </span>
-                      <span className="text-slate-900" style={{ fontWeight: 600 }}>
-                        {orientationLabel(property.orientation)}
-                      </span>
-                    </div>
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label="Orientación">{orientationLabel(property.orientation)}</DetailRow>
+                    </>
                   ) : null}
-                  {propertyTags.length > 0 ? (
-                    <div className="flex flex-col gap-1.5 pt-1">
-                      <span className="text-slate-600" style={{ fontWeight: 500 }}>
-                        Etiquetas:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5 justify-end">
-                        {propertyTags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-800"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                  {property.colony ? (
-                    <div className="flex justify-between gap-3">
-                      <span className="shrink-0 text-slate-600" style={{ fontWeight: 500 }}>
-                        Colonia:
-                      </span>
-                      <span className="text-right text-slate-900" style={{ fontWeight: 600 }}>
-                        {property.colony}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-between">
-                    <span className="text-slate-600" style={{ fontWeight: 500 }}>Estado:</span>
-                    <span className="text-slate-900" style={{ fontWeight: 600 }}>
-                      {property.status === "venta" ? "En venta" : "En alquiler"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center gap-3">
-                    <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>Actualizado:</span>
-                    <span className="inline-flex items-center gap-1.5 text-right text-slate-900" style={{ fontWeight: 600 }}>
-                      <Calendar className="w-4 h-4 shrink-0 text-slate-400" strokeWidth={1.5} />
+                  <div style={{ height: 1, background: T.border }} />
+                  <DetailRow label="Estado">{property.status === "venta" ? "En venta" : "En alquiler"}</DetailRow>
+                  <div style={{ height: 1, background: T.border }} />
+                  <DetailRow label="Actualizado">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: T.gold }} strokeWidth={1.5} />
                       {listingActivityLabel(property.listingUpdatedAt)}
                     </span>
-                  </div>
-                  {linkedDevelopment ? (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>
-                        Fecha de entrega:
-                      </span>
-                      <span className="text-right text-slate-900" style={{ fontWeight: 600 }}>
-                        {formatDeliveryDateEs(linkedDevelopment.deliveryDate) ||
-                          displayDeliveryDate(linkedDevelopment.deliveryDate)}
-                      </span>
-                    </div>
-                  ) : null}
+                  </DetailRow>
                   {property.parkingSpaces !== undefined ? (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>
-                        Estacionamientos:
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 text-slate-900" style={{ fontWeight: 600 }}>
-                        <Car className="h-4 w-4 text-slate-400" strokeWidth={1.5} />
-                        {property.parkingSpaces}
-                      </span>
-                    </div>
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label="Estacionamiento">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Car className="h-3.5 w-3.5" style={{ color: T.gold }} strokeWidth={1.5} />
+                          {property.parkingSpaces}
+                        </span>
+                      </DetailRow>
+                    </>
                   ) : null}
                   {property.age !== undefined ? (
-                    <div className="flex justify-between">
-                      <span className="text-slate-600" style={{ fontWeight: 500 }}>
-                        Antigüedad:
-                      </span>
-                      <span className="text-slate-900" style={{ fontWeight: 600 }}>
-                        {property.age === 0 ? "A estrenar" : `${property.age} años`}
-                      </span>
-                    </div>
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label="Antigüedad">{property.age === 0 ? "A estrenar" : `${property.age} años`}</DetailRow>
+                    </>
                   ) : null}
-                  {property.expenses != null && property.expenses > 0 ? (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-slate-600 shrink-0" style={{ fontWeight: 500 }}>
-                        {property.status === "alquiler" ? "Mantenimiento:" : "Gastos / expensas:"}
-                      </span>
-                      <span className="text-right text-slate-900" style={{ fontWeight: 600 }}>
-                        ${property.expenses.toLocaleString()}
-                      </span>
-                    </div>
+                  {linkedDevelopment ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label="Entrega">
+                        {formatDeliveryDateEs(linkedDevelopment.deliveryDate) || displayDeliveryDate(linkedDevelopment.deliveryDate)}
+                      </DetailRow>
+                    </>
+                  ) : null}
+                  {propertyTags.length > 0 ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <div className="py-3">
+                        <EyebrowLabel>Etiquetas</EyebrowLabel>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {propertyTags.map((tag) => (
+                            <span
+                              key={tag}
+                              style={{
+                                padding: "2px 9px", borderRadius: 4,
+                                border: `1px solid ${T.borderGold}`,
+                                background: T.goldFaint,
+                                color: T.gold,
+                                fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.05em",
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </>
                   ) : null}
                 </div>
-              </div>
+              </motion.div>
+
+              {/* ── Contact (desktop) ──────────────────────────────────── */}
+              <motion.div
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+                className="hidden lg:block"
+                style={{ borderRadius: 12, background: T.white, boxShadow: "0 2px 16px rgba(20,28,46,0.07)", padding: 20 }}
+              >
+                <ContactSection
+                  property={property}
+                  telHref={telHref}
+                  whatsappHref={whatsappHref}
+                  formData={formData}
+                  handleChange={handleChange}
+                  handleSubmit={handleSubmit}
+                  submitting={submitting}
+                  submitted={submitted}
+                  submitError={submitError}
+                  showGlobalWhatsappHint={!property?.contactWhatsapp?.trim()}
+                  phoneInvalidHint={property?.contactPhone?.trim() && !telHref ? "El teléfono guardado no tiene suficientes dígitos." : undefined}
+                />
+              </motion.div>
+
             </div>
           </div>
+
         </div>
       </div>
 
       <Footer />
+    </div>
+  );
+}
+
+/* ─── ContactSection ─────────────────────────────────────────────────────── */
+function ContactSection({
+  property, telHref, whatsappHref, formData, handleChange, handleSubmit,
+  submitting, submitted, submitError, showGlobalWhatsappHint, phoneInvalidHint,
+}: {
+  property: Property; telHref: string | null; whatsappHref: string;
+  formData: { name: string; email: string; phone: string; message: string };
+  handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  handleSubmit: (e: React.FormEvent) => void;
+  submitting: boolean; submitted: boolean; submitError: string | null;
+  showGlobalWhatsappHint?: boolean; phoneInvalidHint?: string;
+}) {
+  const phoneDisplay = formatPhoneForDisplay(property.contactPhone?.trim() ?? "");
+  const waDisplay    = whatsappDisplayLabel(property.contactWhatsapp);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <EyebrowLabel>¿Te interesa?</EyebrowLabel>
+        <p className="mt-1.5 text-sm" style={{ color: T.muted, lineHeight: 1.6 }}>
+          Llama, escribe por WhatsApp o déjanos tus datos.
+        </p>
+      </div>
+
+      {/* CTA buttons */}
+      <div className="grid grid-cols-2 gap-2">
+        {telHref ? (
+          <a
+            href={telHref}
+            className="flex flex-col items-center justify-center gap-0.5 text-sm transition-all"
+            style={{ padding: "11px 8px", borderRadius: 7, border: `1.5px solid ${T.border}`, background: T.canvas, color: T.navy, fontWeight: 700 }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Phone className="h-3.5 w-3.5" strokeWidth={2} />
+              Llamar
+            </span>
+            {phoneDisplay ? <span style={{ fontSize: "0.65rem", color: T.muted, fontWeight: 400 }}>{phoneDisplay}</span> : null}
+          </a>
+        ) : (
+          <span
+            className="flex flex-col items-center justify-center gap-0.5 text-sm"
+            style={{ padding: "11px 8px", borderRadius: 7, border: `1.5px dashed ${T.border}`, background: T.canvas, color: T.muted, cursor: "default" }}
+            title={phoneInvalidHint ?? "Configura un teléfono en el admin"}
+          >
+            <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={2} />Llamar</span>
+          </span>
+        )}
+        <a
+          href={whatsappHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex flex-col items-center justify-center gap-0.5 text-sm transition-all"
+          style={{ padding: "11px 8px", borderRadius: 7, background: "linear-gradient(135deg,#20b955,#25D366)", color: "#fff", fontWeight: 700, boxShadow: "0 2px 10px rgba(37,211,102,0.22)" }}
+        >
+          <span className="flex items-center gap-1.5"><WhatsAppGlyph className="h-3.5 w-3.5 text-white" />WhatsApp</span>
+          {waDisplay ? <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.8)", fontWeight: 400 }}>{waDisplay}</span> : null}
+        </a>
+      </div>
+
+      {showGlobalWhatsappHint ? (
+        <p style={{ fontSize: "0.65rem", color: T.muted }}>WhatsApp: enlace global del sitio.</p>
+      ) : null}
+
+      {/* Divider */}
+      <div className="relative py-1">
+        <GoldRule />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span style={{ background: T.white, padding: "0 10px", fontSize: "0.6rem", letterSpacing: "0.14em", textTransform: "uppercase", color: T.muted }}>
+            O completa el formulario
+          </span>
+        </div>
+      </div>
+
+      {/* Feedback */}
+      {submitError && (
+        <div className="px-3 py-2.5 text-center text-xs" style={{ borderRadius: 6, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", color: "#b91c1c" }}>
+          {submitError}
+        </div>
+      )}
+      {submitted && (
+        <div className="px-3 py-2.5 text-center text-xs" style={{ borderRadius: 6, border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.06)", color: "#15803d" }}>
+          ¡Mensaje enviado!
+        </div>
+      )}
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="space-y-2.5">
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <input type="text" name="name" required value={formData.name} onChange={handleChange} className="pd-input" placeholder="Nombre" autoComplete="name" />
+          <input type="tel" name="phone" required value={formData.phone} onChange={handleChange} className="pd-input" placeholder="Tu teléfono" autoComplete="tel" />
+        </div>
+        <input type="email" name="email" required value={formData.email} onChange={handleChange} className="pd-input" placeholder="Correo" autoComplete="email" />
+        <textarea name="message" value={formData.message} onChange={handleChange} rows={3} className="pd-input" style={{ resize: "none" }} placeholder="Mensaje (opcional)" />
+        <button
+          type="submit"
+          disabled={submitting}
+          className="flex w-full items-center justify-center gap-2 transition-all"
+          style={{
+            padding: "12px 20px", borderRadius: 7,
+            background: submitting ? T.muted : T.navy,
+            color: "#fff", fontWeight: 700, fontSize: "0.8rem",
+            letterSpacing: "0.1em", textTransform: "uppercase",
+            cursor: submitting ? "not-allowed" : "pointer",
+            opacity: submitting ? 0.7 : 1,
+            boxShadow: submitting ? "none" : `0 3px 14px rgba(20,28,46,0.22)`,
+          }}
+        >
+          <Send className="h-3.5 w-3.5" strokeWidth={2} />
+          {submitting ? "Enviando…" : "Enviar consulta"}
+        </button>
+      </form>
     </div>
   );
 }

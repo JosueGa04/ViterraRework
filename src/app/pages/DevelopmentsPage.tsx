@@ -209,6 +209,7 @@ export function DevelopmentsPage() {
                 hidePropertyAdvancedFilters
                 showMapZoneLink={false}
                 catalogPrices={catalogPrices}
+                defaultStatus="venta"
               />
             </motion.div>
           </Reveal>

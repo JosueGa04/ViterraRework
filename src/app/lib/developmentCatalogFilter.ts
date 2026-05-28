@@ -10,7 +10,14 @@ export function developmentUnitPrices(dev: Development): number[] {
 export function developmentsCatalogPrices(devs: Development[]): number[] {
   const out: number[] = [];
   for (const d of devs) {
-    out.push(...developmentUnitPrices(d));
+    const unitPrices = developmentUnitPrices(d);
+    if (unitPrices.length > 0) {
+      out.push(...unitPrices);
+    } else if (d.priceRange) {
+      const bounds = parsePriceRangeString(d.priceRange);
+      if (bounds.min !== null) out.push(bounds.min);
+      if (bounds.max !== null) out.push(bounds.max);
+    }
   }
   return out;
 }
