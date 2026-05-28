@@ -4490,70 +4490,36 @@ export function AdminWorkspace() {
                 </div>
               </div>
 
-              {!isGroupLeader && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
-                {(
-                  [
-                    {
-                      id: "users" as const,
-                      title: "Equipo y accesos",
-                      desc: "Usuarios del CRM, roles y permisos.",
-                      icon: Users,
-                    },
-                    {
-                      id: "leadStages" as const,
-                      title: "Pipeline de ventas",
-                      desc: "Como administrador, revisa y edita el embudo de cada equipo; el líder solo el suyo.",
-                      icon: LayoutGrid,
-                    },
-                    {
-                      id: "settings" as const,
-                      title: "Configuración",
-                      desc: "Espacio de trabajo, respaldos y accesos.",
-                      icon: Settings,
-                    },
-                  ] as const
-                ).map((item) => {
-                  const active = companySubtab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => goTab("company", item.id)}
-                      className={cn(
-                        "group flex w-full flex-row items-center gap-3 rounded-xl border px-3 py-2 text-left transition-all duration-200",
-                        active
-                          ? "border-primary/35 bg-gradient-to-br from-primary/[0.07] via-white to-white shadow-[0_12px_32px_-16px_rgba(200,16,46,0.25)] ring-2 ring-primary/15"
-                          : "border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-md",
-                      )}
-                    >
-                      <div
+              {!isGroupLeader && (
+                <div className="flex gap-1 rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm">
+                  {(
+                    [
+                      { id: "users"      as const, title: "Equipo y accesos",   icon: Users      },
+                      { id: "leadStages" as const, title: "Pipeline de ventas", icon: LayoutGrid },
+                      { id: "settings"   as const, title: "Configuración",      icon: Settings   },
+                    ] as const
+                  ).map((item) => {
+                    const active = companySubtab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => goTab("company", item.id)}
                         className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                          "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
                           active
-                            ? "border-primary/25 bg-primary/10 text-primary"
-                            : "border-slate-200/90 bg-slate-50 text-slate-600 group-hover:border-slate-300 group-hover:bg-white",
+                            ? "bg-slate-900 text-white shadow-sm"
+                            : "text-slate-500 hover:bg-slate-50 hover:text-slate-700",
                         )}
+                        style={{ fontWeight: active ? 600 : 500 }}
                       >
-                        <item.icon className="h-4 w-4" strokeWidth={active ? 2 : 1.75} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={cn(
-                            "font-heading text-sm leading-tight",
-                            active ? "text-brand-navy" : "text-slate-900",
-                          )}
-                          style={{ fontWeight: 600 }}
-                        >
-                          {item.title}
-                        </p>
-                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500" style={{ fontWeight: 500 }}>
-                          {item.desc}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>}
+                        <item.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={active ? 2.2 : 1.75} />
+                        <span className="hidden sm:inline">{item.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
                 {companySubtab === "users" && user && (
