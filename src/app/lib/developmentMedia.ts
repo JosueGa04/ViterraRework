@@ -1,8 +1,6 @@
 import type { Development } from "../data/developments";
 import type { PropertyTour3dEntry } from "./propertyTours3d";
 import type { PropertyVideoEntry } from "./propertyVideos";
-import { tours3dFromLegacyFields } from "./propertyTours3d";
-import { videosFromLegacyFields } from "./propertyVideos";
 import {
   legacyTour3dUrlFromTours,
   parsePropertyTours3dJson,

@@ -4,6 +4,7 @@ import type { Property } from "../PropertyCard";
 import { hasRichDescription } from "../../lib/propertyDescription";
 import type { Development } from "../../data/developments";
 import type { User } from "../../contexts/AuthContext";
+import { loadWorkspaceAdminSettings } from "../../data/workspaceSettings";
 
 export interface PdfManualFields {
   frente?: string;
@@ -462,14 +463,6 @@ function stripHtml(html: string | undefined): string {
   return text.trim();
 }
 
-interface FichaTecnicaPdfProps {
-  data: Property | Development;
-  type: "property" | "development";
-  includeLogo: boolean;
-  user?: User | null;
-  manualFields?: PdfManualFields;
-}
-
 export function FichaTecnicaPdf({ data, type, includeLogo, user, manualFields }: FichaTecnicaPdfProps) {
   const isDev = type === "development";
   const p = data as any;
@@ -490,6 +483,16 @@ export function FichaTecnicaPdf({ data, type, includeLogo, user, manualFields }:
   const agentName = user?.name || "Asesor Inmobiliario";
   const agentEmail = user?.email || "contacto@viterra.com.mx";
   const agentPhone = user?.profile?.phone || "33 3629-7122";
+
+  // Identidad de la empresa configurable (Mi empresa → Configuración); usa
+  // los valores por defecto de Viterra cuando los campos están vacíos.
+  const companySettings = loadWorkspaceAdminSettings();
+  const companyPhone = companySettings.companyPhone.trim() || "33 3629-7122";
+  const companyAddress =
+    companySettings.companyAddress.trim() ||
+    "Av. Terranova #1455 Int. 102, Providencia 4a Secc; C.P. 44639, Guadalajara, Jal.";
+  const companyWebsite = companySettings.companyWebsite.trim() || "viterrainmobiliaria.com";
+  const companyTaxId = companySettings.companyTaxId.trim();
   
   // Extract values
   const bedrooms = p.bedrooms ? String(p.bedrooms) : "-";
@@ -847,18 +850,23 @@ export function FichaTecnicaPdf({ data, type, includeLogo, user, manualFields }:
                 <Svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#ffffff" strokeWidth="2">
                   <Path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
                 </Svg>
-                <Text style={styles.footerText}>Tel. 33 3629-7122</Text>
+                <Text style={styles.footerText}>Tel. {companyPhone}</Text>
               </View>
               <View style={styles.footerTextRow}>
                 <Svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#ffffff" strokeWidth="2">
                   <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                 </Svg>
-                <Text style={styles.footerText}>Av. Terranova #1455 Int. 102, Providencia 4a Secc; C.P. 44639, Guadalajara, Jal.</Text>
+                <Text style={styles.footerText}>{companyAddress}</Text>
               </View>
+              {companyTaxId ? (
+                <View style={styles.footerTextRow}>
+                  <Text style={styles.footerText}>RFC: {companyTaxId}</Text>
+                </View>
+              ) : null}
             </View>
             <View>
               <View style={styles.footerTextRow}>
-                <Text style={styles.footerText}>viterrainmobiliaria.com</Text>
+                <Text style={styles.footerText}>{companyWebsite}</Text>
               </View>
               <View style={styles.footerTextRow}>
                 <Text style={styles.footerText}>viterragrupoinmobiliario</Text>

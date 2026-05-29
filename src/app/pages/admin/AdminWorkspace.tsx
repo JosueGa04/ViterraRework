@@ -320,13 +320,16 @@ export function AdminWorkspace() {
       activeTab === "profile" ||
       (activeTab === "company" && companySubtab !== "site");
 
+    // Para todos los subtabs de empresa (excepto el editor de sitio) el plan de datos
+    // es idéntico. Así, alternar entre «Equipo y accesos» y «Pipeline de ventas» no
+    // cambia los flags y no vuelve a disparar la carga (ni el skeleton).
     const needsDevelopments =
       activeTab === "developments" ||
       activeTab === "properties" ||
       activeTab === "leads" ||
       activeTab === "consultas" ||
       activeTab === "clients" ||
-      (activeTab === "company" && (companySubtab === "users" || companySubtab === "settings"));
+      (activeTab === "company" && companySubtab !== "site");
 
     const needsCatalog =
       activeTab === "dashboard" ||
@@ -336,7 +339,7 @@ export function AdminWorkspace() {
       activeTab === "clients" ||
       activeTab === "properties" ||
       activeTab === "developments" ||
-      (activeTab === "company" && (companySubtab === "users" || companySubtab === "settings"));
+      (activeTab === "company" && companySubtab !== "site");
 
     return { needsLeads, needsDevelopments, needsCatalog };
   }, [activeTab, companySubtab]);
@@ -525,9 +528,15 @@ export function AdminWorkspace() {
   const leadsModuleLoading = leadsLoading;
   const kpisModuleLoading = crmCoreLoading;
   /** Sitio y ajustes no dependen del pipeline; usuarios puede mostrarse con leads aún cargando en segundo plano. */
-  const companyModuleLoading =
+  const companyModuleLoadingRaw =
     (companySubtab === "leadStages" && !crmBootstrapReady) ||
     (companySubtab === "users" && leadsLoading);
+  // Una vez que el módulo de empresa estuvo listo, no volvemos a mostrar el skeleton completo
+  // al cambiar de subtab: evita el "refresh" visual al alternar entre Pipeline y Equipo.
+  const companyModuleEverReadyRef = useRef(false);
+  if (!companyModuleLoadingRaw) companyModuleEverReadyRef.current = true;
+  const companyModuleLoading =
+    companyModuleLoadingRaw && !companyModuleEverReadyRef.current;
 
   const logCatalogActivity = useCallback(
     async (row: {
@@ -792,7 +801,8 @@ export function AdminWorkspace() {
     user?.mustChangePassword,
     user?.id,
     adminViewAs,
-    adminRemoteDataPlan,
+    adminRemoteDataPlan.needsLeads,
+    adminRemoteDataPlan.needsDevelopments,
   ]);
 
   useEffect(() => {
@@ -2526,7 +2536,7 @@ export function AdminWorkspace() {
               title: "Dashboard",
               description: "Inicio operativo: prioridades, citas y accesos rápidos",
               keywords: ["inicio", "resumen", "dashboard", "panel", "hoy", "prioridades"],
-              category: "crm",
+              category: "crm" as const,
               icon: LayoutDashboard,
               action: () => goTab("dashboard"),
             },
@@ -2539,7 +2549,7 @@ export function AdminWorkspace() {
               title: "KPI's",
               description: "Reportes: métricas, metas y comparativos por período",
               keywords: ["kpi", "kpis", "reportes", "metricas", "métricas", "indicadores", "meta", "metas", "tendencia"],
-              category: "crm",
+              category: "crm" as const,
               icon: BarChart3,
               action: () => goTab("kpis"),
             },
@@ -2552,7 +2562,7 @@ export function AdminWorkspace() {
               title: "Leads",
               description: "Pipeline y seguimiento comercial",
               keywords: ["lead", "clientes", "pipeline", "kanban", "prospectos"],
-              category: "crm",
+              category: "crm" as const,
               icon: Users,
               action: () => goTab("leads"),
             },
@@ -2572,7 +2582,7 @@ export function AdminWorkspace() {
                 "descartados",
                 "reasignar",
               ],
-              category: "crm",
+              category: "crm" as const,
               icon: ClipboardList,
               action: () => goTab("consultas"),
             },
@@ -2585,7 +2595,7 @@ export function AdminWorkspace() {
               title: "Clientes",
               description: "Fichas de clientes e historial",
               keywords: ["clientes", "crm", "compradores", "contactos"],
-              category: "crm",
+              category: "crm" as const,
               icon: UserCircle2,
               action: () => goTab("clients"),
             },
@@ -2598,7 +2608,7 @@ export function AdminWorkspace() {
               title: "Agenda",
               description: "Calendario semanal de citas",
               keywords: ["agenda", "calendario", "citas", "semana", "horario"],
-              category: "crm",
+              category: "crm" as const,
               icon: Calendar,
               action: () => goTab("agenda"),
             },
@@ -2611,7 +2621,7 @@ export function AdminWorkspace() {
               title: "Propiedades",
               description: "Catálogo y administración de propiedades",
               keywords: ["propiedades", "inmuebles", "venta", "renta"],
-              category: "catalog",
+              category: "catalog" as const,
               icon: Home,
               action: () => goTab("properties"),
             },
@@ -2624,7 +2634,7 @@ export function AdminWorkspace() {
               title: "Desarrollos",
               description: "Gestión de desarrollos propios",
               keywords: ["desarrollos", "proyectos", "desarrollo"],
-              category: "catalog",
+              category: "catalog" as const,
               icon: Building2,
               action: () => goTab("developments"),
             },
@@ -2637,7 +2647,7 @@ export function AdminWorkspace() {
               title: "Actividades",
               description: "Timeline del catálogo: propiedades y desarrollos",
               keywords: ["actividades", "timeline", "historial", "cambios", "precio", "inventario"],
-              category: "catalog",
+              category: "catalog" as const,
               icon: History,
               action: () => goTab("activities"),
             },
@@ -2650,7 +2660,7 @@ export function AdminWorkspace() {
               title: "Sitio web · Editor",
               description: "Editor visual del contenido público",
               keywords: ["editar sitio", "sitio", "web", "editor", "contenido"],
-              category: "site",
+              category: "site" as const,
               icon: Globe2,
               action: () => goTab("sitio"),
             },
@@ -2664,7 +2674,7 @@ export function AdminWorkspace() {
                 title: "Pipeline de ventas",
                 description: "Grupos asignados y configuración de columnas",
                 keywords: ["pipeline", "ventas", "grupos", "columnas", "kanban"],
-                category: "company",
+                category: "company" as const,
                 icon: Briefcase,
                 action: () => {
                   goTab("company", "leadStages");
@@ -2677,7 +2687,7 @@ export function AdminWorkspace() {
                 title: "Mi empresa · Usuarios",
                 description: "Administración de usuarios y permisos",
                 keywords: ["usuarios", "mi empresa", "permisos", "roles", "equipo"],
-                category: "company",
+                category: "company" as const,
                 icon: Users,
                 action: () => {
                   goTab("company", "users");
@@ -2688,7 +2698,7 @@ export function AdminWorkspace() {
                 title: "Mi empresa · Pipeline de leads",
                 description: "Configura estados y orden del pipeline",
                 keywords: ["estados", "columnas", "pipeline de leads", "kanban", "orden"],
-                category: "company",
+                category: "company" as const,
                 icon: LayoutGrid,
                 action: () => {
                   goTab("company", "leadStages");
@@ -2699,7 +2709,7 @@ export function AdminWorkspace() {
                 title: "Mi empresa · Configuración",
                 description: "Espacio de trabajo, copias de seguridad y datos locales",
                 keywords: ["configuración", "ajustes", "respaldo", "localStorage", "mi empresa"],
-                category: "company",
+                category: "company" as const,
                 icon: Settings,
                 action: () => {
                   goTab("company", "settings");
@@ -2712,7 +2722,7 @@ export function AdminWorkspace() {
           title: "Mensajes",
           description: "Accesos al centro de mensajes",
           keywords: ["mensajes", "contacto", "correo"],
-          category: "account",
+          category: "account" as const,
           icon: MessageSquare,
           action: () => goTab("messages"),
         },
@@ -2721,7 +2731,7 @@ export function AdminWorkspace() {
           title: "Mi perfil",
           description: "Datos en tokko_users, contacto y payload",
           keywords: ["perfil", "cuenta", "datos", "tokko", "correo", "teléfono", "foto"],
-          category: "account",
+          category: "account" as const,
           icon: UserIcon,
           action: () => goTab("profile"),
         },
@@ -2730,7 +2740,7 @@ export function AdminWorkspace() {
           title: "Sitio público · Inicio",
           description: "Ir a la página principal del sitio",
           keywords: ["sitio", "home", "inicio público", "web"],
-          category: "site",
+          category: "site" as const,
           icon: Globe2,
           action: () => navigate("/"),
         },
@@ -2739,7 +2749,7 @@ export function AdminWorkspace() {
           title: "Sitio público · Propiedades",
           description: "Ir al catálogo público de propiedades",
           keywords: ["sitio propiedades", "catálogo", "propiedades públicas"],
-          category: "site",
+          category: "site" as const,
           icon: Home,
           action: () => navigate("/propiedades"),
         },
@@ -2748,7 +2758,7 @@ export function AdminWorkspace() {
           title: "Sitio público · Desarrollos",
           description: "Ir a la página pública de desarrollos",
           keywords: ["sitio desarrollos", "desarrollos públicos"],
-          category: "site",
+          category: "site" as const,
           icon: Building2,
           action: () => navigate("/desarrollos"),
         },
@@ -2757,7 +2767,7 @@ export function AdminWorkspace() {
           title: "Sitio público · Contacto",
           description: "Ir al formulario de contacto",
           keywords: ["contacto", "formulario", "mensaje", "sitio contacto"],
-          category: "site",
+          category: "site" as const,
           icon: MessageSquare,
           action: () => navigate("/contacto"),
         },

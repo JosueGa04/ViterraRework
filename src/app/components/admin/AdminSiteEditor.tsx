@@ -286,8 +286,9 @@ export function AdminSiteEditor() {
     const onMsg = (e: MessageEvent) => {
       if (e.source !== iframeRef.current?.contentWindow) return;
       if (!isSameOriginMessage(e.origin)) return;
-      const d = e.data as SitePreviewChildMessage | { type?: string };
-      if (d?.type !== VITERRA_SITE_PREVIEW_CHILD) return;
+      const raw = e.data as { type?: string };
+      if (raw?.type !== VITERRA_SITE_PREVIEW_CHILD) return;
+      const d = raw as SitePreviewChildMessage;
       if (d.action === "setActiveBlock") {
         setActiveBlockId(d.blockId ?? null);
         return;

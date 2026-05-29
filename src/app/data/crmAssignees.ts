@@ -1,5 +1,14 @@
+import type { UserRole } from "../contexts/authContextTypes";
+
 /** Asesores / usuarios CRM para asignación de leads en la UI (hasta integrar `tokko_users`). */
-export const CRM_ASSIGNEES: { id: string; name: string }[] = [
+export const CRM_ASSIGNEES: {
+  id: string;
+  name: string;
+  email?: string;
+  role?: UserRole;
+  tokkoUserId?: string;
+  picture?: string;
+}[] = [
   { id: "1", name: "Admin Viterra" },
   { id: "2", name: "Patricia López" },
   { id: "3", name: "Laura Méndez" },

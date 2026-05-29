@@ -1,12 +1,16 @@
 import { useCallback, useMemo, useState, type ComponentType } from "react";
 import {
   ArrowRight,
+  Building2,
   Calendar,
   Database,
   Globe2,
+  Hash,
   Home,
   LayoutGrid,
   Mail,
+  MapPin,
+  Phone,
   Settings,
   Shield,
   Users,
@@ -53,6 +57,11 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
   const saveWorkspaceFields = useCallback(() => {
     saveWorkspaceAdminSettings(settings);
     toast.success("Datos del espacio guardados");
+  }, [settings]);
+
+  const saveCompanyIdentity = useCallback(() => {
+    saveWorkspaceAdminSettings(settings);
+    toast.success("Identidad de la empresa guardada");
   }, [settings]);
 
   const storageBytes = useMemo(() => {
@@ -111,7 +120,7 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
           Espacio de trabajo
         </h4>
         <p className="mt-1 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-          Identificador y preferencias que se usan como referencia en exportaciones y nuevas altas.
+          Etiqueta interna del espacio y preferencias de referencia del equipo.
         </p>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -122,6 +131,9 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
               onChange={(e) => setSettings((s) => ({ ...s, workspaceName: e.target.value }))}
               placeholder="Ej. Viterra Inmobiliaria"
             />
+            <p className="text-xs text-slate-400" style={{ fontWeight: 500 }}>
+              Solo se muestra en el pie del panel CRM.
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Moneda por defecto</Label>
@@ -144,7 +156,7 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
             </Select>
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="ws-email">Correo de contacto interno (opcional)</Label>
+            <Label htmlFor="ws-email">Correo de contacto interno del equipo (opcional)</Label>
             <div className="relative">
               <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
               <Input
@@ -160,6 +172,73 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
         </div>
         <Button type="button" variant="secondary" className="mt-5" onClick={saveWorkspaceFields}>
           Guardar datos del espacio
+        </Button>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-5 md:p-6">
+        <h4 className="flex items-center gap-2 text-base text-brand-navy" style={{ fontWeight: 600 }}>
+          <Building2 className="h-4 w-4 text-primary" strokeWidth={1.75} />
+          Identidad de la empresa
+        </h4>
+        <p className="mt-1 text-sm text-slate-600" style={{ fontWeight: 500 }}>
+          Datos de contacto que aparecen en el pie de las fichas técnicas PDF. Si los dejas vacíos se usan los valores por defecto de Viterra.
+        </p>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="co-phone">Teléfono</Label>
+            <div className="relative">
+              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+              <Input
+                id="co-phone"
+                className="pl-10"
+                value={settings.companyPhone}
+                onChange={(e) => setSettings((s) => ({ ...s, companyPhone: e.target.value }))}
+                placeholder="Ej. 33 3629-7122"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="co-web">Sitio web</Label>
+            <div className="relative">
+              <Globe2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+              <Input
+                id="co-web"
+                className="pl-10"
+                value={settings.companyWebsite}
+                onChange={(e) => setSettings((s) => ({ ...s, companyWebsite: e.target.value }))}
+                placeholder="Ej. viterrainmobiliaria.com"
+              />
+            </div>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="co-address">Dirección</Label>
+            <div className="relative">
+              <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+              <Input
+                id="co-address"
+                className="pl-10"
+                value={settings.companyAddress}
+                onChange={(e) => setSettings((s) => ({ ...s, companyAddress: e.target.value }))}
+                placeholder="Ej. Av. Terranova #1455 Int. 102, Guadalajara, Jal."
+              />
+            </div>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="co-rfc">RFC (opcional)</Label>
+            <div className="relative">
+              <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+              <Input
+                id="co-rfc"
+                className="pl-10"
+                value={settings.companyTaxId}
+                onChange={(e) => setSettings((s) => ({ ...s, companyTaxId: e.target.value }))}
+                placeholder="Ej. VIT123456ABC"
+              />
+            </div>
+          </div>
+        </div>
+        <Button type="button" variant="secondary" className="mt-5" onClick={saveCompanyIdentity}>
+          Guardar identidad
         </Button>
       </section>
 
@@ -231,25 +310,6 @@ export function AdminCompanySettings({ counts, onNavigate }: Props) {
             Dashboard
           </Button>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 md:p-6">
-        <h4 className="text-base text-brand-navy" style={{ fontWeight: 600 }}>
-          Claves de almacenamiento local
-        </h4>
-        <p className="mt-1 text-sm text-slate-600" style={{ fontWeight: 500 }}>
-          Referencia técnica de dónde persiste cada módulo en <code className="text-xs">localStorage</code>.
-        </p>
-        <ul className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200/80">
-          {CRM_LOCAL_STORAGE_KEYS.map(({ key, label }) => (
-            <li key={key} className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-slate-800" style={{ fontWeight: 500 }}>
-                {label}
-              </span>
-              <code className="text-[11px] text-slate-500">{key}</code>
-            </li>
-          ))}
-        </ul>
       </section>
 
       <section className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-5 md:p-6">

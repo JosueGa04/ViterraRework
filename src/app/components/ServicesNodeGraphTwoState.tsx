@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type { ServiceCardContent } from "../../data/siteContent";
 import { serviceIconForKey, serviceOrbitAnglesDeg } from "../../lib/serviceIcons";
 import { resolveServiceCardPrimaryHref } from "../../lib/serviceCardPrimaryHref";
+import { cn } from "./ui/utils";
 
 const VITERRA_MARK_MONO = "/images/branding/viterra-mark-mono-alpha.png";
 

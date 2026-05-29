@@ -1,5 +1,6 @@
 import React from "react";
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import type { Style } from "@react-pdf/types";
 import type { User } from "../../../contexts/AuthContext";
 import { roleLabelEs } from "../../../lib/leadsAccess";
 import type { ProfileReportSheet } from "../../../lib/profileReportExport";
@@ -434,7 +435,7 @@ function PageChrome({
   userName: string;
   rangeLabel: string;
   children: React.ReactNode;
-  style?: object;
+  style?: Style;
 }) {
   return (
     <Page size="A4" style={[styles.page, style ?? {}]}>
@@ -497,7 +498,7 @@ function KvTable({ sheet }: { sheet: ProfileReportSheet }) {
   );
 }
 
-function colFlex(count: number, index: number): object {
+function colFlex(count: number, index: number): Style {
   if (count <= 2) return { flex: 1 };
   if (index === 0) return { flex: 2 };
   return { flex: 1 };

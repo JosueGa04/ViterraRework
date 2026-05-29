@@ -1,18 +1,30 @@
 export const WORKSPACE_ADMIN_SETTINGS_KEY = "viterra_workspace_admin_settings";
 
 export interface WorkspaceAdminSettings {
-  /** Nombre mostrado en exportaciones y cabeceras del panel */
+  /** Etiqueta interna del espacio; se muestra en el pie del panel CRM */
   workspaceName: string;
-  /** Moneda preferida para listados y nuevas altas (referencia) */
+  /** Moneda de referencia preferida del espacio */
   defaultCurrency: "MXN" | "USD";
-  /** Correo de contacto interno para alertas (opcional) */
+  /** Correo de contacto interno del equipo */
   contactEmail: string;
+  /** Teléfono de la empresa; aparece en las fichas técnicas PDF */
+  companyPhone: string;
+  /** Dirección de la empresa; aparece en las fichas técnicas PDF */
+  companyAddress: string;
+  /** Sitio web de la empresa; aparece en las fichas técnicas PDF */
+  companyWebsite: string;
+  /** RFC de la empresa; aparece en las fichas técnicas PDF si se captura */
+  companyTaxId: string;
 }
 
 export const DEFAULT_WORKSPACE_ADMIN_SETTINGS: WorkspaceAdminSettings = {
   workspaceName: "Viterra",
   defaultCurrency: "MXN",
   contactEmail: "",
+  companyPhone: "",
+  companyAddress: "",
+  companyWebsite: "",
+  companyTaxId: "",
 };
 
 export function loadWorkspaceAdminSettings(): WorkspaceAdminSettings {
@@ -27,6 +39,10 @@ export function loadWorkspaceAdminSettings(): WorkspaceAdminSettings {
           : DEFAULT_WORKSPACE_ADMIN_SETTINGS.workspaceName,
       defaultCurrency: o.defaultCurrency === "USD" ? "USD" : "MXN",
       contactEmail: typeof o.contactEmail === "string" ? o.contactEmail : "",
+      companyPhone: typeof o.companyPhone === "string" ? o.companyPhone : "",
+      companyAddress: typeof o.companyAddress === "string" ? o.companyAddress : "",
+      companyWebsite: typeof o.companyWebsite === "string" ? o.companyWebsite : "",
+      companyTaxId: typeof o.companyTaxId === "string" ? o.companyTaxId : "",
     };
   } catch {
     return { ...DEFAULT_WORKSPACE_ADMIN_SETTINGS };
