@@ -5,7 +5,10 @@
       "WebFetch(domain:www.instagram.com)",
       "WebSearch",
       "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" \"https://www.instagram.com/viterrainmobiliaria/\")",
-      "WebFetch(domain:www.facebook.com)"
+      "WebFetch(domain:www.facebook.com)",
+      "Bash(npx supabase *)",
+      "Bash(curl -s \"http://localhost:5173/api/instagram-feed?username=viterrainmobiliaria&count=3\")",
+      "Bash(curl -s -v https://i.instagram.com/api/v1/users/web_profile_info/?username=viterrainmobiliaria -H 'User-Agent: Mozilla/5.0 \\(iPhone; CPU iPhone OS 16_0 like Mac OS X\\) AppleWebKit/605.1.15 \\(KHTML, like Gecko\\) Version/16.0 Mobile/15E148 Safari/604.1' -H 'x-ig-app-id: 936619743392459' -H 'Accept: application/json' -H 'Accept-Language: es-MX,es;q=0.9')"
     ]
   }
 }
