@@ -9,6 +9,25 @@ export type AdminViewAsRole = "admin" | UserRole;
 
 const STORAGE_KEY = "viterra_admin_view_as";
 const LEGACY_STORAGE_KEY = "viterra_admin_dashboard_view_as";
+const USER_STORAGE_KEY = "viterra_admin_view_as_user";
+
+/** Id del usuario concreto desde cuya perspectiva ve el admin (al ver como líder o asesor). */
+export function loadAdminViewAsUserId(): string | null {
+  try {
+    return sessionStorage.getItem(USER_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveAdminViewAsUserId(id: string | null): void {
+  try {
+    if (id) sessionStorage.setItem(USER_STORAGE_KEY, id);
+    else sessionStorage.removeItem(USER_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function loadAdminViewAsRole(): AdminViewAsRole {
   try {

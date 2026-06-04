@@ -126,6 +126,8 @@ import {
   getVisiblePipelineGroupIdsForView,
   loadAdminViewAsRole,
   saveAdminViewAsRole,
+  loadAdminViewAsUserId,
+  saveAdminViewAsUserId,
   type AdminViewAsRole,
 } from "../../lib/adminViewAsRole";
 import { copyPublicPageUrl } from "../../lib/copyPublicLink";
@@ -641,6 +643,8 @@ export function AdminWorkspace() {
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [adminViewAs, setAdminViewAs] = useState<AdminViewAsRole>(loadAdminViewAsRole);
+  /** Usuario concreto desde cuya perspectiva ve el admin al elegir "líder" o "asesor". */
+  const [adminViewAsUserId, setAdminViewAsUserId] = useState<string | null>(loadAdminViewAsUserId);
   const [adminSidebarExpanded, setAdminSidebarExpanded] = useState(readStoredAdminSidebarExpanded);
   /** Menú hamburguesa de módulos en móvil/iPad (<lg). */
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -710,13 +714,35 @@ export function AdminWorkspace() {
   const [appointments, setAppointments] = useState<AgendaAppointment[]>([]);
   const isRealAdmin = user?.role === "admin";
   const effectiveRole = effectiveRoleFromView(user, adminViewAs);
-  const effectiveUser = useMemo(
-    () => contextUserForViewAs(user, adminViewAs),
-    [user, adminViewAs],
-  );
+  /** Usuario real elegido para la vista previa (líder/asesor); null si no hay uno válido. */
+  const viewAsTargetUser = useMemo(() => {
+    if (!user || user.role !== "admin" || adminViewAs === "admin") return null;
+    return (
+      users.find((u) => u.id === adminViewAsUserId && u.role === adminViewAs && u.isActive) ?? null
+    );
+  }, [user, adminViewAs, adminViewAsUserId, users]);
+  const effectiveUser = useMemo(() => {
+    if (!user) return null;
+    if (user.role !== "admin" || adminViewAs === "admin") return user;
+    // Ver como un usuario concreto: usar su ficha real (id, grupos, permisos).
+    return viewAsTargetUser ?? contextUserForViewAs(user, adminViewAs);
+  }, [user, adminViewAs, viewAsTargetUser]);
   const isAdmin = effectiveRole === "admin";
   const isGroupLeader = effectiveRole === "lider_grupo";
   const isAdvisor = effectiveRole === "asesor";
+
+  // Al ver como líder/asesor, asegurar que haya un usuario válido seleccionado (auto-elige el primero).
+  useEffect(() => {
+    if (!isRealAdmin || adminViewAs === "admin") return;
+    const valid = users.some(
+      (u) => u.id === adminViewAsUserId && u.role === adminViewAs && u.isActive,
+    );
+    if (valid) return;
+    const first = users.find((u) => u.role === adminViewAs && u.isActive) ?? null;
+    const nextId = first ? first.id : null;
+    setAdminViewAsUserId(nextId);
+    saveAdminViewAsUserId(nextId);
+  }, [isRealAdmin, adminViewAs, users, adminViewAsUserId]);
   const canAccessDashboard = useMemo(() => canAccessDashboardModule(effectiveUser), [effectiveUser]);
   const canAccessKpis = useMemo(() => canAccessKpisModule(effectiveUser), [effectiveUser]);
   const canAccessLeads = useMemo(() => canAccessLeadsModule(effectiveUser), [effectiveUser]);
@@ -1133,13 +1159,15 @@ export function AdminWorkspace() {
   );
   const visiblePipelineGroupIds = useMemo(() => {
     if (!user) return [DEFAULT_PIPELINE_GROUP_ID];
-    if (isRealAdmin && adminViewAs !== "admin") {
+    // Vista previa sin usuario concreto (fallback sintético): el admin ve los grupos del rol.
+    if (isRealAdmin && adminViewAs !== "admin" && !viewAsTargetUser) {
       return getVisiblePipelineGroupIdsForView(user, adminViewAs, userGroups);
     }
+    // Con un usuario real (propio o impersonado) se usan sus grupos reales.
     return isGroupLeader
       ? allowedPipelineGroupIds.filter((groupId) => groupId !== DEFAULT_PIPELINE_GROUP_ID)
       : allowedPipelineGroupIds;
-  }, [user, isRealAdmin, adminViewAs, userGroups, isGroupLeader, allowedPipelineGroupIds]);
+  }, [user, isRealAdmin, adminViewAs, viewAsTargetUser, userGroups, isGroupLeader, allowedPipelineGroupIds]);
 
   useEffect(() => {
     if (!user) return;
@@ -3152,10 +3180,20 @@ export function AdminWorkspace() {
     ],
   );
 
+  const handleAdminViewAsUserChange = useCallback((userId: string) => {
+    setAdminViewAsUserId(userId);
+    saveAdminViewAsUserId(userId);
+    setAdminHeaderQuery("");
+  }, []);
+
   const handleAdminViewAsChange = useCallback(
     (next: AdminViewAsRole) => {
       setAdminViewAs(next);
       saveAdminViewAsRole(next);
+      if (next === "admin") {
+        setAdminViewAsUserId(null);
+        saveAdminViewAsUserId(null);
+      }
       setAdminHeaderQuery("");
       if (next !== "admin" && activeTab === "consultas") {
         goTab("dashboard");
@@ -3372,7 +3410,13 @@ export function AdminWorkspace() {
 
         {/* Ver como (solo admin real) */}
         {isRealAdmin && (
-          <AdminViewAsRoleSwitcher value={adminViewAs} onChange={handleAdminViewAsChange} />
+          <AdminViewAsRoleSwitcher
+            value={adminViewAs}
+            onChange={handleAdminViewAsChange}
+            users={users}
+            selectedUserId={adminViewAsUserId}
+            onSelectUser={handleAdminViewAsUserChange}
+          />
         )}
 
         {/* User Card */}
