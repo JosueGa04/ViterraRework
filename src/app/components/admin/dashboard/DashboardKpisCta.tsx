@@ -9,7 +9,7 @@ export function DashboardKpisCta({ onOpenKpis }: Props) {
     <button
       type="button"
       onClick={onOpenKpis}
-      className="group flex w-full flex-col rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] via-white to-white p-4 text-left shadow-sm transition hover:border-primary/35 hover:shadow-md"
+      className="group flex w-full flex-col rounded-2xl bg-white p-4 text-left shadow-sm transition hover:shadow-md"
     >
       <p className="font-heading text-sm font-semibold text-brand-navy">Análisis y metas en KPI&apos;s</p>
       <p className="mt-1 text-xs leading-relaxed text-slate-500">

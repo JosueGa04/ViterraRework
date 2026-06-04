@@ -3629,14 +3629,11 @@ export function AdminWorkspace() {
               />
             ) : (
               <AdminDashboard
-                userName={user?.name}
-                userEmail={user?.email}
                 leads={leadsForUser}
                 properties={properties}
                 appointments={appointments}
                 users={users}
                 customStages={customKanbanStages}
-                onLogout={handleLogout}
                 onNavigate={(tab) => {
                   if (tab === "company") goTab("company", "users");
                   else goTab(tab);

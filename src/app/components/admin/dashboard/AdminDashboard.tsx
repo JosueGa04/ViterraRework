@@ -5,13 +5,11 @@ import type { AgendaAppointment } from "../../../data/agenda";
 import type { User } from "../../../contexts/AuthContext";
 import type { Property } from "../../PropertyCard";
 import {
-  buildDashboardPrioritySummary,
   countClosedThisMonth,
   countUpcomingAppointments,
 } from "../../../lib/dashboardOps";
 import { createdThisMonth, leadsNeedingAttention } from "../../../lib/leadFunnel";
 import { DashboardCatalogStatus } from "./DashboardCatalogStatus";
-import { DashboardHero } from "./DashboardHero";
 import { DashboardKpisCta } from "./DashboardKpisCta";
 import { DashboardPipelineSnapshot } from "./DashboardPipelineSnapshot";
 import { DashboardPrioritiesPanel } from "./DashboardPrioritiesPanel";
@@ -22,28 +20,22 @@ import { DashboardUpcomingAppointments } from "./DashboardUpcomingAppointments";
 import { dashboardShell } from "./dashboardUi";
 
 export type AdminDashboardProps = {
-  userName?: string;
-  userEmail?: string;
   leads: Lead[];
   properties: Property[];
   appointments: AgendaAppointment[];
   users: User[];
   customStages: CustomKanbanStage[];
-  onLogout: () => void;
   onNavigate: (tab: "leads" | "agenda" | "properties" | "kpis" | "company") => void;
   onNewLead: () => void;
   onOpenUsers: () => void;
 };
 
 export function AdminDashboard({
-  userName,
-  userEmail,
   leads,
   properties,
   appointments,
   users,
   customStages,
-  onLogout,
   onNavigate,
   onNewLead,
   onOpenUsers,
@@ -52,11 +44,6 @@ export function AdminDashboard({
   const weekAppointments = useMemo(() => countUpcomingAppointments(appointments), [appointments]);
   const closedMonth = useMemo(() => countClosedThisMonth(leads), [leads]);
   const newMonth = useMemo(() => leads.filter(createdThisMonth).length, [leads]);
-
-  const contextLine = useMemo(
-    () => buildDashboardPrioritySummary(leads, appointments),
-    [leads, appointments],
-  );
 
   const pulseChips: PulseChip[] = useMemo(
     () => [
@@ -95,13 +82,6 @@ export function AdminDashboard({
 
   return (
     <div className={dashboardShell}>
-      <DashboardHero
-        userName={userName}
-        userEmail={userEmail}
-        contextLine={contextLine}
-        onLogout={onLogout}
-      />
-
       <DashboardPulseRow chips={pulseChips} />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
