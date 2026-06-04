@@ -11,18 +11,34 @@ export const DEFAULT_PIPELINE_GROUP_ID = "__default__";
 
 export const PIPELINE_BY_GROUP_STORAGE_KEY = "viterra_kanban_pipeline_by_group";
 
+/**
+ * Rule that automatically moves a lead from one stage to another after N days.
+ * "If a lead stays in `fromStageId` for more than `afterDays` days → move it to `toStageId`."
+ */
+export type StageAutoMoveRule = {
+  /** Pipeline stage the lead must currently be in. */
+  fromStageId: string;
+  /** Pipeline stage the lead will be moved to when the rule fires. */
+  toStageId: string;
+  /** Number of days the lead must have been in `fromStageId` before the rule triggers. */
+  afterDays: number;
+};
+
 export type GroupPipelineSnapshot = {
   customStages: CustomKanbanStage[];
   stageOrder: string[];
   stageColors: Record<string, string>;
+  /** Time-based auto-move rules for this pipeline group. */
+  stageRules: StageAutoMoveRule[];
 };
 
-/** Copia profunda del embudo (etapas, orden y colores) para asignar a otro `group_id`. */
+/** Copia profunda del embudo (etapas, orden, colores y reglas) para asignar a otro `group_id`. */
 export function cloneGroupPipelineSnapshot(s: GroupPipelineSnapshot): GroupPipelineSnapshot {
   return {
     customStages: s.customStages.map((c) => ({ id: c.id, label: c.label })),
     stageOrder: [...s.stageOrder],
     stageColors: { ...s.stageColors },
+    stageRules: s.stageRules.map((r) => ({ ...r })),
   };
 }
 
@@ -31,6 +47,7 @@ export function createEmptyGroupPipelineSnapshot(): GroupPipelineSnapshot {
     customStages: [],
     stageOrder: [],
     stageColors: {},
+    stageRules: [],
   };
 }
 
@@ -41,6 +58,7 @@ export function createDefaultBuiltinPipelineSnapshot(): GroupPipelineSnapshot {
     customStages: [],
     stageOrder: [...stageOrder],
     stageColors: {},
+    stageRules: [],
   };
 }
 
@@ -69,6 +87,20 @@ function findStageDefById(id: string, defs: CustomKanbanStage[]): CustomKanbanSt
  * `stageOrder` guardado sin filas en `customStages` (o desincronizado) quedaba vacío al cargar
  * y el submódulo Pipeline no mostraba columnas aunque el Kanban sí (por estados en los leads).
  */
+function isValidStageAutoMoveRule(x: unknown): x is StageAutoMoveRule {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return false;
+  const r = x as Record<string, unknown>;
+  return (
+    typeof r.fromStageId === "string" &&
+    r.fromStageId.trim().length > 0 &&
+    typeof r.toStageId === "string" &&
+    r.toStageId.trim().length > 0 &&
+    typeof r.afterDays === "number" &&
+    Number.isFinite(r.afterDays) &&
+    r.afterDays >= 0
+  );
+}
+
 export function parseGroupPipelineConfigFromUnknown(raw: unknown): GroupPipelineSnapshot {
   const empty = createEmptyGroupPipelineSnapshot();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return empty;
@@ -81,6 +113,13 @@ export function parseGroupPipelineConfigFromUnknown(raw: unknown): GroupPipeline
     o.stageColors && typeof o.stageColors === "object" && !Array.isArray(o.stageColors)
       ? (o.stageColors as Record<string, string>)
       : {};
+  const stageRules: StageAutoMoveRule[] = Array.isArray(o.stageRules)
+    ? o.stageRules.filter(isValidStageAutoMoveRule).map((r) => ({
+        fromStageId: (r as StageAutoMoveRule).fromStageId.trim(),
+        toStageId: (r as StageAutoMoveRule).toStageId.trim(),
+        afterDays: Math.max(0, Math.round((r as StageAutoMoveRule).afterDays)),
+      }))
+    : [];
   const idsFromStages = customStagesFromDb.map((s) => s.id);
   const idsFromOrder = [...new Set(stageOrder)];
   const allStageIds = [...new Set([...idsFromStages, ...idsFromOrder])];
@@ -96,7 +135,7 @@ export function parseGroupPipelineConfigFromUnknown(raw: unknown): GroupPipeline
     return { id, label: labelForLeadStatus(id, customStagesFromDb) };
   });
 
-  return { customStages: mergedCustomStages, stageOrder: normOrder, stageColors };
+  return { customStages: mergedCustomStages, stageOrder: normOrder, stageColors, stageRules };
 }
 
 export function migrateLegacyPipelineSnapshot(): GroupPipelineSnapshot | null {
