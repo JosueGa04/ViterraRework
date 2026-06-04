@@ -43,6 +43,8 @@ import {
   History,
   BarChart3,
   ClipboardList,
+  Menu,
+  X,
 } from "lucide-react";
 import { useAuth, type User } from "../../contexts/AuthContext";
 import {
@@ -430,6 +432,8 @@ export function AdminWorkspace() {
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
   const [adminViewAs, setAdminViewAs] = useState<AdminViewAsRole>(loadAdminViewAsRole);
   const [adminSidebarExpanded, setAdminSidebarExpanded] = useState(readStoredAdminSidebarExpanded);
+  /** Menú hamburguesa de módulos en móvil/iPad (<lg). */
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -439,6 +443,21 @@ export function AdminWorkspace() {
       /* ignore */
     }
   }, [adminSidebarExpanded]);
+
+  // Drawer móvil: cerrar con Escape y bloquear el scroll del fondo mientras está abierto.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [mobileMenuOpen]);
   /** Ámbito del texto de búsqueda en leads (admin, líder y asesor comparten la misma lógica). */
   const [leadSearchNameScope, setLeadSearchNameScope] = useState<"all" | "client" | "advisor">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -3239,8 +3258,8 @@ export function AdminWorkspace() {
 
         {/* Mobile pill-strip nav */}
         <div className="mb-5 lg:hidden">
-          <nav className="admin-mobile-nav" aria-label="Navegación del panel admin">
-            {[
+          {(() => {
+            const mobileItems = [
               ...(canAccessDashboard ? [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
               ...(canAccessKpis ? [{ id: "kpis", label: "KPI's", icon: BarChart3 }] : []),
               ...(canAccessLeads ? [{ id: "leads", label: "Leads", icon: Users }] : []),
@@ -3250,35 +3269,133 @@ export function AdminWorkspace() {
               ...(canAccessProperties ? [{ id: "properties", label: "Propiedades", icon: Home }] : []),
               ...(canAccessDevelopments ? [{ id: "developments", label: "Desarrollos", icon: Building2 }] : []),
               ...(canAccessActivities ? [{ id: "activities", label: "Actividades", icon: History }] : []),
-              ...(canEditSite ? [{ id: "sitio", label: "Sitio", icon: Globe2 }] : []),
+              ...(canEditSite ? [{ id: "sitio", label: "Sitio web", icon: Globe2 }] : []),
               ...(canAccessCompanyModule
-                ? [{ id: "company", label: isGroupLeader ? "Pipeline" : "Empresa", icon: Briefcase }]
+                ? [{ id: "company", label: isGroupLeader ? "Pipeline" : "Mi empresa", icon: Briefcase }]
                 : []),
               { id: "messages", label: "Mensajes", icon: MessageSquare },
               { id: "profile", label: "Perfil", icon: UserIcon },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (item.id === "company") {
-                    goTab("company", isGroupLeader ? "leadStages" : companySubtab);
-                  } else {
-                    goTab(item.id as TabType);
-                  }
-                }}
-                className={cn("admin-mobile-nav-pill", activeTab === item.id && "is-active")}
-              >
-                <item.icon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
-                {item.label}
-                {item.id === "messages" && messagesUnreadTotal > 0 && (
-                  <span className="admin-unread-badge" style={{ marginLeft: "0.125rem" }}>
-                    {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
-                  </span>
+            ];
+            const activeItem = mobileItems.find((it) => it.id === activeTab) ?? mobileItems[0];
+            const goMobile = (id: string) => {
+              if (id === "company") {
+                goTab("company", isGroupLeader ? "leadStages" : companySubtab);
+              } else {
+                goTab(id as TabType);
+              }
+              setMobileMenuOpen(false);
+            };
+            return (
+              <>
+                {/* Barra superior con botón hamburguesa + módulo activo */}
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(true)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 active:scale-95"
+                    aria-label="Abrir menú de módulos"
+                    aria-haspopup="dialog"
+                    aria-expanded={mobileMenuOpen}
+                  >
+                    <Menu className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+                  </button>
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    {activeItem?.icon ? (
+                      <activeItem.icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.9} aria-hidden />
+                    ) : null}
+                    <span className="truncate text-sm font-semibold text-brand-navy">
+                      {activeItem?.label ?? "Menú"}
+                    </span>
+                  </div>
+                  {messagesUnreadTotal > 0 && (
+                    <span className="admin-unread-badge shrink-0">
+                      {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+                    </span>
+                  )}
+                </div>
+
+                {/* Drawer de módulos */}
+                {mobileMenuOpen && (
+                  <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Menú de módulos">
+                    <button
+                      type="button"
+                      aria-label="Cerrar menú"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="absolute inset-0 h-full w-full cursor-default bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+                    />
+                    <div
+                      className="absolute inset-y-0 left-0 flex w-[18rem] max-w-[85vw] flex-col shadow-2xl animate-in slide-in-from-left duration-200"
+                      style={{ backgroundColor: "#0d1117" }}
+                    >
+                      <div
+                        className="flex items-center justify-between"
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "1.1rem 1rem" }}
+                      >
+                        <div>
+                          <span className="admin-logo-wordmark">VITERRA</span>
+                          <div className="admin-logo-subtitle">CRM System</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Cerrar menú"
+                        >
+                          <X className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto" style={{ padding: "1rem 0" }}>
+                        <div className="admin-section-label">Módulos</div>
+                        <nav aria-label="Navegación del panel admin">
+                          {mobileItems.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => goMobile(item.id)}
+                              className={cn("admin-nav-item", activeTab === item.id && "is-active")}
+                            >
+                              <item.icon
+                                className="h-[15px] w-[15px] shrink-0"
+                                strokeWidth={activeTab === item.id ? 2 : 1.6}
+                                aria-hidden
+                              />
+                              <span className="flex-1 text-left">{item.label}</span>
+                              {item.id === "messages" && messagesUnreadTotal > 0 && (
+                                <span className="admin-unread-badge">
+                                  {messagesUnreadTotal > 99 ? "99+" : messagesUnreadTotal}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </nav>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => goMobile("profile")}
+                        className="admin-user-card w-full text-left"
+                        title="Mi perfil"
+                        aria-label="Abrir mi perfil"
+                      >
+                        <div className={cn("admin-user-avatar", activeTab === "profile" && "is-active-profile")}>
+                          {user.profile.picture ? (
+                            <img src={user.profile.picture} alt={`Foto de ${user.name}`} className="h-full w-full object-cover" />
+                          ) : (
+                            <UserIcon className="h-4 w-4" strokeWidth={1.6} aria-hidden />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="admin-user-name">{user.name}</div>
+                          <div className="admin-user-role">{roleLabelEs(user.role)}</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
-            ))}
-          </nav>
+              </>
+            );
+          })()}
         </div>
 
         {/* Dashboard Tab */}
