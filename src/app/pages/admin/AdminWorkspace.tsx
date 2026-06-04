@@ -61,6 +61,7 @@ import {
   fetchAllLeadsForAdmin,
   insertLead,
   updateLead,
+  updateLeadOrder,
   softDeleteLead,
 } from "../../lib/supabaseLeads";
 import { withTimeout } from "../../lib/withTimeout";
@@ -1444,38 +1445,122 @@ export function AdminWorkspace() {
   );
 
   const handleUpdateLeadStatus = useCallback(
-    async (leadId: string, newStatus: string) => {
+    async (leadId: string, newStatus: string, beforeId?: string | null) => {
       const lead = leads.find((l) => l.id === leadId);
-      if (!lead || lead.status === newStatus) return;
+      if (!lead) return;
+      const statusChanged = lead.status !== newStatus;
+      // El Kanban envía `beforeId` (string | null) para colocar la tarjeta donde se ve el hueco.
+      const reorder = beforeId !== undefined && beforeId !== leadId;
+      if (!statusChanged && !reorder) return;
 
       const updatedAt = new Date().toISOString();
-      const prevLabel = resolveStatusLabel(lead.status);
-      const nextLabel = resolveStatusLabel(newStatus);
-      const nextLead: Lead = {
-        ...lead,
-        status: newStatus,
-        updatedAt,
-        activity: [
-          {
-            id: newLeadActivityId(),
-            type: "status_change",
-            createdAt: updatedAt,
-            description: `Se movió de ${prevLabel} a ${nextLabel}`,
-          },
-          ...(lead.activity ?? []),
-        ],
-      };
+      let nextLead: Lead = statusChanged
+        ? {
+            ...lead,
+            status: newStatus,
+            updatedAt,
+            activity: [
+              {
+                id: newLeadActivityId(),
+                type: "status_change",
+                createdAt: updatedAt,
+                description: `Se movió de ${resolveStatusLabel(lead.status)} a ${resolveStatusLabel(newStatus)}`,
+              },
+              ...(lead.activity ?? []),
+            ],
+          }
+        : { ...lead };
 
+      // Cambio de etapa sin reordenar (tabla/diálogo): cae al final de la nueva columna.
+      if (statusChanged && !reorder) {
+        nextLead = { ...nextLead, sortOrder: undefined };
+      }
+
+      // Reordena el arreglo global para que la tarjeta quede donde se ve el hueco.
+      let working: Lead[];
+      if (!reorder) {
+        working = leads.map((l) => (l.id === leadId ? nextLead : l));
+      } else {
+        const without = leads.filter((l) => l.id !== leadId);
+        let insertAt: number;
+        if (beforeId) {
+          insertAt = without.findIndex((l) => l.id === beforeId);
+          if (insertAt < 0) insertAt = without.length;
+        } else {
+          let lastIdx = -1;
+          without.forEach((l, i) => {
+            if (l.status === newStatus && l.pipelineGroupId === nextLead.pipelineGroupId) lastIdx = i;
+          });
+          insertAt = lastIdx >= 0 ? lastIdx + 1 : without.length;
+        }
+        working = without.slice();
+        working.splice(insertAt, 0, nextLead);
+      }
+
+      // Calcula `sortOrder` del lead movido (fraccional; reindexa la columna solo si los vecinos no tienen orden).
+      const orderUpdates = new Map<string, number>();
+      if (reorder) {
+        const ord = (l: Lead) =>
+          typeof l.sortOrder === "number" && Number.isFinite(l.sortOrder) ? l.sortOrder : undefined;
+        const col = working.filter(
+          (l) => l.status === newStatus && l.pipelineGroupId === nextLead.pipelineGroupId
+        );
+        const idx = col.findIndex((l) => l.id === leadId);
+        const prevO = idx > 0 ? ord(col[idx - 1]) : undefined;
+        const nextO = idx < col.length - 1 ? ord(col[idx + 1]) : undefined;
+        const hasPrev = idx > 0;
+        const hasNext = idx < col.length - 1;
+
+        let movedOrder: number;
+        if (prevO !== undefined && nextO !== undefined && prevO < nextO) {
+          movedOrder = (prevO + nextO) / 2;
+        } else if (prevO !== undefined && !hasNext) {
+          movedOrder = prevO + 1;
+        } else if (nextO !== undefined && !hasPrev) {
+          movedOrder = nextO - 1;
+        } else if (!hasPrev && !hasNext) {
+          movedOrder = 0;
+        } else {
+          // Vecinos sin orden definido → reindexa toda la columna (0..N) una sola vez.
+          col.forEach((l, i) => {
+            if (ord(l) !== i) orderUpdates.set(l.id, i);
+          });
+          movedOrder = idx;
+        }
+        orderUpdates.set(leadId, movedOrder);
+      }
+
+      if (orderUpdates.size > 0) {
+        working = working.map((l) =>
+          orderUpdates.has(l.id) ? { ...l, sortOrder: orderUpdates.get(l.id)! } : l
+        );
+        nextLead = working.find((l) => l.id === leadId) ?? nextLead;
+      }
+
+      // Persistencia.
       const client = getSupabaseClient();
       if (client) {
-        const { error: updErr } = await updateLead(client, nextLead);
-        if (updErr) {
-          toast.error(updErr.message);
-          return;
+        if (statusChanged) {
+          // Escribe estado + payload (incluye el nuevo sortOrder del lead movido).
+          const { error: updErr } = await updateLead(client, nextLead);
+          if (updErr) {
+            toast.error(updErr.message);
+            return;
+          }
+        } else if (orderUpdates.has(leadId)) {
+          void updateLeadOrder(client, nextLead).then((r) => {
+            if (r.error) toast.error(r.error.message);
+          });
+        }
+        // Persiste el reordenamiento del resto de la columna (solo ocurre al reindexar por primera vez).
+        for (const l of working) {
+          if (l.id !== leadId && orderUpdates.has(l.id)) {
+            void updateLeadOrder(client, l);
+          }
         }
       }
 
-      setLeads((prev) => prev.map((l) => (l.id === leadId ? nextLead : l)));
+      setLeads(working);
       setLeadDialog((d) =>
         d && d.lead.id === leadId ? { ...d, lead: nextLead } : d
       );

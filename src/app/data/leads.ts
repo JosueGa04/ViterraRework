@@ -100,6 +100,8 @@ export interface Lead {
    * de Tokko, que a veces viene informado en filas activas).
    */
   crmSoftDeletedAt?: string | null;
+  /** Orden manual dentro de su columna del Kanban (menor = más arriba). Se persiste en `payload.sortOrder`. */
+  sortOrder?: number;
 }
 
 /**
@@ -312,5 +314,7 @@ export function normalizeStoredLead(raw: Partial<Lead> & Record<string, unknown>
         : raw.crmSoftDeletedAt === null
           ? null
           : undefined,
+    sortOrder:
+      typeof raw.sortOrder === "number" && Number.isFinite(raw.sortOrder) ? raw.sortOrder : undefined,
   };
 }

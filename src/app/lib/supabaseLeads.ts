@@ -13,6 +13,8 @@ type LeadPayloadShape = {
   relatedDevelopmentId?: string;
   /** Seteado solo al archivar desde el CRM (`softDeleteLead`); no usar `deleted_at` de Tokko como descartado. */
   crmSoftDeletedAt?: string;
+  /** Orden manual dentro de su columna del Kanban (menor = más arriba). */
+  sortOrder?: number;
 };
 
 function parsePayload(raw: unknown): LeadPayloadShape {
@@ -65,6 +67,7 @@ export function rowToLead(row: Record<string, unknown>): Lead {
       typeof payload.crmSoftDeletedAt === "string" && payload.crmSoftDeletedAt.trim()
         ? payload.crmSoftDeletedAt
         : undefined,
+    sortOrder: typeof payload.sortOrder === "number" ? payload.sortOrder : undefined,
   } as Partial<Lead> & Record<string, unknown>);
 }
 
@@ -78,6 +81,9 @@ function leadPayloadForDb(lead: Lead): Record<string, unknown> {
   };
   if (lead.crmSoftDeletedAt != null && String(lead.crmSoftDeletedAt).trim() !== "") {
     out.crmSoftDeletedAt = lead.crmSoftDeletedAt;
+  }
+  if (typeof lead.sortOrder === "number" && Number.isFinite(lead.sortOrder)) {
+    out.sortOrder = lead.sortOrder;
   }
   return out;
 }
@@ -202,6 +208,17 @@ export async function updateLead(client: SupabaseClient, lead: Lead) {
     updated_at: ts,
   };
   return client.from("leads").update(row).eq("id", lead.id);
+}
+
+/**
+ * Persiste solo el orden manual del lead (`payload.sortOrder`) sin tocar `updated_at` ni el estado.
+ * Se usa al reordenar tarjetas dentro de una columna del Kanban.
+ */
+export async function updateLeadOrder(client: SupabaseClient, lead: Lead) {
+  return client
+    .from("leads")
+    .update({ payload: leadPayloadForDb(lead) as Record<string, unknown>, synced_at: nowIso() })
+    .eq("id", lead.id);
 }
 
 /** Archiva el lead en panel: `deleted_at` + `payload.crmSoftDeletedAt` (fusiona con payload existente). */
