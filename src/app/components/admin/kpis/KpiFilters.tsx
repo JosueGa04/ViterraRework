@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Calendar as CalendarIcon, Users as UsersIcon, RefreshCw } from "lucide-react";
+import { Calendar as CalendarIcon, Users as UsersIcon, RefreshCw, Filter } from "lucide-react";
 import type { User } from "../../../contexts/AuthContext";
 import type { UserGroup } from "../../../lib/userGroups";
 import type { KpiFiltersState } from "../../../hooks/useKpiData";
@@ -68,7 +68,11 @@ export function KpiFilters({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] sm:p-5">
+      <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <Filter className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+        Filtros
+      </div>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[180px] flex-1">
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">

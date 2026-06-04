@@ -247,46 +247,22 @@ export function KPIsModule({
 
   return (
     <div ref={containerRef} className="space-y-6">
-      {/* Mismo patrón de encabezado que Leads / Propiedades */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div
-          className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl"
-          aria-hidden
-        />
-        <div className="relative px-5 pb-6 pt-6 md:px-8 md:pb-7 md:pt-7">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
-            <div className="min-w-0 max-w-2xl">
-              <p
-                className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary"
-                style={{ fontWeight: 600 }}
-              >
-                Pipeline CRM
-              </p>
-              <h2
-                className="font-heading mt-2 text-[1.65rem] leading-tight text-brand-navy md:text-[1.85rem]"
-                style={{ fontWeight: 600 }}
-              >
-                Reportes
-              </h2>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-                {headerDescription}
-              </p>
-            </div>
-
-            <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
-              <KpiExportButtons
-                containerRef={containerRef}
-                current={data.current}
-                advisorRanking={data.advisorRanking}
-                appointments={data.appointments}
-                scopeLabel={targetScopeLabel}
-                rangeLabel={rangeLabel(data.range, filters.rangeKey)}
-              />
-            </div>
+      {/* Header plano, mismo patrón que Leads / Propiedades / Desarrollos */}
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-2xl">
+            <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">Reportes</h2>
+            <p className="text-sm text-slate-500 max-w-xl">{headerDescription}</p>
+          </div>
+          <div className="flex w-full flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+            <KpiExportButtons
+              containerRef={containerRef}
+              current={data.current}
+              advisorRanking={data.advisorRanking}
+              appointments={data.appointments}
+              scopeLabel={targetScopeLabel}
+              rangeLabel={rangeLabel(data.range, filters.rangeKey)}
+            />
           </div>
         </div>
       </div>

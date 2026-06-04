@@ -45,6 +45,7 @@ import {
   ClipboardList,
   Menu,
   X,
+  Inbox,
 } from "lucide-react";
 import { useAuth, type User } from "../../contexts/AuthContext";
 import {
@@ -3173,74 +3174,43 @@ export function AdminWorkspace() {
       >
 
         {activeTab === "dashboard" && (
-          <header
-            className={cn(
-              "relative z-20 mb-5 overflow-visible",
-              isAdvisor || isGroupLeader
-                ? "overflow-hidden rounded-2xl border border-black/[0.06] bg-white shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1)]"
-                : "",
-            )}
-          >
-            {(isAdvisor || isGroupLeader) && (
-              <>
-                <div
-                  className="h-[3px] w-full shrink-0"
-                  style={{ background: "linear-gradient(90deg, #9a7b4f 0%, #c8102e 55%, #7f1d1d 100%)" }}
-                  aria-hidden
-                />
-              </>
-            )}
-            <div className={cn("relative", isAdvisor || isGroupLeader ? "px-5 py-5 sm:px-6 sm:py-6" : "")}>
-              {(isAdvisor || isGroupLeader) && (
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="text-[10px] font-semibold uppercase tracking-[0.22em] text-brand-gold"
-                    >
-                      Panel Viterra
-                    </p>
-                    <h2
-                      className="font-heading mt-2 text-[1.2rem] leading-tight text-brand-navy sm:text-[1.4rem]"
-                      style={{ fontWeight: 600, letterSpacing: "-0.01em" }}
-                    >
-                      {dashboardTimeGreetingEs()}
-                      {user?.name?.trim()
-                        ? `, ${user.name.trim().split(/\s+/)[0]}`
-                        : ""}
-                    </h2>
-                    <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-slate-500 sm:text-sm">
-                      {isAdvisor
-                        ? "Tu desempeño comercial, embudo de leads e inventario del catálogo."
-                        : isGroupLeader
-                          ? "Vista de equipo del pipeline activo: ventas por asesor, conversión, inventario y proyección del mes."
-                          : "Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio."}
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end sm:gap-2.5">
-                    <Link
-                      to="/"
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-sm text-slate-600 shadow-sm transition hover:border-black/[0.14] hover:text-brand-navy"
-                      style={{ fontWeight: 500 }}
-                    >
-                      <Globe2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      Ir al sitio
-                    </Link>
-
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-sm text-slate-600 shadow-sm transition hover:border-black/[0.14] hover:text-slate-900"
-                      style={{ fontWeight: 500 }}
-                    >
-                      <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      Cerrar sesión
-                    </button>
-                  </div>
+          <header className="relative z-20 mb-8 overflow-visible">
+            <div className="border-b border-slate-200 pb-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0">
+                  <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
+                    {dashboardTimeGreetingEs()}
+                    {user?.name?.trim() ? `, ${user.name.trim().split(/\s+/)[0]}` : ""}
+                  </h2>
+                  <p className="text-sm text-slate-500 max-w-xl">
+                    {isAdvisor
+                      ? "Tu desempeño comercial, embudo de leads e inventario del catálogo."
+                      : isGroupLeader
+                        ? "Vista de equipo del pipeline activo: ventas por asesor, conversión, inventario y proyección del mes."
+                        : "Bienvenido al panel. Aquí ves el resumen de leads, propiedades y el pulso del negocio."}
+                  </p>
                 </div>
-              )}
 
-              <div className={cn("relative min-w-0 max-w-xl", (isAdvisor || isGroupLeader) && "mt-4")}>
+                <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center lg:w-auto">
+                  <Link
+                    to="/"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-brand-navy sm:w-auto"
+                  >
+                    <Globe2 className="h-4 w-4" strokeWidth={1.8} />
+                    Ir al sitio
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 sm:w-auto"
+                  >
+                    <LogOut className="h-4 w-4" strokeWidth={1.8} />
+                    Cerrar sesión
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative mt-6 min-w-0 max-w-xl">
                 <AdminWorkspaceSearch
                   routes={adminNavigationRoutes}
                   allUsers={users}
@@ -3686,19 +3656,14 @@ export function AdminWorkspace() {
                 leads.length > 0 &&
                 leadsForUser.length === 0 && (
                   <div
-                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                    style={{ fontWeight: 500 }}
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3.5 text-sm text-slate-600"
                     role="status"
                   >
-                    Hay {leads.length} lead{leads.length === 1 ? "" : "s"} en el sistema, pero ninguno coincide con tu
-                    usuario ({roleLabelEs(effectiveUser.role)}). En datos Tokko,{" "}
-                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">assigned_to_user_id</code> suele ser el{" "}
-                    <strong>id Tokko del asesor</strong> (no el UUID de Auth): debe coincidir con{" "}
-                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">tokko_users.tokko_user_id</code> o con{" "}
-                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">user_metadata.tokko_user_id</code> en
-                    Auth. Un administrador puede poner{" "}
-                    <code className="rounded bg-amber-100/80 px-1 py-0.5 text-xs">role: &quot;admin&quot;</code> para ver
-                    todos.
+                    <Inbox className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={1.75} aria-hidden />
+                    <p>
+                      <span className="font-medium text-slate-800">No tienes leads asignados.</span>{" "}
+                      Los demás leads del sistema pertenecen a otros asesores.
+                    </p>
                   </div>
                 )}
 

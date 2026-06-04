@@ -5,6 +5,7 @@ import { es } from "date-fns/locale";
 import {
   Building2,
   CalendarDays,
+  ChevronDown,
   ClipboardList,
   Eye,
   Filter,
@@ -486,40 +487,30 @@ export function AdminConsultasModule({
 
   return (
     <div className="space-y-6">
-      <header className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_24px_60px_-18px_rgba(20,28,46,0.14)] ring-1 ring-slate-900/[0.04]">
-        <div className="h-1.5 w-full bg-gradient-to-r from-brand-gold via-primary to-brand-burgundy" aria-hidden />
-        <div className="pointer-events-none absolute -right-20 top-8 h-56 w-56 rounded-full bg-gradient-to-br from-primary/[0.07] to-transparent blur-3xl" aria-hidden />
-        <div className="relative px-5 py-6 md:px-8 md:py-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 max-w-2xl">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary" style={{ fontWeight: 600 }}>
-                Panel admin · Consultas
-              </p>
-              <h2 className="font-heading mt-1.5 text-[1.4rem] leading-tight text-brand-navy sm:text-[1.7rem]" style={{ fontWeight: 600 }}>
-                Bandeja de leads
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600" style={{ fontWeight: 500 }}>
-                Revisa todos los leads creados, los que ya están asignados y los descartados. Filtra por equipo, asesor
-                o tipo de inventario, busca por cliente / asesor / propiedad o desarrollo, por fecha, y reasigna cuando lo
-                necesites.
-              </p>
-            </div>
-            <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
-              {onRefresh && (
-                <button
-                  type="button"
-                  onClick={onRefresh}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-brand-navy"
-                  style={{ fontWeight: 600 }}
-                >
-                  <RefreshCw className="h-4 w-4" strokeWidth={1.8} />
-                  Refrescar
-                </button>
-              )}
-            </div>
+      <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-2xl">
+            <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">Bandeja de leads</h2>
+            <p className="text-sm text-slate-500 max-w-xl">
+              Revisa los leads creados, asignados y descartados. Filtra por equipo, asesor o tipo de inventario,
+              busca por cliente, asesor, propiedad o desarrollo y reasigna cuando lo necesites.
+            </p>
           </div>
+          {onRefresh && (
+            <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center lg:w-auto">
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 sm:w-auto"
+              >
+                <RefreshCw className="h-4 w-4" strokeWidth={1.8} />
+                Refrescar
+              </button>
+            </div>
+          )}
+        </div>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="inline-flex w-fit max-w-full shrink-0 self-start items-stretch overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-100/70 p-1 sm:self-auto">
               {(["todos", "asignados", "descartados"] as const).map((id) => {
               const active = tab === id;
@@ -567,119 +558,107 @@ export function AdminConsultasModule({
             </p>
           </div>
         </div>
-      </header>
 
-      <section className="rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-sm sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-500" style={{ fontWeight: 600 }}>
-          <Filter className="h-3.5 w-3.5" strokeWidth={1.8} />
-          Filtros
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-            <label className="relative flex min-w-0 flex-col gap-1.5 lg:col-span-8">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-                Búsqueda
-              </span>
-              <span className="absolute inset-y-0 left-3 top-[1.6rem] flex items-start pt-2.5 text-slate-400">
-                <Search className="h-4 w-4" strokeWidth={1.75} />
-              </span>
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cliente, asesor, propiedad o desarrollo…"
-                className={cn(FIELD_CLASS, "pl-9")}
-                aria-label="Buscar por cliente, asesor, propiedad o desarrollo"
-              />
-            </label>
-
-            <div className="flex min-w-0 flex-col gap-1.5 lg:col-span-4">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-                Fecha de creación
-              </span>
-              <ConsultasCreationDateRangeFilter value={creationDateRange} onChange={setCreationDateRange} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-                Equipo
-              </span>
-              <select
-                value={groupFilter}
-                onChange={(e) => {
-                  setGroupFilter(e.target.value);
-                  setAdvisorFilter("all");
-                }}
-                className={FIELD_CLASS}
-              >
-                <option value="all">Todos los equipos</option>
-                <option value={DEFAULT_PIPELINE_GROUP_ID}>General (sin equipo)</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-                Asesor
-              </span>
-              <select
-                value={advisorFilter}
-                onChange={(e) => setAdvisorFilter(e.target.value)}
-                className={FIELD_CLASS}
-              >
-                <option value="all">Todos los asesores</option>
-                <option value="__unassigned__">Sin asignar</option>
-                {filteredAdvisorOptions.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500" style={{ fontWeight: 600 }}>
-                Propiedad / desarrollo
-              </span>
-              <select
-                value={inventoryFilter}
-                onChange={(e) => setInventoryFilter(e.target.value as InventoryKindFilter)}
-                className={FIELD_CLASS}
-                aria-label="Filtrar por tipo: propiedad o desarrollo"
-              >
-                <option value="all">Todos (propiedades y desarrollos)</option>
-                <option value="property">Solo leads vinculados a propiedad</option>
-                <option value="development">Solo leads vinculados a desarrollo</option>
-              </select>
-            </label>
+      <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="flex flex-col sm:flex-row sm:items-center p-1.5 gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" strokeWidth={1.5} />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cliente, asesor, propiedad o desarrollo…"
+              className="w-full border-none bg-transparent py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 font-medium"
+              aria-label="Buscar por cliente, asesor, propiedad o desarrollo"
+            />
           </div>
         </div>
 
-        {filtersActive && (
-          <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-            <p className="text-xs text-slate-500" style={{ fontWeight: 500 }}>
-              Mostrando <span className="font-semibold text-brand-navy">{filteredLeads.length}</span> de{" "}
-              <span className="font-semibold text-brand-navy">{tabSourceLeads.length}</span> leads en este tab.
-            </p>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-brand-navy"
-              style={{ fontWeight: 600 }}
+        <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 bg-slate-50 px-4 py-2.5 rounded-b-2xl overflow-x-auto">
+          <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-1">
+            <Filter className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            Filtros
+          </span>
+
+          <div className="relative shrink-0">
+            <select
+              value={groupFilter}
+              onChange={(e) => {
+                setGroupFilter(e.target.value);
+                setAdvisorFilter("all");
+              }}
+              className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+              aria-label="Equipo"
             >
-              <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-              Limpiar filtros
-            </button>
+              <option value="all">Todos los equipos</option>
+              <option value={DEFAULT_PIPELINE_GROUP_ID}>General (sin equipo)</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
           </div>
-        )}
-      </section>
+
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+          <div className="relative shrink-0">
+            <select
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value)}
+              className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+              aria-label="Asesor"
+            >
+              <option value="all">Todos los asesores</option>
+              <option value="__unassigned__">Sin asignar</option>
+              {filteredAdvisorOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+          </div>
+
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+          <div className="relative shrink-0">
+            <select
+              value={inventoryFilter}
+              onChange={(e) => setInventoryFilter(e.target.value as InventoryKindFilter)}
+              className="appearance-none border-none bg-transparent py-1 pl-2 pr-7 text-sm font-medium text-slate-600 hover:text-slate-900 focus:ring-0 cursor-pointer"
+              aria-label="Filtrar por tipo: propiedad o desarrollo"
+            >
+              <option value="all">Propiedades y desarrollos</option>
+              <option value="property">Solo propiedades</option>
+              <option value="development">Solo desarrollos</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2} />
+          </div>
+
+          <div className="h-5 w-px bg-slate-300 shrink-0" />
+
+          <label className="flex shrink-0 items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Fecha</span>
+            <ConsultasCreationDateRangeFilter value={creationDateRange} onChange={setCreationDateRange} />
+          </label>
+
+          {filtersActive && (
+            <>
+              <div className="h-5 w-px bg-slate-300 shrink-0 ml-auto" />
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                Limpiar
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {errorMessage && (
         <div className="rounded-xl border border-red-200 bg-red-50/80 p-4 text-sm text-red-700" role="alert">
