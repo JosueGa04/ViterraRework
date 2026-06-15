@@ -150,7 +150,7 @@ export function AdminUserProfilePanel({
         phone: strVal(meta.phone) || user.profile.phone,
         cellphone: strVal(meta.cellphone),
         position: strVal(meta.position),
-        picture: strVal(meta.picture) || user.profile.picture,
+        picture: strVal(meta.picture) || user.profile.picture || "",
       };
       setDraft(d);
       setInitial(d);

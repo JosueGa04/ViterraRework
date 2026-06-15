@@ -1,9 +1,10 @@
 import React from "react";
-import { pdf } from "@react-pdf/renderer";
+import { pdf, type DocumentProps } from "@react-pdf/renderer";
 
 export async function generatePdf(element: React.ReactElement, filename: string): Promise<void> {
   try {
-    const blob = await pdf(element).toBlob();
+    // El elemento siempre es un <Document> de @react-pdf; el cast acota el tipo en el límite.
+    const blob = await pdf(element as React.ReactElement<DocumentProps>).toBlob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

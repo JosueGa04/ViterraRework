@@ -108,9 +108,8 @@ describe("DEFAULT_PERMISSIONS_BY_ROLE – Integridad del sistema de roles", () =
     roles.forEach((role) => {
       const perms = permissionsFor(role);
       const unique = [...new Set(perms)];
-      expect(perms.length).toBe(
-        unique.length,
-        `El rol "${role}" tiene permisos duplicados`
+      expect(perms.length, `El rol "${role}" tiene permisos duplicados`).toBe(
+        unique.length
       );
     });
   });

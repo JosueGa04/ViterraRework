@@ -1017,8 +1017,8 @@ export function AdminWorkspace() {
               }
               setUserGroups([]);
             } else {
-              groupsData = groupsRes.data;
-              setUserGroups(groupsRes.data);
+              groupsData = groupsRes.data ?? [];
+              setUserGroups(groupsData);
             }
 
             const allowedGroupIds = effectiveUser
@@ -1031,7 +1031,7 @@ export function AdminWorkspace() {
               }
               setPipelineByGroup(buildPipelineByGroupFromSources([], allowedGroupIds, localLegacy));
             } else {
-              setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data, allowedGroupIds, localLegacy));
+              setPipelineByGroup(buildPipelineByGroupFromSources(pipeRes.data ?? [], allowedGroupIds, localLegacy));
             }
             setPipelineSourcesHydrated(true);
             pipelineBootstrappedRef.current = true;
@@ -1684,7 +1684,7 @@ export function AdminWorkspace() {
   const effectiveStageColors = useMemo(() => {
     const out: Record<string, string> = {};
     for (const id of leadColumnStatuses) {
-      let hex = stageColumnColors[id];
+      let hex: string | undefined = stageColumnColors[id];
       if (!hex) {
         const k = Object.keys(stageColumnColors).find((c) => c.toLowerCase() === id.toLowerCase());
         hex = k ? stageColumnColors[k] : undefined;
@@ -2236,7 +2236,7 @@ export function AdminWorkspace() {
       }
     }
     setLeadDialog((d) =>
-      d && d.lead.id === updated.id ? { ...d, lead: merged } : d
+      d && d.lead.id === updated.id ? { ...d, lead: merged! } : d
     );
   }, []);
 
@@ -5757,11 +5757,12 @@ export function AdminWorkspace() {
               property={propertyForm?.mode === "edit" ? propertyForm.property : null}
               newId={newPropertyDraftId}
               onSave={handleSaveProperty}
-              otherFeaturedCount={
-                propertyForm?.mode === "edit" && propertyForm.property
-                  ? properties.filter((x) => x.featured && x.id !== propertyForm.property.id).length
-                  : properties.filter((x) => x.featured).length
-              }
+              otherFeaturedCount={(() => {
+                const editing = propertyForm?.mode === "edit" ? propertyForm.property : null;
+                return editing
+                  ? properties.filter((x) => x.featured && x.id !== editing.id).length
+                  : properties.filter((x) => x.featured).length;
+              })()}
               developments={developments}
               developmentsLoading={developmentsLoading}
               catalogProperties={properties}

@@ -126,7 +126,7 @@ export function AdminDevelopmentsMap({
           else marker.addTo(map);
         });
 
-        if (markers) map.addLayer(markers);
+        if (markers) map.addLayer(markers as unknown as import("leaflet").Layer);
         mapInstanceRef.current = map;
         isInitializingRef.current = false;
       } catch (e) {
