@@ -123,7 +123,7 @@ import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
 import { useLeadsData } from "./useLeadsData";
 import { AdminDashboardContent } from "../../components/admin/AdminDashboardContent";
-import { computeVisiblePipelineGroupIds, resolveActivePipeline } from "./pipelineSelection";
+import { usePipelineConfig } from "./usePipelineConfig";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
@@ -451,13 +451,22 @@ export function AdminWorkspace() {
     setLeadsTableSectionCollapsed,
   } = useLeadsFilters();
   const [addLeadOpen, setAddLeadOpen] = useState(false);
-  const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() => ({
-    [DEFAULT_PIPELINE_GROUP_ID]: createDefaultBuiltinPipelineSnapshot(),
-  }));
-  /** Tras cargar pipeline desde Supabase (y fusionar local legacy si aplica). */
-  const [pipelineSourcesHydrated, setPipelineSourcesHydrated] = useState(false);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
-  const [activePipelineGroupId, setActivePipelineGroupId] = useState<string>(DEFAULT_PIPELINE_GROUP_ID);
+  const {
+    pipelineByGroup,
+    setPipelineByGroup,
+    pipelineSourcesHydrated,
+    setPipelineSourcesHydrated,
+    activePipelineGroupId,
+    setActivePipelineGroupId,
+    allowedPipelineGroupIds,
+    visiblePipelineGroupIds,
+    activePipeline,
+    customKanbanStages,
+    pipelineStageOrder,
+    stageColumnColors,
+    canConfigureActivePipeline,
+  } = usePipelineConfig({ user, effectiveUser, isRealAdmin, adminViewAs, isGroupLeader, userGroups });
   const [pipelineCopyFrom, setPipelineCopyFrom] = useState<string>("");
   const [pipelineCopyTo, setPipelineCopyTo] = useState<string>("");
   const [leadDialog, setLeadDialog] = useState<{ lead: Lead; mode: "view" | "edit" } | null>(null);
@@ -874,23 +883,6 @@ export function AdminWorkspace() {
     [userGroups]
   );
 
-  const allowedPipelineGroupIds = useMemo(
-    () =>
-      effectiveUser ? getAllowedPipelineGroupIds(effectiveUser, userGroups) : [DEFAULT_PIPELINE_GROUP_ID],
-    [effectiveUser, userGroups],
-  );
-  const visiblePipelineGroupIds = useMemo(
-    () =>
-      computeVisiblePipelineGroupIds({
-        user,
-        isRealAdmin,
-        adminViewAs,
-        isGroupLeader,
-        userGroups,
-        allowedPipelineGroupIds,
-      }),
-    [user, isRealAdmin, adminViewAs, userGroups, isGroupLeader, allowedPipelineGroupIds],
-  );
 
   useEffect(() => {
     if (!user) return;
@@ -987,15 +979,6 @@ export function AdminWorkspace() {
     });
   }, [activePipelineGroupId]);
 
-  const activePipeline = useMemo(
-    () => resolveActivePipeline(pipelineByGroup, activePipelineGroupId),
-    [pipelineByGroup, activePipelineGroupId],
-  );
-  const customKanbanStages = activePipeline.customStages;
-  const pipelineStageOrder = activePipeline.stageOrder;
-  const stageColumnColors = activePipeline.stageColors;
-
-
   const leadsInActivePipeline = useMemo(
     () =>
       filterLeadsByActiveGroup(
@@ -1016,12 +999,6 @@ export function AdminWorkspace() {
       return teamIds[0] ?? prev;
     });
   }, [user, isRealAdmin, adminViewAs, visiblePipelineGroupIds]);
-
-  const canConfigureActivePipeline = useMemo(
-    () =>
-      effectiveUser ? canConfigurePipelineForGroup(effectiveUser, activePipelineGroupId, userGroups) : false,
-    [effectiveUser, activePipelineGroupId, userGroups],
-  );
 
   const allStageIds = useMemo(
     () => [...new Set([...customKanbanStages.map((s) => s.id), ...pipelineStageOrder])],

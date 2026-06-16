@@ -20,7 +20,8 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras 2.9 (selección por grupo) | 5.393 | 26 | 20 | 43 | 39 |
 | Tras 2.10 (useLeadsData) | 5.360 | 26 | 19 | 42 | 38 |
 | Tras 3.1 (AdminDashboardContent) | 5.337 | 25 | 19 | 42 | 38 |
-| Tras 2.11 (pipelineSelection) | **5.333** | 25 | 19 | 41 | 38 |
+| Tras 2.11 (pipelineSelection) | 5.333 | 25 | 19 | 41 | 38 |
+| Tras 2.12 (usePipelineConfig) | **5.310** | 22 | 19 | 38 | 38 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -49,7 +50,7 @@ testeabilidad.)
 ## Pendiente ⏳ (continuar mañana)
 
 ### Fase 2 — núcleo de datos (ALTO cuidado)
-- [~] `usePipelineConfig` — **ALTO riesgo**. **Iniciado de-riesgando**: `pipelineSelection.ts` extrae `computeVisiblePipelineGroupIds` (visibilidad de grupos acoplada a permisos) y `resolveActivePipeline` como funciones puras + **6 tests** (2.11). **Falta** el hook dueño-de-estado (pipelineByGroup/activePipelineGroupId + efectos de reset/persist + CRUD de etapas), que comparte el fetch combinado → hacerlo con cuidado, en sesión enfocada.
+- [x] `usePipelineConfig` (2.11 de-riesgo + 2.12 hook). `usePipelineConfig.ts` posee el estado (pipelineByGroup/pipelineSourcesHydrated/activePipelineGroupId) + derivaciones (allowed/visiblePipelineGroupIds, activePipeline, customKanbanStages/stageOrder/stageColors, canConfigureActivePipeline). **Decisión:** los EFECTOS de sync/persist/reset/snapshot-ensure y los handlers de CRUD de etapas se quedaron en AdminWorkspace en su posición original (preservan el orden relativo al fetch combinado → cero riesgo de timing). Falta verificación runtime (Fase 4).
 - [ ] `useDevelopmentsData` — `developments` + `developmentsLoading` + recarga.
 
 ### Fase 3 — pestañas → componentes (INICIADA)
