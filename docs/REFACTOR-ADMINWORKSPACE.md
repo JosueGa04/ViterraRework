@@ -24,7 +24,8 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras 2.12 (usePipelineConfig) | 5.310 | 22 | 19 | 38 | 38 |
 | Tras 3.2 (PropertyStatsCards) | 5.268 | 22 | 19 | 38 | 38 |
 | Tras 3.3 (PropertiesToolbar) | 5.076 | 22 | 19 | 38 | 38 |
-| Tras 3.4 (PropertiesViews) | **4.746** | 22 | 19 | 38 | 38 |
+| Tras 3.4 (PropertiesViews) | 4.746 | 22 | 19 | 38 | 38 |
+| Tras 3.5 (LeadsTable) | **4.546** | 22 | 19 | 38 | 38 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -58,7 +59,8 @@ testeabilidad.)
 
 ### Fase 3 — pestañas → componentes (INICIADA)
 - [x] **3.1** Dashboard → `components/admin/AdminDashboardContent.tsx` (patrón establecido).
-- [~] Propiedades (en piezas): **3.2** `AdminPropertyStatsCards.tsx` (stats). **3.3** `AdminPropertiesToolbar.tsx` (header+toggle vista+Nueva+búsqueda+filtros, −192 líneas; recibe el objeto `usePropertiesFilters()` como un prop `filters`). **3.4** `AdminPropertiesViews.tsx` (mapa/tarjetas/lista/vacío, −330 líneas; PropertyMap y PdfDownloadDropdown lazy dentro). **Pestaña Propiedades COMPLETA.** Falta: pestañas Empresa y Leads.
+- [~] Propiedades (en piezas): **3.2** `AdminPropertyStatsCards.tsx` (stats). **3.3** `AdminPropertiesToolbar.tsx` (header+toggle vista+Nueva+búsqueda+filtros, −192 líneas; recibe el objeto `usePropertiesFilters()` como un prop `filters`). **3.4** `AdminPropertiesViews.tsx` (mapa/tarjetas/lista/vacío, −330 líneas; PropertyMap y PdfDownloadDropdown lazy dentro). **Pestaña Propiedades COMPLETA.**
+- [~] Leads (en piezas): **3.5** `AdminLeadsTable.tsx` (vista tabla por estado con acciones por lead, −200 líneas). **Falta** el toolbar de Leads (header+filtros, ~180 líneas; kanban y AddLeadDialog ya son componentes). Luego pestaña Empresa.
 - [ ] Pestañas "gordas" (las que más reducen líneas, ~600 c/u, superficie de props grande): **Propiedades**, **Empresa**, **Leads**.
 - [ ] Pestañas delgadas restantes (consultas, clientes, agenda, actividades, perfil).
 
