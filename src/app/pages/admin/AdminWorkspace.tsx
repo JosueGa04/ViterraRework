@@ -120,11 +120,10 @@ import { AdminWorkspaceSearch } from "../../components/admin/AdminWorkspaceSearc
 import { AdminViewAsRoleSwitcher } from "../../components/admin/AdminViewAsRoleSwitcher";
 import { AutoMoveRulesPanel } from "../../components/admin/AutoMoveRulesPanel";
 import { useAdminSidebar } from "./useAdminSidebar";
+import { useAdminViewAs } from "./useAdminViewAs";
 import {
-  contextUserForViewAs,
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
-  loadAdminViewAsRole,
   saveAdminViewAsRole,
   type AdminViewAsRole,
 } from "../../lib/adminViewAsRole";
@@ -407,7 +406,16 @@ export function AdminWorkspace() {
   const [expandedLeaderGroupId, setExpandedLeaderGroupId] = useState<string | null>(null);
   const [propertyInventoryView, setPropertyInventoryView] = useState<"cards" | "list" | "map">("cards");
   const [adminHeaderQuery, setAdminHeaderQuery] = useState("");
-  const [adminViewAs, setAdminViewAs] = useState<AdminViewAsRole>(loadAdminViewAsRole);
+  const {
+    adminViewAs,
+    setAdminViewAs,
+    isRealAdmin,
+    effectiveRole,
+    effectiveUser,
+    isAdmin,
+    isGroupLeader,
+    isAdvisor,
+  } = useAdminViewAs(user);
   const { adminSidebarExpanded, setAdminSidebarExpanded, mobileMenuOpen, setMobileMenuOpen } =
     useAdminSidebar();
   const [searchQuery, setSearchQuery] = useState("");
@@ -451,16 +459,6 @@ export function AdminWorkspace() {
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
   /** Agenda local (localStorage). Se hidrata para alimentar las métricas de citas en KPI's. */
   const [appointments, setAppointments] = useState<AgendaAppointment[]>([]);
-  const isRealAdmin = user?.role === "admin";
-  const effectiveRole = effectiveRoleFromView(user, adminViewAs);
-  /** Vista por rol con la propia cuenta del admin (solo cambia el rol, no la identidad). */
-  const effectiveUser = useMemo(
-    () => contextUserForViewAs(user, adminViewAs),
-    [user, adminViewAs],
-  );
-  const isAdmin = effectiveRole === "admin";
-  const isGroupLeader = effectiveRole === "lider_grupo";
-  const isAdvisor = effectiveRole === "asesor";
 
   const canAccessDashboard = useMemo(() => canAccessDashboardModule(effectiveUser), [effectiveUser]);
   const canAccessKpis = useMemo(() => canAccessKpisModule(effectiveUser), [effectiveUser]);
