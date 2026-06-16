@@ -125,6 +125,7 @@ import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
 import { filterLeadsForDisplay } from "./leadsFiltering";
+import { filterPropertiesForDisplay } from "./propertiesFiltering";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -2491,38 +2492,13 @@ export function AdminWorkspace() {
 
   const propertiesMatchingInventoryFilters = useMemo(
     () =>
-      properties.filter((property) => {
-        const q = foldSearchText(propertySearchQuery);
-        const matchesSearch =
-          !q ||
-          foldSearchText(property.title).includes(q) ||
-          foldSearchText(property.location).includes(q) ||
-          foldSearchText(property.type).includes(q) ||
-          foldSearchText(property.status).includes(q);
-        const refQ = foldSearchText(propertyReferenceCodeQuery);
-        const matchesReferenceCode =
-          !refQ || foldSearchText(property.referenceCode ?? "").includes(refQ);
-        const matchesOperation =
-          propertyOperationFilter === "all" || property.status === propertyOperationFilter;
-        const matchesType =
-          propertyTypeFilter === "all" || property.type === propertyTypeFilter;
-        const matchesLocation =
-          propertyLocationFilter === "all" || property.location === propertyLocationFilter;
-
-        const matchesFeatured =
-          propertyFeaturedFilter === "all" ||
-          (propertyFeaturedFilter === "featured"
-            ? Boolean(property.featured)
-            : !property.featured);
-
-        return (
-          matchesSearch &&
-          matchesReferenceCode &&
-          matchesOperation &&
-          matchesType &&
-          matchesLocation &&
-          matchesFeatured
-        );
+      filterPropertiesForDisplay(properties, {
+        propertySearchQuery,
+        propertyReferenceCodeQuery,
+        propertyOperationFilter,
+        propertyTypeFilter,
+        propertyLocationFilter,
+        propertyFeaturedFilter,
       }),
     [
       properties,
