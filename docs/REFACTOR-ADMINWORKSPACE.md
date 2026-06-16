@@ -13,7 +13,7 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Momento | Líneas | useState | useEffect | useMemo | useCallback |
 |---|---|---|---|---|---|
 | Inicio | 5.735 | 50 | 23 | 44 | 39 |
-| Tras Fase 2.4 | **5.458** | **34** | **20** | 43 | 39 |
+| Tras Fase 2.5 | **5.465** | **26** | **20** | 43 | 39 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -30,11 +30,11 @@ testeabilidad.)
 - **2.2** `useAdminViewAs.ts` — vista por rol: `adminViewAs`, `effectiveUser`, `effectiveRole`, `isAdmin/isGroupLeader/isAdvisor`. _(ac1da8a)_
 - **2.3** `useAdminAppointments.ts` — agenda local (hidratación localStorage para métricas de KPI's). _(9eb9fa7)_
 - **2.4** `usePropertiesFilters.ts` — 8 estados de búsqueda/filtros/vista del catálogo (solo UI). _(19cf59b)_
+- **2.5** `useLeadsFilters.ts` — 8 estados de búsqueda/filtros/vista de leads (solo UI). useState 34 → 26.
 
 ## Pendiente ⏳ (continuar mañana)
 
 ### Fase 2 — núcleo de datos (ALTO cuidado)
-- [ ] `useLeadsFilters` — estado UI de leads (`leadSearchNameScope`, `statusFilter`, `createdRangeFilter`, `createdFrom/To`, `leadsView`, `leadsTableSectionCollapsed`). **Bajo riesgo** (UI). Buen primer paso mañana.
 - [ ] `useLeadsData` — **ALTO riesgo**: el efecto de fetch combinado con reintentos, refetch al cambiar de vista (vía `adminViewAsRef`), filtrado por `effectiveUser`, error/loading. Es el código tipo closures+refs+timing donde vivió el bug del rol.
 - [ ] `usePipelineConfig` — **ALTO riesgo**: `pipelineByGroup`, `activePipelineGroupId`, hidratación, CRUD de etapas, copia, reglas de auto-move, `visiblePipelineGroupIds` (acoplado a permisos).
 - [ ] `useDevelopmentsData` — `developments` + `developmentsLoading` + recarga.

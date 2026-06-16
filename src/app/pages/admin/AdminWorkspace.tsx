@@ -123,6 +123,7 @@ import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
+import { useLeadsFilters } from "./useLeadsFilters";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -425,19 +426,25 @@ export function AdminWorkspace() {
   } = useAdminViewAs(user);
   const { adminSidebarExpanded, setAdminSidebarExpanded, mobileMenuOpen, setMobileMenuOpen } =
     useAdminSidebar();
-  const [searchQuery, setSearchQuery] = useState("");
-  /** Ámbito del texto de búsqueda en leads (admin, líder y asesor comparten la misma lógica). */
-  const [leadSearchNameScope, setLeadSearchNameScope] = useState<"all" | "client" | "advisor">("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [createdRangeFilter, setCreatedRangeFilter] = useState<
-    "all" | "1m" | "3m" | "6m" | "1y" | "custom"
-  >("all");
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
+  const {
+    searchQuery,
+    setSearchQuery,
+    leadSearchNameScope,
+    setLeadSearchNameScope,
+    statusFilter,
+    setStatusFilter,
+    createdRangeFilter,
+    setCreatedRangeFilter,
+    createdFrom,
+    setCreatedFrom,
+    createdTo,
+    setCreatedTo,
+    leadsView,
+    setLeadsView,
+    leadsTableSectionCollapsed,
+    setLeadsTableSectionCollapsed,
+  } = useLeadsFilters();
   const [addLeadOpen, setAddLeadOpen] = useState(false);
-  const [leadsView, setLeadsView] = useState<"kanban" | "table">("kanban");
-  /** Vista lista: secciones por estado; true = colapsada */
-  const [leadsTableSectionCollapsed, setLeadsTableSectionCollapsed] = useState<Record<string, boolean>>({});
   const [pipelineByGroup, setPipelineByGroup] = useState<Record<string, GroupPipelineSnapshot>>(() => ({
     [DEFAULT_PIPELINE_GROUP_ID]: createDefaultBuiltinPipelineSnapshot(),
   }));
