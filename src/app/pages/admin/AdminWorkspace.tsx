@@ -123,6 +123,7 @@ import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
 import { useLeadsData } from "./useLeadsData";
 import { AdminDashboardContent } from "../../components/admin/AdminDashboardContent";
+import { computeVisiblePipelineGroupIds, resolveActivePipeline } from "./pipelineSelection";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
@@ -135,7 +136,6 @@ import {
 } from "./leadsGrouping";
 import {
   effectiveRoleFromView,
-  getVisiblePipelineGroupIdsForView,
   saveAdminViewAsRole,
   type AdminViewAsRole,
 } from "../../lib/adminViewAsRole";
@@ -879,16 +879,18 @@ export function AdminWorkspace() {
       effectiveUser ? getAllowedPipelineGroupIds(effectiveUser, userGroups) : [DEFAULT_PIPELINE_GROUP_ID],
     [effectiveUser, userGroups],
   );
-  const visiblePipelineGroupIds = useMemo(() => {
-    if (!user) return [DEFAULT_PIPELINE_GROUP_ID];
-    // Vista por rol del admin: ve los grupos correspondientes al rol previsualizado.
-    if (isRealAdmin && adminViewAs !== "admin") {
-      return getVisiblePipelineGroupIdsForView(user, adminViewAs, userGroups);
-    }
-    return isGroupLeader
-      ? allowedPipelineGroupIds.filter((groupId) => groupId !== DEFAULT_PIPELINE_GROUP_ID)
-      : allowedPipelineGroupIds;
-  }, [user, isRealAdmin, adminViewAs, userGroups, isGroupLeader, allowedPipelineGroupIds]);
+  const visiblePipelineGroupIds = useMemo(
+    () =>
+      computeVisiblePipelineGroupIds({
+        user,
+        isRealAdmin,
+        adminViewAs,
+        isGroupLeader,
+        userGroups,
+        allowedPipelineGroupIds,
+      }),
+    [user, isRealAdmin, adminViewAs, userGroups, isGroupLeader, allowedPipelineGroupIds],
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -985,16 +987,10 @@ export function AdminWorkspace() {
     });
   }, [activePipelineGroupId]);
 
-  const activePipeline = useMemo((): GroupPipelineSnapshot => {
-    const cur = pipelineByGroup[activePipelineGroupId];
-    if (cur) return cur;
-    if (activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID) {
-      return createDefaultBuiltinPipelineSnapshot();
-    }
-    return cloneGroupPipelineSnapshot(
-      pipelineByGroup[DEFAULT_PIPELINE_GROUP_ID] ?? createDefaultBuiltinPipelineSnapshot()
-    );
-  }, [pipelineByGroup, activePipelineGroupId]);
+  const activePipeline = useMemo(
+    () => resolveActivePipeline(pipelineByGroup, activePipelineGroupId),
+    [pipelineByGroup, activePipelineGroupId],
+  );
   const customKanbanStages = activePipeline.customStages;
   const pipelineStageOrder = activePipeline.stageOrder;
   const stageColumnColors = activePipeline.stageColors;
