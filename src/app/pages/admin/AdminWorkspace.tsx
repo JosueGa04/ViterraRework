@@ -121,6 +121,7 @@ import { AdminViewAsRoleSwitcher } from "../../components/admin/AdminViewAsRoleS
 import { AutoMoveRulesPanel } from "../../components/admin/AutoMoveRulesPanel";
 import { useAdminSidebar } from "./useAdminSidebar";
 import { useAdminViewAs } from "./useAdminViewAs";
+import { useLeadsData } from "./useLeadsData";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
@@ -366,9 +367,6 @@ export function AdminWorkspace() {
 
   const [stageDraftLabel, setStageDraftLabel] = useState("");
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [leadsLoading, setLeadsLoading] = useState(true);
-  const [leadsError, setLeadsError] = useState<string | null>(null);
   /**
    * Tracks the (userId + viewAs) combination for which leads have already been
    * successfully fetched. Prevents re-fetching on every tab navigation.
@@ -426,6 +424,16 @@ export function AdminWorkspace() {
     isGroupLeader,
     isAdvisor,
   } = useAdminViewAs(user);
+  const {
+    leads,
+    setLeads,
+    leadsLoading,
+    setLeadsLoading,
+    leadsError,
+    setLeadsError,
+    leadsForUser,
+    reloadLeads,
+  } = useLeadsData({ user, effectiveUser, adminViewAs, isRealAdmin });
   const { adminSidebarExpanded, setAdminSidebarExpanded, mobileMenuOpen, setMobileMenuOpen } =
     useAdminSidebar();
   const {
@@ -995,15 +1003,6 @@ export function AdminWorkspace() {
   const pipelineStageOrder = activePipeline.stageOrder;
   const stageColumnColors = activePipeline.stageColors;
 
-  const leadsForUser = useMemo(
-    () =>
-      effectiveUser
-        ? filterLeadsForUser(leads, effectiveUser).filter(
-          (l) => l.crmSoftDeletedAt == null || String(l.crmSoftDeletedAt).trim() === "",
-        )
-        : [],
-    [leads, effectiveUser],
-  );
 
   const leadsInActivePipeline = useMemo(
     () =>
@@ -1948,38 +1947,6 @@ export function AdminWorkspace() {
       d && d.lead.id === updated.id ? { ...d, lead: merged! } : d
     );
   }, []);
-
-  /** Re-carga manual de leads (usado por el botón «Refrescar» en el módulo Consultas). */
-  const reloadLeads = useCallback(async () => {
-    const client = getSupabaseClient();
-    if (!client) return;
-    setLeadsLoading(true);
-    setLeadsError(null);
-    const loader =
-      user && effectiveRoleFromView(user, adminViewAs) === "admin"
-        ? fetchAllLeadsForAdmin
-        : fetchActiveLeads;
-    try {
-      const res = await loader(client);
-      if (res.error) {
-        setLeadsError(res.error.message);
-      } else {
-        setLeads(res.data);
-      }
-    } catch (e: unknown) {
-      setLeadsError(e instanceof Error ? e.message : "No se pudieron cargar los leads.");
-    } finally {
-      setLeadsLoading(false);
-    }
-  }, [user, adminViewAs]);
-
-  const adminViewAsRef = useRef(adminViewAs);
-  useEffect(() => {
-    if (!isRealAdmin || !user) return;
-    if (adminViewAsRef.current === adminViewAs) return;
-    adminViewAsRef.current = adminViewAs;
-    void reloadLeads();
-  }, [isRealAdmin, user, adminViewAs, reloadLeads]);
 
   /**
    * Reasigna un lead a otro asesor desde el módulo Consultas. Mantiene la misma lógica de

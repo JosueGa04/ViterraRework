@@ -17,7 +17,8 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras 2.6 (filtrado leads) | 5.428 | 26 | 20 | 43 | 39 |
 | Tras 2.7 (filtrado props) | 5.399 | 26 | 20 | 43 | 39 |
 | Tras 2.8 (agrupación leads) | 5.387 | 26 | 20 | 43 | 39 |
-| Tras 2.9 (selección por grupo) | **5.393** | 26 | 20 | 43 | 39 |
+| Tras 2.9 (selección por grupo) | 5.393 | 26 | 20 | 43 | 39 |
+| Tras 2.10 (useLeadsData) | **5.360** | 26 | 19 | 42 | 38 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -39,13 +40,13 @@ testeabilidad.)
 - **2.7** `propertiesFiltering.ts` — `filterPropertiesForDisplay` (búsqueda, código ref, operación, tipo, ubicación, destacado) puro + **6 tests**. De-riesga la pestaña/datos de Propiedades.
 - **2.8** `leadsGrouping.ts` — `computeLeadStatusesForRendering` + `groupLeadsByStatus` puros + **5 tests**.
 - **2.9** `filterLeadsByActiveGroup` (selección por grupo de pipeline, semántica "General = todos los permitidos") + **2 tests**. **100 tests** acumulados.
+- **2.10** `useLeadsData.ts` — estado de leads (`leads`/`leadsLoading`/`leadsError`) + `leadsForUser` + `reloadLeads` + refetch al cambiar de vista. Extracción dueña-de-estado: devuelve los setters; el efecto de carga combinado y los handlers CRUD se quedan en AdminWorkspace. Semánticamente idéntico (mismo código/deps). **Falta verificación runtime (Fase 4).**
 
 > **Nota sobre la capa de datos:** `leads`, `developments`, grupos y pipeline se cargan en **un solo efecto de fetch combinado** (`Promise.all([leadsP, devP, bootstrapP])`, ~líneas 660-755). Por eso `useLeadsData`/`useDevelopmentsData`/`usePipelineConfig` NO son separables sin refactorizar ese efecto → siguen siendo ALTO riesgo y requieren la red de tests primero. Estrategia: seguir extrayendo la **lógica pura** (filtrado/orden/agrupación) con tests antes de tocar el efecto.
 
 ## Pendiente ⏳ (continuar mañana)
 
 ### Fase 2 — núcleo de datos (ALTO cuidado)
-- [ ] `useLeadsData` — **ALTO riesgo**: el efecto de fetch combinado con reintentos, refetch al cambiar de vista (vía `adminViewAsRef`), filtrado por `effectiveUser`, error/loading. Es el código tipo closures+refs+timing donde vivió el bug del rol.
 - [ ] `usePipelineConfig` — **ALTO riesgo**: `pipelineByGroup`, `activePipelineGroupId`, hidratación, CRUD de etapas, copia, reglas de auto-move, `visiblePipelineGroupIds` (acoplado a permisos).
 - [ ] `useDevelopmentsData` — `developments` + `developmentsLoading` + recarga.
 
