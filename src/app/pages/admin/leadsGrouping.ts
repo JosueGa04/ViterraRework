@@ -3,6 +3,24 @@ import type { Lead } from "../../data/leads";
 export type LeadTableSection = { statusId: string; label: string; leads: Lead[] };
 
 /**
+ * Leads visibles en el grupo de pipeline activo. Si el grupo activo es el "General"
+ * (`defaultGroupId`), devuelve los leads de TODOS los grupos permitidos (vista agregada);
+ * si no, solo los del grupo activo.
+ */
+export function filterLeadsByActiveGroup(
+  leads: Lead[],
+  activeGroupId: string,
+  allowedGroupIds: string[],
+  defaultGroupId: string,
+): Lead[] {
+  if (activeGroupId === defaultGroupId) {
+    const allowed = new Set(allowedGroupIds);
+    return leads.filter((l) => allowed.has(l.pipelineGroupId));
+  }
+  return leads.filter((l) => l.pipelineGroupId === activeGroupId);
+}
+
+/**
  * Orden de estados para renderizar: las columnas configuradas del pipeline, más cualquier
  * estado presente en los leads que no esté en ellas (deduplicado y ordenado alfabéticamente).
  */

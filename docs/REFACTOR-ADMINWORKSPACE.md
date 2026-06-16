@@ -16,7 +16,8 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras Fase 2.5 | 5.465 | 26 | 20 | 43 | 39 |
 | Tras 2.6 (filtrado leads) | 5.428 | 26 | 20 | 43 | 39 |
 | Tras 2.7 (filtrado props) | 5.399 | 26 | 20 | 43 | 39 |
-| Tras 2.8 (agrupación leads) | **5.387** | 26 | 20 | 43 | 39 |
+| Tras 2.8 (agrupación leads) | 5.387 | 26 | 20 | 43 | 39 |
+| Tras 2.9 (selección por grupo) | **5.393** | 26 | 20 | 43 | 39 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -37,6 +38,7 @@ testeabilidad.)
 - **2.6** `leadsFiltering.ts` — `filterLeadsForDisplay` (búsqueda por scope + estado + rango de fecha) extraído como función pura + **8 tests**. De-riesga el futuro `useLeadsData` aislando su lógica más propensa a bugs.
 - **2.7** `propertiesFiltering.ts` — `filterPropertiesForDisplay` (búsqueda, código ref, operación, tipo, ubicación, destacado) puro + **6 tests**. De-riesga la pestaña/datos de Propiedades.
 - **2.8** `leadsGrouping.ts` — `computeLeadStatusesForRendering` + `groupLeadsByStatus` puros + **5 tests**.
+- **2.9** `filterLeadsByActiveGroup` (selección por grupo de pipeline, semántica "General = todos los permitidos") + **2 tests**. **100 tests** acumulados.
 
 > **Nota sobre la capa de datos:** `leads`, `developments`, grupos y pipeline se cargan en **un solo efecto de fetch combinado** (`Promise.all([leadsP, devP, bootstrapP])`, ~líneas 660-755). Por eso `useLeadsData`/`useDevelopmentsData`/`usePipelineConfig` NO son separables sin refactorizar ese efecto → siguen siendo ALTO riesgo y requieren la red de tests primero. Estrategia: seguir extrayendo la **lógica pura** (filtrado/orden/agrupación) con tests antes de tocar el efecto.
 

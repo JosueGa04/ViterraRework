@@ -126,7 +126,11 @@ import { usePropertiesFilters } from "./usePropertiesFilters";
 import { useLeadsFilters } from "./useLeadsFilters";
 import { filterLeadsForDisplay } from "./leadsFiltering";
 import { filterPropertiesForDisplay } from "./propertiesFiltering";
-import { computeLeadStatusesForRendering, groupLeadsByStatus } from "./leadsGrouping";
+import {
+  computeLeadStatusesForRendering,
+  filterLeadsByActiveGroup,
+  groupLeadsByStatus,
+} from "./leadsGrouping";
 import {
   effectiveRoleFromView,
   getVisiblePipelineGroupIdsForView,
@@ -1001,14 +1005,16 @@ export function AdminWorkspace() {
     [leads, effectiveUser],
   );
 
-  const leadsInActivePipeline = useMemo(() => {
-    // "General" es la vista agregada (label: todos los equipos), no solo el bucket `__default__`.
-    if (activePipelineGroupId === DEFAULT_PIPELINE_GROUP_ID) {
-      const allowed = new Set(allowedPipelineGroupIds);
-      return leadsForUser.filter((l) => allowed.has(l.pipelineGroupId));
-    }
-    return leadsForUser.filter((l) => l.pipelineGroupId === activePipelineGroupId);
-  }, [leadsForUser, activePipelineGroupId, allowedPipelineGroupIds]);
+  const leadsInActivePipeline = useMemo(
+    () =>
+      filterLeadsByActiveGroup(
+        leadsForUser,
+        activePipelineGroupId,
+        allowedPipelineGroupIds,
+        DEFAULT_PIPELINE_GROUP_ID,
+      ),
+    [leadsForUser, activePipelineGroupId, allowedPipelineGroupIds],
+  );
 
   useEffect(() => {
     if (!user || !isRealAdmin) return;

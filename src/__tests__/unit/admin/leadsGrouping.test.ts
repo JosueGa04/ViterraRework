@@ -5,11 +5,12 @@
 import { describe, it, expect } from "vitest";
 import {
   computeLeadStatusesForRendering,
+  filterLeadsByActiveGroup,
   groupLeadsByStatus,
 } from "../../../app/pages/admin/leadsGrouping";
 import type { Lead } from "../../../app/data/leads";
 
-function makeLead(id: string, status: string): Lead {
+function makeLead(id: string, status: string, pipelineGroupId = "__default__"): Lead {
   return {
     id,
     name: id,
@@ -24,6 +25,7 @@ function makeLead(id: string, status: string): Lead {
     source: "",
     assignedTo: "",
     assignedToUserId: "",
+    pipelineGroupId,
     lastContact: "2024-01-01",
   } as Lead;
 }
@@ -58,5 +60,24 @@ describe("groupLeadsByStatus", () => {
 
   it("devuelve vacío si no hay leads", () => {
     expect(groupLeadsByStatus([], ["nuevo"], label)).toEqual([]);
+  });
+});
+
+describe("filterLeadsByActiveGroup", () => {
+  const DEF = "__default__";
+  const leads = [
+    makeLead("a", "nuevo", "g1"),
+    makeLead("b", "nuevo", "g2"),
+    makeLead("c", "nuevo", "g3"),
+  ];
+
+  it("'General' (default) agrega solo los grupos permitidos", () => {
+    const out = filterLeadsByActiveGroup(leads, DEF, ["g1", "g2"], DEF);
+    expect(out.map((l) => l.id)).toEqual(["a", "b"]); // g3 no permitido
+  });
+
+  it("un grupo concreto devuelve solo sus leads", () => {
+    const out = filterLeadsByActiveGroup(leads, "g3", ["g1", "g2", "g3"], DEF);
+    expect(out.map((l) => l.id)).toEqual(["c"]);
   });
 });
