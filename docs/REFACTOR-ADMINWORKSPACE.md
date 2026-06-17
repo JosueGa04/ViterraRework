@@ -66,10 +66,19 @@ testeabilidad.)
 - [~] Leads (en piezas): **3.5** `AdminLeadsTable.tsx` (vista tabla por estado con acciones por lead, −200 líneas). **3.6** `AdminLeadsToolbar.tsx` (header+toggle+Nuevo+búsqueda+filtros+selector de grupo, −161 líneas). **Pestaña Leads COMPLETA** (kanban y AddLeadDialog ya eran componentes).
 - [x] Empresa (en piezas): **3.7** `AdminPipelineStagesPanel.tsx` (subtab leadStages: selección de grupo, duplicado de pipeline, grupos del líder, CRUD/orden/color de columnas con DnD, AutoMoveRulesPanel; −464 líneas). **3.8** `AdminCompanyContent.tsx` (contenedor: cabecera + selector de subtab + estructura "siempre montado"; los paneles pesados —users/settings/pipeline— se inyectan como **slots ReactNode** ya cableados en AdminWorkspace para no re-cablear ~30 props; editor de sitio lazy dentro; −56 líneas). **Pestaña Empresa COMPLETA.**
 - [x] Pestañas "gordas" componetizadas: **Propiedades**, **Leads**, **Empresa**.
-- [ ] Pestañas delgadas restantes (consultas, clientes, agenda, actividades, perfil).
+- [x] Pestañas delgadas restantes (consultas, clientes, agenda, actividades, perfil, kpis, sitio, developments): **verificadas — cada una ya delega en un único módulo dedicado** (AdminConsultasModule, AdminClientsManager, AdminAgendaModule, AdminActivitiesModule, AdminUsersManager/AdminUserProfilePanel, KPIsModule, AdminSiteEditor, AdminDevelopmentsManager). No queda lógica inline que extraer; envolverlas sería pura indirección. **Fase 3 COMPLETA.**
 
-### Fase 4 — red de seguridad ampliada
-- [ ] Smoke-tests por pestaña (que cada módulo monte y haga su acción principal). Idealmente **antes** de tocar `useLeadsData`/`usePipelineConfig`.
+### Fase 4 — red de seguridad ampliada (EN CURSO)
+Smoke/integration-tests con Testing Library (jsdom). Empezando por el área de mayor riesgo
+(closures/timing del CRUD de pipeline) y siguiendo por las pestañas componetizadas.
+- [x] `AdminPipelineStagesPanel` (+7) — monta filas por columna; cada acción (cambiar grupo, agregar/editar/eliminar columna, color, gating por permiso) dispara su handler.
+- [x] `AdminCompanyContent` (+6) — skeleton de carga, cabecera por rol, selector de subtab (goTab), 3 paneles montados SIEMPRE (hidden-CSS).
+- [x] `AdminLeadsTable` (+7) — vacío, secciones, colapsar, cambio de estado, ver/editar, eliminar con confirmación.
+- [x] `AdminLeadsToolbar` (+6) — toggle vista, Nuevo Lead, búsqueda, selector de grupo, rango personalizado.
+- [x] `AdminPropertyStatsCards` (+2) — métricas y formato de moneda.
+- [x] `AdminDashboardContent` (+3) — routing de skeleton por rol en carga.
+- [ ] Pendiente: `AdminPropertiesToolbar` / `AdminPropertiesViews` (fixtures de `Property`); **verificación runtime en el navegador** de `useLeadsData` + `usePipelineConfig` + CRUD de pipeline (lo que un test de jsdom no cubre: persistencia, fetch combinado, timing real).
+- Conteo: **106 → 137 tests** (10 → 16 archivos).
 
 ### Fase 5 — limpieza y medición final
 - [ ] Quitar imports/constantes huérfanas, medir líneas/hooks/tamaño de chunk.
