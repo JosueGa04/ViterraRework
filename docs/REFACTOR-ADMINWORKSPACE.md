@@ -26,7 +26,9 @@ muchas piezas pequeñas, cohesivas y testeables, **sin cambiar comportamiento**.
 | Tras 3.3 (PropertiesToolbar) | 5.076 | 22 | 19 | 38 | 38 |
 | Tras 3.4 (PropertiesViews) | 4.746 | 22 | 19 | 38 | 38 |
 | Tras 3.5 (LeadsTable) | 4.546 | 22 | 19 | 38 | 38 |
-| Tras 3.6 (LeadsToolbar) | **4.381** | 22 | 19 | 38 | 38 |
+| Tras 3.6 (LeadsToolbar) | 4.381 | 22 | 19 | 38 | 38 |
+| Tras 3.7 (PipelineStagesPanel) | 3.915 | 22 | 19 | 38 | 38 |
+| Tras 3.8 (CompanyContent) | **3.859** | 22 | 19 | 38 | 38 |
 
 (El conteo de líneas baja poco en los hooks de puro `useState` por lo verboso del destructure;
 el valor real es la reducción de estado/efectos que el componente maneja directamente y la
@@ -58,11 +60,12 @@ testeabilidad.)
 - [x] `usePipelineConfig` (2.11 de-riesgo + 2.12 hook). `usePipelineConfig.ts` posee el estado (pipelineByGroup/pipelineSourcesHydrated/activePipelineGroupId) + derivaciones (allowed/visiblePipelineGroupIds, activePipeline, customKanbanStages/stageOrder/stageColors, canConfigureActivePipeline). **Decisión:** los EFECTOS de sync/persist/reset/snapshot-ensure y los handlers de CRUD de etapas se quedaron en AdminWorkspace en su posición original (preservan el orden relativo al fetch combinado → cero riesgo de timing). Falta verificación runtime (Fase 4).
 - [ ] `useDevelopmentsData` — `developments` + `developmentsLoading` + recarga.
 
-### Fase 3 — pestañas → componentes (INICIADA)
+### Fase 3 — pestañas → componentes
 - [x] **3.1** Dashboard → `components/admin/AdminDashboardContent.tsx` (patrón establecido).
 - [~] Propiedades (en piezas): **3.2** `AdminPropertyStatsCards.tsx` (stats). **3.3** `AdminPropertiesToolbar.tsx` (header+toggle vista+Nueva+búsqueda+filtros, −192 líneas; recibe el objeto `usePropertiesFilters()` como un prop `filters`). **3.4** `AdminPropertiesViews.tsx` (mapa/tarjetas/lista/vacío, −330 líneas; PropertyMap y PdfDownloadDropdown lazy dentro). **Pestaña Propiedades COMPLETA.**
-- [~] Leads (en piezas): **3.5** `AdminLeadsTable.tsx` (vista tabla por estado con acciones por lead, −200 líneas). **3.6** `AdminLeadsToolbar.tsx` (header+toggle+Nuevo+búsqueda+filtros+selector de grupo, −161 líneas). **Pestaña Leads COMPLETA** (kanban y AddLeadDialog ya eran componentes). Falta: pestaña **Empresa** (~628) + thin tabs.
-- [ ] Pestañas "gordas" (las que más reducen líneas, ~600 c/u, superficie de props grande): **Propiedades**, **Empresa**, **Leads**.
+- [~] Leads (en piezas): **3.5** `AdminLeadsTable.tsx` (vista tabla por estado con acciones por lead, −200 líneas). **3.6** `AdminLeadsToolbar.tsx` (header+toggle+Nuevo+búsqueda+filtros+selector de grupo, −161 líneas). **Pestaña Leads COMPLETA** (kanban y AddLeadDialog ya eran componentes).
+- [x] Empresa (en piezas): **3.7** `AdminPipelineStagesPanel.tsx` (subtab leadStages: selección de grupo, duplicado de pipeline, grupos del líder, CRUD/orden/color de columnas con DnD, AutoMoveRulesPanel; −464 líneas). **3.8** `AdminCompanyContent.tsx` (contenedor: cabecera + selector de subtab + estructura "siempre montado"; los paneles pesados —users/settings/pipeline— se inyectan como **slots ReactNode** ya cableados en AdminWorkspace para no re-cablear ~30 props; editor de sitio lazy dentro; −56 líneas). **Pestaña Empresa COMPLETA.**
+- [x] Pestañas "gordas" componetizadas: **Propiedades**, **Leads**, **Empresa**.
 - [ ] Pestañas delgadas restantes (consultas, clientes, agenda, actividades, perfil).
 
 ### Fase 4 — red de seguridad ampliada
