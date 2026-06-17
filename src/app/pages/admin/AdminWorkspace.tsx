@@ -115,6 +115,7 @@ import { AdminPropertyStatsCards } from "../../components/admin/AdminPropertySta
 import { AdminPropertiesToolbar } from "../../components/admin/AdminPropertiesToolbar";
 import { AdminPropertiesViews } from "../../components/admin/AdminPropertiesViews";
 import { AdminPipelineStagesPanel } from "../../components/admin/AdminPipelineStagesPanel";
+import { AdminCompanyContent } from "../../components/admin/AdminCompanyContent";
 import { usePipelineConfig } from "./usePipelineConfig";
 import { useAdminAppointments } from "./useAdminAppointments";
 import { usePropertiesFilters } from "./usePropertiesFilters";
@@ -212,7 +213,6 @@ import {
 import {
   AdminActivitiesSkeleton,
   AdminClientsSkeleton,
-  AdminCompanySkeleton,
   AdminConsultasSkeleton,
   AdminDevelopmentsSkeleton,
   AdminKpisSkeleton,
@@ -3525,171 +3525,115 @@ export function AdminWorkspace() {
             />
           ))}
 
-        {activeTab === "company" &&
-          canAccessCompanyModule &&
-          (companyModuleLoading ? (
-            <AdminCompanySkeleton />
-          ) : (
-            <div className="space-y-5">
-              <div className="relative border-b border-slate-200 bg-transparent pb-8 mb-8">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                  <div>
-                    <h2 className="text-3xl font-light tracking-tight text-slate-900 mb-2">
-                      {isGroupLeader ? "Pipeline de ventas" : "Mi Empresa"}
-                    </h2>
-                    <p className="text-sm text-slate-500 max-w-xl">
-                      {isGroupLeader
-                        ? "Gestiona tus grupos asignados y configura las columnas del pipeline de cada equipo."
-                        : isAdmin
-                          ? "Equipo, sitio, embudo comercial y ajustes. Como administrador puedes abrir el pipeline de cada grupo y ajustar columnas, orden y colores."
-                          : "Equipo, sitio, embudo comercial y ajustes del espacio de trabajo. Elige un área para continuar."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {!isGroupLeader && (
-                <div className="flex gap-1 rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm">
-                  {(
-                    [
-                      { id: "users"      as const, title: "Equipo y accesos",   icon: Users      },
-                      { id: "leadStages" as const, title: "Pipeline de ventas", icon: LayoutGrid },
-                      { id: "settings"   as const, title: "Configuración",      icon: Settings   },
-                    ] as const
-                  ).map((item) => {
-                    const active = companySubtab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => goTab("company", item.id)}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
-                          active
-                            ? "bg-slate-900 text-white shadow-sm"
-                            : "text-slate-500 hover:bg-slate-50 hover:text-slate-700",
-                        )}
-                        style={{ fontWeight: active ? 600 : 500 }}
-                      >
-                        <item.icon className="h-3.5 w-3.5 shrink-0" strokeWidth={active ? 2.2 : 1.75} />
-                        <span className="hidden sm:inline">{item.title}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_48px_-28px_rgba(20,28,46,0.14)] ring-1 ring-black/[0.03]">
-                {/* Los paneles users / settings / leadStages se mantienen SIEMPRE montados
-                    (hidden CSS en lugar de &&) para evitar el reset de estado al cambiar tab. */}
-                <div className={cn(companySubtab !== "users" && "hidden")}>
-                  {user && <div className="p-5 md:p-8">
-                    <AdminUsersManager
-                      currentUser={user}
-                      users={users}
-                      leads={leads}
-                      properties={properties}
-                      developments={developments}
-                      customKanbanStages={customKanbanStages}
-                      userGroups={userGroups}
-                      onUserGroupsChange={handleUserGroupsChange}
-                      onViewLead={(lead) => {
-                        goTab("leads");
-                        openLeadDetail(lead, "view");
-                      }}
-                      onCreateUser={(input) => createUser(input, user.name)}
-                      onUpdateUser={(id, input) => updateUser(id, input, user.name)}
-                      onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
-                      onUpdatePermissions={(id, role, permissions) =>
-                        updateUserPermissions(id, role, permissions, user.name)
-                      }
-                      onArchive={(id) => archiveUser(id, user.name)}
-                      onReactivate={(id) => reactivateUser(id, user.name)}
-                      onDelete={(id) => deleteUser(id, user.name)}
-                      onSendMessageNavigate={goToMessagesWith}
-                      focusUser={usersPanelFocus}
-                      onFocusUserConsumed={handleUsersPanelFocusConsumed}
-                      onUserDetailClosed={handleUserDetailClosed}
-                    />
-                  </div>}
-                </div>
-                {companySubtab === "site" && canEditSite && (
-                  <div className="flex h-[calc(100dvh-1.25rem)] max-h-[calc(100dvh-1.25rem)] min-h-0 w-full flex-col overflow-hidden p-2 sm:p-2.5 md:p-3 lg:h-[calc(100dvh-0.75rem)] lg:max-h-[calc(100dvh-0.75rem)]">
-                    <Suspense fallback={adminModuleFallback()}>
-                      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-                        <AdminSiteEditor />
-                      </div>
-                    </Suspense>
-                  </div>
-                )}
-                <div className={cn(companySubtab !== "settings" && "hidden")}>
-                  <AdminCompanySettings
-                    counts={{
-                      leads: leads.length,
-                      properties: properties.length,
-                      developments: developments.length,
-                      users: users.length,
-                      agenda: (() => {
-                        try {
-                          const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
-                          if (!raw) return 0;
-                          const p = JSON.parse(raw) as unknown;
-                          return Array.isArray(p) ? p.length : 0;
-                        } catch {
-                          return 0;
-                        }
-                      })(),
-                    }}
-                    onNavigate={(spec) => {
-                      if (spec.type === "tab") {
-                        goTab(spec.tab);
-                      } else {
-                        goTab("company", spec.sub);
-                      }
-                    }}
-                  />
-                </div>
-                <div className={cn(companySubtab !== "leadStages" && "hidden")}>
-                  <AdminPipelineStagesPanel
-                    isAdmin={isAdmin}
-                    isGroupLeader={isGroupLeader}
-                    activePipelineGroupId={activePipelineGroupId}
-                    setActivePipelineGroupId={setActivePipelineGroupId}
-                    allowedPipelineGroupIds={allowedPipelineGroupIds}
-                    pipelineGroupLabel={pipelineGroupLabel}
-                    pipelineCopyDestOptions={pipelineCopyDestOptions}
-                    pipelineCopyFrom={pipelineCopyFrom}
-                    setPipelineCopyFrom={setPipelineCopyFrom}
-                    pipelineCopySourceOptions={pipelineCopySourceOptions}
-                    pipelineCopyTo={pipelineCopyTo}
-                    setPipelineCopyTo={setPipelineCopyTo}
-                    handleDuplicatePipelineToTeam={handleDuplicatePipelineToTeam}
-                    canSubmitPipelineCopy={canSubmitPipelineCopy}
-                    pipelineGroupsVisibleToLeader={pipelineGroupsVisibleToLeader}
-                    advisorsByGroupId={advisorsByGroupId}
-                    expandedLeaderGroupId={expandedLeaderGroupId}
-                    setExpandedLeaderGroupId={setExpandedLeaderGroupId}
-                    handleViewTeamMember={handleViewTeamMember}
-                    stageDraftLabel={stageDraftLabel}
-                    setStageDraftLabel={setStageDraftLabel}
-                    handleAddKanbanStage={handleAddKanbanStage}
-                    canConfigureActivePipeline={canConfigureActivePipeline}
-                    leadColumnStatuses={leadColumnStatuses}
-                    resolveStatusLabel={resolveStatusLabel}
-                    editingStageId={editingStageId}
-                    setEditingStageId={setEditingStageId}
+        {activeTab === "company" && canAccessCompanyModule && (
+          <AdminCompanyContent
+            isAdmin={isAdmin}
+            isGroupLeader={isGroupLeader}
+            companySubtab={companySubtab}
+            companyModuleLoading={companyModuleLoading}
+            canEditSite={canEditSite}
+            goTab={goTab}
+            adminModuleFallback={adminModuleFallback}
+            usersPanel={
+              user && (
+                <div className="p-5 md:p-8">
+                  <AdminUsersManager
+                    currentUser={user}
+                    users={users}
                     leads={leads}
-                    handleReorderPipelineRows={handleReorderPipelineRows}
-                    resolveStageHex={resolveStageHex}
-                    setPipelineByGroup={setPipelineByGroup}
-                    handleUpdateKanbanStage={handleUpdateKanbanStage}
-                    requestDeletePipelineStage={requestDeletePipelineStage}
-                    pipelineByGroup={pipelineByGroup}
+                    properties={properties}
+                    developments={developments}
+                    customKanbanStages={customKanbanStages}
+                    userGroups={userGroups}
+                    onUserGroupsChange={handleUserGroupsChange}
+                    onViewLead={(lead) => {
+                      goTab("leads");
+                      openLeadDetail(lead, "view");
+                    }}
+                    onCreateUser={(input) => createUser(input, user.name)}
+                    onUpdateUser={(id, input) => updateUser(id, input, user.name)}
+                    onUpdatePassword={(id, password) => updateUserPassword(id, password, user.name)}
+                    onUpdatePermissions={(id, role, permissions) =>
+                      updateUserPermissions(id, role, permissions, user.name)
+                    }
+                    onArchive={(id) => archiveUser(id, user.name)}
+                    onReactivate={(id) => reactivateUser(id, user.name)}
+                    onDelete={(id) => deleteUser(id, user.name)}
+                    onSendMessageNavigate={goToMessagesWith}
+                    focusUser={usersPanelFocus}
+                    onFocusUserConsumed={handleUsersPanelFocusConsumed}
+                    onUserDetailClosed={handleUserDetailClosed}
                   />
                 </div>
-              </section>
-            </div>
-          ))}
+              )
+            }
+            settingsPanel={
+              <AdminCompanySettings
+                counts={{
+                  leads: leads.length,
+                  properties: properties.length,
+                  developments: developments.length,
+                  users: users.length,
+                  agenda: (() => {
+                    try {
+                      const raw = localStorage.getItem(AGENDA_STORAGE_KEY);
+                      if (!raw) return 0;
+                      const p = JSON.parse(raw) as unknown;
+                      return Array.isArray(p) ? p.length : 0;
+                    } catch {
+                      return 0;
+                    }
+                  })(),
+                }}
+                onNavigate={(spec) => {
+                  if (spec.type === "tab") {
+                    goTab(spec.tab);
+                  } else {
+                    goTab("company", spec.sub);
+                  }
+                }}
+              />
+            }
+            pipelinePanel={
+              <AdminPipelineStagesPanel
+                isAdmin={isAdmin}
+                isGroupLeader={isGroupLeader}
+                activePipelineGroupId={activePipelineGroupId}
+                setActivePipelineGroupId={setActivePipelineGroupId}
+                allowedPipelineGroupIds={allowedPipelineGroupIds}
+                pipelineGroupLabel={pipelineGroupLabel}
+                pipelineCopyDestOptions={pipelineCopyDestOptions}
+                pipelineCopyFrom={pipelineCopyFrom}
+                setPipelineCopyFrom={setPipelineCopyFrom}
+                pipelineCopySourceOptions={pipelineCopySourceOptions}
+                pipelineCopyTo={pipelineCopyTo}
+                setPipelineCopyTo={setPipelineCopyTo}
+                handleDuplicatePipelineToTeam={handleDuplicatePipelineToTeam}
+                canSubmitPipelineCopy={canSubmitPipelineCopy}
+                pipelineGroupsVisibleToLeader={pipelineGroupsVisibleToLeader}
+                advisorsByGroupId={advisorsByGroupId}
+                expandedLeaderGroupId={expandedLeaderGroupId}
+                setExpandedLeaderGroupId={setExpandedLeaderGroupId}
+                handleViewTeamMember={handleViewTeamMember}
+                stageDraftLabel={stageDraftLabel}
+                setStageDraftLabel={setStageDraftLabel}
+                handleAddKanbanStage={handleAddKanbanStage}
+                canConfigureActivePipeline={canConfigureActivePipeline}
+                leadColumnStatuses={leadColumnStatuses}
+                resolveStatusLabel={resolveStatusLabel}
+                editingStageId={editingStageId}
+                setEditingStageId={setEditingStageId}
+                leads={leads}
+                handleReorderPipelineRows={handleReorderPipelineRows}
+                resolveStageHex={resolveStageHex}
+                setPipelineByGroup={setPipelineByGroup}
+                handleUpdateKanbanStage={handleUpdateKanbanStage}
+                requestDeletePipelineStage={requestDeletePipelineStage}
+                pipelineByGroup={pipelineByGroup}
+              />
+            }
+          />
+        )}
 
         {/* Messages Tab */}
         {activeTab === "messages" && user && (
