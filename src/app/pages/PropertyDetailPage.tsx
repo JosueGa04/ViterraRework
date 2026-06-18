@@ -127,6 +127,12 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+/* ─── Números de contacto globales (casas en venta / renta) ──────────────── */
+/** Teléfono global de casas: (33) 3629-7122 */
+const PROPERTIES_GLOBAL_TEL_HREF = "tel:+523336297122";
+/** WhatsApp global de casas: (33) 3199-1774 */
+const PROPERTIES_GLOBAL_WA_HREF  = "https://wa.me/523331991774";
+
 /* ─── Main page ──────────────────────────────────────────────────────────── */
 export function PropertyDetailPage() {
   const { id } = useParams();
@@ -221,11 +227,16 @@ export function PropertyDetailPage() {
     const fromProp = resolveTelHref(property?.contactPhone);
     if (fromProp) return fromProp;
     const phoneItem = contactSite.infoItems?.find((i) => i.icon === "phone");
-    return resolveTelHref(phoneItem?.body?.split("\n")[0]);
+    const fromSite = resolveTelHref(phoneItem?.body?.split("\n")[0]);
+    if (fromSite) return fromSite;
+    // Último recurso: número global de casas en venta/renta
+    return PROPERTIES_GLOBAL_TEL_HREF;
   }, [property?.contactPhone, contactSite.infoItems]);
   const whatsappHref = useMemo(() => {
     const stored  = property?.contactWhatsapp?.trim();
-    const fallback = contactSite.quickWhatsappHref || "https://wa.me/523318878494";
+    // Ignorar placeholder antiguo de Supabase
+    const siteWa = contactSite.quickWhatsappHref;
+    const fallback = (siteWa && !siteWa.includes("1234567890")) ? siteWa : PROPERTIES_GLOBAL_WA_HREF;
     return resolveWhatsappHref(stored ?? undefined, fallback, whatsappInterestMessage);
   }, [property?.contactWhatsapp, contactSite.quickWhatsappHref, whatsappInterestMessage]);
 
@@ -816,8 +827,8 @@ export function PropertyDetailPage() {
                 submitting={submitting}
                 submitted={submitted}
                 submitError={submitError}
-                showGlobalWhatsappHint={!property?.contactWhatsapp?.trim()}
-                phoneInvalidHint={property?.contactPhone?.trim() && !telHref ? "El teléfono guardado no tiene suficientes dígitos." : undefined}
+                showGlobalWhatsappHint={false}
+                phoneInvalidHint={undefined}
               />
             </div>
           </div>
@@ -1009,8 +1020,8 @@ export function PropertyDetailPage() {
                   submitting={submitting}
                   submitted={submitted}
                   submitError={submitError}
-                  showGlobalWhatsappHint={!property?.contactWhatsapp?.trim()}
-                  phoneInvalidHint={property?.contactPhone?.trim() && !telHref ? "El teléfono guardado no tiene suficientes dígitos." : undefined}
+                  showGlobalWhatsappHint={false}
+                  phoneInvalidHint={undefined}
                 />
               </motion.div>
 

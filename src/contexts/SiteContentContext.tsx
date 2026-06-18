@@ -46,8 +46,8 @@ const UPDATED_MAP_LNG = -103.386476;
 
 function normalizeLegacyContact(content: SiteContent): SiteContent {
   const next = { ...content, contact: { ...content.contact } };
-  const mapIdx = next.contact.infoItems.findIndex((r) => r.icon === "map");
-  if (mapIdx >= 0 && next.contact.infoItems[mapIdx].body === LEGACY_CONTACT_ADDRESS) {
+  const mapIdx = next.contact.infoItems?.findIndex((r) => r.icon === "map");
+  if (mapIdx !== undefined && mapIdx >= 0 && next.contact.infoItems[mapIdx].body === LEGACY_CONTACT_ADDRESS) {
     const infoItems = next.contact.infoItems.map((row, i) =>
       i === mapIdx ? { ...row, body: UPDATED_CONTACT_ADDRESS } : row
     );
@@ -63,6 +63,95 @@ function normalizeLegacyContact(content: SiteContent): SiteContent {
     next.contact.mapLat = UPDATED_MAP_LAT;
     next.contact.mapLng = UPDATED_MAP_LNG;
   }
+
+  // Normalize WhatsApp link if it contains placeholder digits or is empty
+  const wa = next.contact.quickWhatsappHref;
+  if (
+    !wa ||
+    wa.includes("12356789") ||
+    wa.includes("3300000000") ||
+    wa.includes("123456789") ||
+    wa.includes("1234567890")
+  ) {
+    next.contact.quickWhatsappHref = "https://wa.me/523331991774";
+  }
+
+  // Normalize contact infoItems for email and phone if they contain placeholder values
+  if (next.contact.infoItems) {
+    next.contact.infoItems = next.contact.infoItems.map((item) => {
+      if (item.icon === "mail") {
+        const email = item.body.toLowerCase();
+        if (
+          email.includes("info@viterra") ||
+          email.includes("ventas@viterra") ||
+          email.includes("@viterra.mx") ||
+          (email.includes("@viterra.com") && !email.includes("viterrainmobiliaria"))
+        ) {
+          return { ...item, body: "contacto@viterrainmobiliaria.com" };
+        }
+      }
+      if (item.icon === "phone") {
+        if (
+          item.body.includes("12356789") ||
+          item.body.includes("3300000000") ||
+          item.body.includes("123456789")
+        ) {
+          return { ...item, body: "(33) 3629-7122\n(33) 3199-1774" };
+        }
+      }
+      return item;
+    });
+  }
+
+  // Normalize services section contactLinks
+  if (content.services) {
+    const services = { ...content.services };
+    if (Array.isArray(services.cards)) {
+      services.cards = services.cards.map((card) => {
+        if (Array.isArray(card.contactLinks)) {
+          const contactLinks = card.contactLinks.map((link) => {
+            const href = link.href.toLowerCase();
+            if (link.icon === "mail") {
+              if (
+                href.includes("info@viterra") ||
+                href.includes("ventas@viterra") ||
+                href.includes("@viterra.mx") ||
+                (href.includes("@viterra.com") && !href.includes("viterrainmobiliaria"))
+              ) {
+                return { ...link, href: "mailto:contacto@viterrainmobiliaria.com" };
+              }
+            } else if (link.icon === "messageCircle") {
+              if (
+                href.includes("12356789") ||
+                href.includes("3300000000") ||
+                href.includes("123456789") ||
+                href.includes("1234567890")
+              ) {
+                return {
+                  ...link,
+                  href: "https://wa.me/523331991774?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20sus%20servicios.",
+                };
+              }
+            } else if (link.icon === "phone") {
+              if (
+                href.includes("12356789") ||
+                href.includes("3300000000") ||
+                href.includes("123456789") ||
+                href.includes("1234567890")
+              ) {
+                return { ...link, href: "tel:+523331991774" };
+              }
+            }
+            return link;
+          });
+          return { ...card, contactLinks };
+        }
+        return card;
+      });
+    }
+    return { ...next, services };
+  }
+
   return next;
 }
 

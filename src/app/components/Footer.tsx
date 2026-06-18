@@ -114,14 +114,14 @@ export function Footer() {
               </li>
               <li className="flex items-center gap-3 group">
                 <Phone className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 transition-colors" strokeWidth={1.5} />
-                <a href="tel:+1234567890" className="hover:text-white transition-colors" style={{ fontWeight: 400 }}>
-                  (123) 456-7890
+                <a href="tel:+523336297122" className="hover:text-white transition-colors" style={{ fontWeight: 400 }}>
+                  33 3629-7122
                 </a>
               </li>
               <li className="flex items-center gap-3 group">
                 <Mail className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 transition-colors" strokeWidth={1.5} />
-                <a href="mailto:info@viterra.com" className="hover:text-white transition-colors" style={{ fontWeight: 400 }}>
-                  info@viterra.com
+                <a href="mailto:contacto@viterrainmobiliaria.com" className="hover:text-white transition-colors" style={{ fontWeight: 400 }}>
+                  contacto@viterrainmobiliaria.com
                 </a>
               </li>
             </ul>

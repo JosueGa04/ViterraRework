@@ -82,11 +82,11 @@ export type ServiceCardContactLink = {
 export const DEFAULT_SERVICE_CARD_CONTACT_LINKS: ServiceCardContactLink[] = [
   {
     label: "WhatsApp",
-    href: "https://wa.me/523300000000?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20sus%20servicios.",
+    href: "https://wa.me/523331991774?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20sus%20servicios.",
     icon: "messageCircle",
   },
-  { label: "Correo", href: "mailto:contacto@viterra.mx", icon: "mail" },
-  { label: "Llamada", href: "tel:+523300000000", icon: "phone" },
+  { label: "Correo", href: "mailto:contacto@viterrainmobiliaria.com", icon: "mail" },
+  { label: "Llamada", href: "tel:+523331991774", icon: "phone" },
 ];
 
 function cloneDefaultServiceCardContactLinks(): ServiceCardContactLink[] {
@@ -352,12 +352,12 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
       {
         icon: "phone",
         title: "Teléfono",
-        body: "(123) 456-7890\n(098) 765-4321",
+        body: "(33) 3629-7122\n(33) 3199-1774",
       },
       {
         icon: "mail",
         title: "Email",
-        body: "info@viterra.com\nventas@viterra.com",
+        body: "contacto@viterrainmobiliaria.com",
       },
       {
         icon: "clock",
@@ -368,7 +368,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     quickTitle: "¿Necesitas ayuda inmediata?",
     quickSubtitle: "Nuestro equipo está disponible para atenderte por WhatsApp",
     quickWhatsappLabel: "Chatear por WhatsApp",
-    quickWhatsappHref: "https://wa.me/1234567890",
+    quickWhatsappHref: "https://wa.me/523331991774",
     formTitle: "Envíanos un Mensaje",
     formKicker: "Escríbenos",
     successTitle: "¡Mensaje enviado con éxito!",

@@ -179,10 +179,10 @@ export function DevelopmentDetailPage() {
   useEffect(() => { setDescriptionExpanded(false); }, [id]);
   useEffect(() => { setActiveTab("descripcion"); }, [id]);
 
-  const contactPhoneRaw = development?.inChargePhone?.trim() ?? "";
-  const telContactHref  = useMemo(() => resolveTelHref(contactPhoneRaw), [contactPhoneRaw]);
-  const phoneDisplay    = useMemo(() => formatPhoneForDisplay(contactPhoneRaw), [contactPhoneRaw]);
-  const siteWhatsappFallback = contactSite.quickWhatsappHref || "https://wa.me/523318878494";
+  const contactPhoneRaw = "3314457122";
+  const telContactHref  = "tel:+523314457122";
+  const phoneDisplay    = "(33) 1445 7122";
+  const siteWhatsappFallback = "https://wa.me/523314457122";
 
   const resolvedVideos  = useMemo(() => { if (!development) return []; const c = getSupabaseClient(); return resolveAllPropertyVideoUrls(developmentVideosList(development), c); }, [development]);
   const resolvedTours3d = useMemo(() => { if (!development) return []; return resolvePropertyTour3dUrls(developmentTours3dList(development)); }, [development]);
@@ -196,9 +196,9 @@ export function DevelopmentDetailPage() {
 
   const whatsappInterestMessage = useMemo(() => development ? developmentContactMessage({ name: development.name, referenceCode: displayReference }, "¿Podrían darme más información?") : "", [development, displayReference]);
   const whatsappVisitMessage    = useMemo(() => development ? developmentContactMessage({ name: development.name, referenceCode: displayReference }, "Me gustaría agendar una visita.") : "", [development, displayReference]);
-  const whatsappContactHref = useMemo(() => resolveWhatsappHref(development?.inChargeWhatsapp?.trim(), siteWhatsappFallback, whatsappInterestMessage), [development?.inChargeWhatsapp, siteWhatsappFallback, whatsappInterestMessage]);
-  const whatsappVisitHref   = useMemo(() => resolveWhatsappHref(development?.inChargeWhatsapp?.trim(), siteWhatsappFallback, whatsappVisitMessage), [development?.inChargeWhatsapp, siteWhatsappFallback, whatsappVisitMessage]);
-  const waDisplay = useMemo(() => whatsappDisplayLabel(development?.inChargeWhatsapp), [development?.inChargeWhatsapp]);
+  const whatsappContactHref = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappInterestMessage), [siteWhatsappFallback, whatsappInterestMessage]);
+  const whatsappVisitHref   = useMemo(() => resolveWhatsappHref(undefined, siteWhatsappFallback, whatsappVisitMessage), [siteWhatsappFallback, whatsappVisitMessage]);
+  const waDisplay = "(33) 1445 7122";
 
   const scheduleVisitHref    = useMemo(() => { if (whatsappVisitHref?.includes("wa.me")) return whatsappVisitHref; if (telContactHref) return telContactHref; return "/contacto"; }, [whatsappVisitHref, telContactHref]);
   const contactAdvisorHref   = useMemo(() => { if (telContactHref) return telContactHref; if (whatsappContactHref?.includes("wa.me")) return whatsappContactHref; return "/contacto"; }, [telContactHref, whatsappContactHref]);

@@ -519,7 +519,7 @@ export function DevelopmentsPage() {
               </motion.div>
               <motion.div whileHover={reduceMotion ? undefined : { y: -3 }} transition={{ type: "spring", stiffness: 380, damping: 24 }}>
                 <a
-                  href="tel:+1234567890"
+                  href="tel:+523314457122"
                   className="font-heading inline-flex items-center justify-center gap-2 rounded-lg border border-brand-navy/25 bg-white px-8 py-4 font-medium text-brand-navy transition-all hover:border-brand-navy/40 hover:bg-brand-navy/[0.04]"
                 >
                   Llamar ahora
