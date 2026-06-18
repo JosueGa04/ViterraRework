@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { RootLayout } from "./RootLayout";
 import { AdminLayout } from "./pages/admin/AdminLayout";
 import { RouteErrorFallback } from "./components/ErrorBoundary";
+import { SitePreviewFramePage } from "./pages/admin/SitePreviewFramePage";
 
 const lazyPage = (loader: () => Promise<{ [key: string]: unknown }>, exportName: string) => async () => {
   const mod = await loader();
@@ -74,16 +75,21 @@ export const router = createBrowserRouter([
         path: "/admin/cambiar-contrasena",
         lazy: lazyPage(() => import("./pages/FirstLoginChangePasswordPage"), "FirstLoginChangePasswordPage"),
       },
+      /** Iframe del editor: ruta fuera de `/admin/*` para no cargar el CRM por error. */
+      {
+        path: "/site-preview-frame",
+        Component: SitePreviewFramePage,
+      },
+      {
+        path: "/admin/site-preview-frame",
+        element: <Navigate to="/site-preview-frame" replace />,
+      },
       {
         path: "/admin",
         /** Contenedor mínimo: eager para que al refrescar no espere un chunk vacío antes del workspace. */
         Component: AdminLayout,
         children: [
           { index: true, element: <Navigate to="/admin/dashboard" replace /> },
-          {
-            path: "site-preview-frame",
-            lazy: lazyPage(() => import("./pages/admin/SitePreviewFramePage"), "SitePreviewFramePage"),
-          },
           {
             path: "*",
             lazy: lazyPage(() => import("./pages/admin/AdminWorkspace"), "AdminWorkspace"),

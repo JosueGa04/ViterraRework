@@ -13,6 +13,8 @@ import {
   type ServiceDetailCanvasLayout,
   type ServiceIconKey,
   type HeaderNavSocialLink,
+  type FooterNavLink,
+  type FooterContactItem,
   type SiteContent,
 } from "../data/siteContent";
 import { HEADER_SOCIAL_PLATFORM_OPTIONS } from "../app/config/socialLinks";
@@ -451,6 +453,29 @@ function normalizeServiceCardContactLinks(raw: unknown, fallbackRow: ServiceCard
   return out.length > 0 ? out.slice(0, 12) : [];
 }
 
+function normalizeFooterNavLinksArray(raw: unknown[]): FooterNavLink[] {
+  const out: FooterNavLink[] = [];
+  for (const row of raw) {
+    if (!isPlainObject(row)) continue;
+    const label = typeof row.label === "string" ? row.label.trim() : "";
+    if (!label) continue;
+    const href = typeof row.href === "string" ? row.href.trim() : "";
+    out.push({ label, href: href || "#" });
+  }
+  return out.slice(0, 24);
+}
+
+function normalizeFooterContactItemsArray(raw: unknown[]): FooterContactItem[] {
+  const out: FooterContactItem[] = [];
+  for (const row of raw) {
+    if (!isPlainObject(row)) continue;
+    const body = typeof row.body === "string" ? row.body : "";
+    if (!body.trim()) continue;
+    out.push({ icon: sanitizeContactInfoIcon(row.icon), body });
+  }
+  return out.slice(0, 12);
+}
+
 const HEADER_SOCIAL_IDS = new Set<string>(HEADER_SOCIAL_PLATFORM_OPTIONS.map((o) => o.id));
 
 function normalizeHeaderNavSocial(raw: unknown, def: HeaderNavSocialLink[]): HeaderNavSocialLink[] {
@@ -607,6 +632,48 @@ export function mergeSiteSection<K extends keyof SiteContent>(key: K, section: u
     const navSocial = normalizeHeaderNavSocial(mergedRecord.navSocial, def.navSocial);
     const h = merged as SiteContent["header"];
     return { ...def, ...h, navSocial } as SiteContent[K];
+  }
+
+  if (key === "footer") {
+    const def = DEFAULT_SITE_CONTENT.footer;
+    const mergedRecord = merged as unknown as Record<string, unknown>;
+    const f = merged as SiteContent["footer"];
+
+    const rawQuick = mergedRecord.quickLinks;
+    const quickLinks = Array.isArray(rawQuick)
+      ? normalizeFooterNavLinksArray(rawQuick)
+      : def.quickLinks;
+
+    const rawContact = mergedRecord.contactItems;
+    const contactItems = Array.isArray(rawContact)
+      ? normalizeFooterContactItemsArray(rawContact)
+      : def.contactItems;
+
+    const rawSocial = mergedRecord.socialLinks;
+    const socialLinks = Array.isArray(rawSocial)
+      ? normalizeSocialLinksArray(rawSocial)
+      : def.socialLinks;
+
+    const copyrightLine =
+      typeof f.copyrightLine === "string" && f.copyrightLine.trim()
+        ? f.copyrightLine
+        : def.copyrightLine;
+
+    return {
+      ...def,
+      ...f,
+      brandTitle: typeof f.brandTitle === "string" ? f.brandTitle : def.brandTitle,
+      brandSubtitle: typeof f.brandSubtitle === "string" ? f.brandSubtitle : def.brandSubtitle,
+      brandDescription:
+        typeof f.brandDescription === "string" ? f.brandDescription : def.brandDescription,
+      quickLinksTitle: typeof f.quickLinksTitle === "string" ? f.quickLinksTitle : def.quickLinksTitle,
+      quickLinks,
+      servicesTitle: typeof f.servicesTitle === "string" ? f.servicesTitle : def.servicesTitle,
+      contactTitle: typeof f.contactTitle === "string" ? f.contactTitle : def.contactTitle,
+      contactItems,
+      socialLinks,
+      copyrightLine,
+    } as SiteContent[K];
   }
 
   if (key === "about") {

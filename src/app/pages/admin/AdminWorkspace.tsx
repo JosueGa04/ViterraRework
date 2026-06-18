@@ -206,6 +206,7 @@ import {
   buildAdminHref,
   buildAdminProfileHref,
   parseAdminPath,
+  ADMIN_NON_WORKSPACE_PATHS,
   type AdminTab,
   type CompanySubtab,
 } from "./adminNavigation";
@@ -308,6 +309,10 @@ export function AdminWorkspace() {
 
   useEffect(() => {
     if (!location.pathname.startsWith("/admin")) return;
+    const normalized = location.pathname.replace(/\/+$/, "");
+    const rest = normalized.slice("/admin".length).replace(/^\//, "");
+    const firstSeg = rest.split("/").filter(Boolean)[0] ?? "";
+    if (ADMIN_NON_WORKSPACE_PATHS.has(firstSeg)) return;
     const parsed = parseAdminPath(location.pathname);
     const canonical = buildAdminCanonicalHref(parsed);
     const cur = location.pathname.replace(/\/+$/, "") || "/admin";

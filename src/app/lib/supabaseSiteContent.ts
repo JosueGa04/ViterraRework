@@ -5,6 +5,7 @@ import { mergeSiteSection } from "../../lib/siteContentMerge";
 export const SITE_CONTENT_PAGE_KEYS: (keyof SiteContent)[] = [
   "home",
   "header",
+  "footer",
   "contact",
   "services",
   "about",
@@ -33,6 +34,7 @@ export async function fetchAllSiteSections(client: SupabaseClient): Promise<Site
   return {
     home: mergeSiteSection("home", byPage.home),
     header: mergeSiteSection("header", byPage.header),
+    footer: mergeSiteSection("footer", byPage.footer),
     contact: mergeSiteSection("contact", byPage.contact),
     services: mergeSiteSection("services", byPage.services),
     about: mergeSiteSection("about", byPage.about),

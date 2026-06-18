@@ -444,7 +444,7 @@ export function ServicesNodeGraph({ cards, reduceMotion }: ServicesNodeGraphProp
               const isHovered = hovered === i;
               const depth = nodeDepth(y);
               return (
-                <PreviewSectionChrome key={`${card.title}-${i}`} blockId={`services-card-${i}`} label={`Tarjeta ${i + 1}`}>
+                <PreviewSectionChrome key={`${card.title}-${i}`} blockId={`services-card-${i}`} label={`Tarjeta ${i + 1}`} compact hideLabel>
                   <div
                     className="absolute z-[5] overflow-visible"
                     style={{

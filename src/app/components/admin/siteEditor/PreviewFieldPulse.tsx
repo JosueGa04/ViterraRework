@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useVisualSiteEditorOptional } from "../../../../contexts/VisualSiteEditorContext";
+import { blockBelongsToEditorTab } from "./editorBlocks";
 import { cn } from "../../ui/utils";
 
 /**
@@ -10,15 +11,14 @@ export function PreviewFieldPulse({
   fieldKey,
   children,
   className,
-  layout = "inline",
+  layout = "block",
 }: {
   blockId: string;
   fieldKey: string;
   children: ReactNode;
-  /** p. ej. `block` / `inline-flex` para encajar con el layout del hero. */
   className?: string;
-  /** `cover`: contenedor a pantalla completo (p. ej. imagen de fondo del hero). */
-  layout?: "inline" | "cover";
+  /** `block` (defecto): títulos y párrafos. `inline`: enlaces en línea. `cover`: fondo a pantalla completa. */
+  layout?: "inline" | "block" | "cover";
 }) {
   const v = useVisualSiteEditorOptional();
   const [flash, setFlash] = useState(false);
@@ -37,13 +37,17 @@ export function PreviewFieldPulse({
 
   if (!v?.enabled) return <>{children}</>;
 
+  if (v.editorTab && !blockBelongsToEditorTab(blockId, v.editorTab)) {
+    return <>{children}</>;
+  }
+
   const fieldAttr = { "data-viterra-editor-field": fieldKey } as const;
 
   const ring = flash ? (
     <span
       className={cn(
         "pointer-events-none z-[25] rounded-md border-[3px] border-amber-300 shadow-[0_0_0_2px_rgba(0,0,0,0.45),0_0_26px_rgba(251,191,36,0.65)]",
-        layout === "cover" ? "absolute inset-0 sm:inset-0" : "absolute inset-[-5px] sm:inset-[-7px]"
+        layout === "cover" ? "absolute inset-0" : "absolute inset-[-4px] sm:inset-[-6px]"
       )}
       aria-hidden
     />
@@ -58,10 +62,33 @@ export function PreviewFieldPulse({
     );
   }
 
+  if (layout === "inline") {
+    return (
+      <span
+        {...fieldAttr}
+        className={cn(
+          flash ? "relative inline-block max-w-full align-middle" : "inline max-w-full align-middle",
+          className
+        )}
+      >
+        {children}
+        {ring}
+      </span>
+    );
+  }
+
+  if (!flash) {
+    return (
+      <span {...fieldAttr} className={cn("block min-w-0 max-w-full", className)}>
+        {children}
+      </span>
+    );
+  }
+
   return (
-    <span {...fieldAttr} className={cn("relative align-middle", className)}>
+    <div {...fieldAttr} className={cn("relative block w-full min-w-0", className)}>
       {children}
       {ring}
-    </span>
+    </div>
   );
 }

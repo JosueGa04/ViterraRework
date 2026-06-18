@@ -51,6 +51,9 @@ const SEGMENT_TO_COMPANY_SUB: Record<string, CompanySubtab> = {
   settings: "settings",
 };
 
+/** Rutas bajo `/admin` que no son pestañas del CRM (iframe del editor de sitio, etc.). */
+export const ADMIN_NON_WORKSPACE_PATHS = new Set(["site-preview-frame"]);
+
 const SEGMENT_TO_TAB: Record<string, AdminTab> = {
   dashboard: "dashboard",
   kpis: "kpis",
@@ -114,6 +117,9 @@ export function parseAdminPath(pathname: string): ParsedAdminPath {
 
   const parts = rest.split("/").filter(Boolean);
   const seg = parts[0] ?? "";
+  if (ADMIN_NON_WORKSPACE_PATHS.has(seg)) {
+    return { tab: "dashboard", companySubtab: "users", profileUserId: null };
+  }
   if (seg === "profile") {
     const profileUserId = parts[1] ? decodeURIComponent(parts[1]) : null;
     return { tab: "profile", companySubtab: "users", profileUserId };

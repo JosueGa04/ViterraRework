@@ -7,6 +7,7 @@ import {
   AboutEditorForm,
   ContactEditorForm,
   DevelopmentsEditorForm,
+  FooterEditorForm,
   HeaderEditorForm,
   HomeEditorForm,
   RentEditorForm,
@@ -17,6 +18,7 @@ import { EDITOR_PAGE_BLOCKS, getServicesEditorPageBlocks, type SiteKey } from ".
 import {
   VITERRA_SITE_PREVIEW_SYNC,
   VITERRA_SITE_PREVIEW_CHILD,
+  VITERRA_SITE_PREVIEW_READY,
   type SitePreviewChildMessage,
   type SitePreviewSyncPayload,
   isSameOriginMessage,
@@ -33,9 +35,10 @@ const SITE_LABELS: Record<SiteKey, string> = {
   about: "Acerca de",
   developments: "Desarrollos",
   header: "Headder",
+  footer: "Footer",
 };
 
-const ORDER: SiteKey[] = ["home", "rent", "sale", "contact", "services", "about", "developments", "header"];
+const ORDER: SiteKey[] = ["home", "rent", "sale", "contact", "services", "about", "developments", "header", "footer"];
 
 const PREVIEW_PATH: Record<SiteKey, string> = {
   home: "/",
@@ -46,6 +49,7 @@ const PREVIEW_PATH: Record<SiteKey, string> = {
   about: "/nosotros",
   developments: "/desarrollos",
   header: "/",
+  footer: "/",
 };
 
 /**
@@ -95,6 +99,11 @@ export function AdminSiteEditor() {
   useEffect(() => {
     setMobileSplitTab("edit");
   }, [tab]);
+
+  useEffect(() => {
+    const el = previewScrollRef.current;
+    if (el) el.scrollTop = 0;
+  }, [tab, activeBlockId]);
 
   useEffect(() => {
     if (tab !== "services") setServicesPreviewSurface("detail");
@@ -201,6 +210,10 @@ export function AdminSiteEditor() {
     setPreviewNavigateTargetId(null);
   }, []);
 
+  useEffect(() => {
+    clearTransientPreviewHighlight();
+  }, [tab, clearTransientPreviewHighlight]);
+
   const designWidth = PREVIEW_DESIGN_WIDTH[previewFrame];
   const previewViewportHeight = PREVIEW_VIEWPORT_HEIGHT[previewFrame];
   const scale = useMemo(() => {
@@ -211,12 +224,14 @@ export function AdminSiteEditor() {
   const postSyncToIframe = useCallback(
     (override?: Partial<SitePreviewSyncPayload>) => {
       const win = iframeRef.current?.contentWindow;
-      if (!win) return;
+      if (!win) return false;
       const payload: SitePreviewSyncPayload = {
         mergedContent: mergedContentRef.current,
         previewPath: previewPathRef.current,
         serviceDetailPreviewSlug: serviceSlugRef.current,
-        showSiteHeaderInPreview: tabRef.current === "header",
+        showSiteHeaderInPreview: true,
+        editorTab: tabRef.current,
+        showBlockLabels: false,
         activeBlockId,
         previewNavigateSeq,
         previewNavigateTargetId,
@@ -224,8 +239,23 @@ export function AdminSiteEditor() {
         ...override,
       };
       win.postMessage({ type: VITERRA_SITE_PREVIEW_SYNC, payload }, window.location.origin);
+      return true;
     },
     [activeBlockId, previewNavigateSeq, previewNavigateTargetId, previewNavigateFieldKey]
+  );
+
+  const postSyncToIframeWithRetry = useCallback(
+    (override?: Partial<SitePreviewSyncPayload>) => {
+      if (postSyncToIframe(override)) return;
+      let attempts = 0;
+      const retry = () => {
+        attempts += 1;
+        if (postSyncToIframe(override) || attempts >= 8) return;
+        window.setTimeout(retry, 50);
+      };
+      window.setTimeout(retry, 0);
+    },
+    [postSyncToIframe]
   );
 
   const requestPreviewNavigate = useCallback(
@@ -244,7 +274,9 @@ export function AdminSiteEditor() {
               mergedContent: mergedContentRef.current,
               previewPath: previewPathRef.current,
               serviceDetailPreviewSlug: serviceSlugRef.current,
-              showSiteHeaderInPreview: tabRef.current === "header",
+              showSiteHeaderInPreview: true,
+              editorTab: tabRef.current,
+              showBlockLabels: false,
               activeBlockId: blockId,
               previewNavigateSeq: next,
               previewNavigateTargetId: blockId,
@@ -287,6 +319,10 @@ export function AdminSiteEditor() {
       if (e.source !== iframeRef.current?.contentWindow) return;
       if (!isSameOriginMessage(e.origin)) return;
       const raw = e.data as { type?: string };
+      if (raw?.type === VITERRA_SITE_PREVIEW_READY) {
+        postSyncToIframeWithRetry();
+        return;
+      }
       if (raw?.type !== VITERRA_SITE_PREVIEW_CHILD) return;
       const d = raw as SitePreviewChildMessage;
       if (d.action === "setActiveBlock") {
@@ -304,11 +340,11 @@ export function AdminSiteEditor() {
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, []);
+  }, [postSyncToIframeWithRetry]);
 
   useEffect(() => {
     if (!iframeReady) return;
-    const t = window.setTimeout(() => postSyncToIframe(), 120);
+    const t = window.setTimeout(() => postSyncToIframeWithRetry(), 120);
     return () => window.clearTimeout(t);
   }, [
     mergedContent,
@@ -319,7 +355,7 @@ export function AdminSiteEditor() {
     previewNavigateTargetId,
     previewNavigateFieldKey,
     iframeReady,
-    postSyncToIframe,
+    postSyncToIframeWithRetry,
     tab,
   ]);
 
@@ -400,6 +436,14 @@ export function AdminSiteEditor() {
         <HeaderEditorForm
           draft={draft as SiteContent["header"]}
           activeSectionId={activeBlockId}
+          onChange={(next) => setDraft(next)}
+        />
+      )}
+      {tab === "footer" && (
+        <FooterEditorForm
+          draft={draft as SiteContent["footer"]}
+          activeSectionId={activeBlockId}
+          serviceCards={mergeSiteSection("services", content.services).cards}
           onChange={(next) => setDraft(next)}
         />
       )}
@@ -554,6 +598,7 @@ export function AdminSiteEditor() {
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-0 overflow-hidden rounded-lg border border-slate-200/90 bg-slate-50/50 ring-1 ring-slate-100 lg:flex-row">
           <VisualSiteEditorProvider
             enabled
+            editorTab={tab}
             activeBlockId={activeBlockId}
             setActiveBlockId={setActiveBlockId}
             previewNavigateSeq={previewNavigateSeq}
@@ -723,14 +768,14 @@ export function AdminSiteEditor() {
                       key={previewIframeMountKey}
                       ref={iframeRef}
                       title="Vista previa del sitio"
-                      src="/admin/site-preview-frame"
+                      src="/site-preview-frame"
                       className="block border-0 bg-white"
                       width={designWidth}
                       height={previewViewportHeight}
                       onLoad={() => {
                         setIframeReady(true);
-                        queueMicrotask(() => postSyncToIframe());
-                        window.setTimeout(() => postSyncToIframe(), 180);
+                        queueMicrotask(() => postSyncToIframeWithRetry());
+                        window.setTimeout(() => postSyncToIframeWithRetry(), 180);
                       }}
                     />
                   </div>

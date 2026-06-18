@@ -5,6 +5,8 @@ import type {
   ServiceDetailBlock,
   ServiceIconKey,
   ServiceCardContactLink,
+  ServiceCardContent,
+  FooterNavLink,
 } from "../../../../data/siteContent";
 import {
   SERVICE_ICON_KEYS,
@@ -16,6 +18,12 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { mergeSiteSection } from "../../../../lib/siteContentMerge";
 import { resolveServiceCardPrimaryHref, serviceCardUsesDedicatedPage } from "../../../../lib/serviceCardPrimaryHref";
+import {
+  FOOTER_INTERNAL_LINK_OPTIONS,
+  FOOTER_QUICK_LINK_CUSTOM,
+  footerQuickLinkSelectValue,
+  footerServiceLinksFromCards,
+} from "../../../../lib/footerSiteLinks";
 import { EditorSection, ImageUploadField, LabeledField, NumberInput, TextArea, TextInput } from "./editorUi";
 import { DetailBlockReorderRow } from "./DetailBlockReorderRow";
 
@@ -1763,16 +1771,6 @@ export function ServicesEditorForm({
         <LabeledField label="Texto del botón" editorFieldKey="services-cta-button">
           <TextInput value={safe.ctaButton} onChange={(v) => p({ ctaButton: v })} />
         </LabeledField>
-        <div className="mt-4 space-y-2">
-          <p className="text-xs font-semibold text-slate-600">Vista previa (cierre de página)</p>
-          <div className="rounded-xl border border-slate-200 bg-brand-canvas px-6 py-8 text-center">
-            <h3 className="font-heading text-xl font-light text-brand-navy md:text-2xl">{safe.ctaTitle || "Título"}</h3>
-            <p className="font-heading mt-3 text-sm font-light text-brand-navy/70">{safe.ctaSubtitle || "Subtítulo"}</p>
-            <span className="font-heading mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-6 py-3 text-sm font-medium text-white">
-              {safe.ctaButton || "Botón"}
-            </span>
-          </div>
-        </div>
       </EditorSection>
       )}
     </div>
@@ -2449,6 +2447,308 @@ export function HeaderEditorForm({
               </LabeledField>
             </div>
           ))}
+        </EditorSection>
+      )}
+    </div>
+  );
+}
+
+type F = SiteContent["footer"];
+
+function FooterQuickLinksEditor({
+  links,
+  onChange,
+}: {
+  links: FooterNavLink[];
+  onChange: (next: FooterNavLink[]) => void;
+}) {
+  const update = (index: number, patch: Partial<FooterNavLink>) => {
+    onChange(links.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+  const remove = (index: number) => onChange(links.filter((_, i) => i !== index));
+  const add = () => onChange([...links, { label: "Inicio", href: "/" }]);
+
+  const setRoute = (index: number, routeValue: string) => {
+    const link = links[index];
+    if (!link) return;
+    if (routeValue === FOOTER_QUICK_LINK_CUSTOM) {
+      update(index, { href: link.href.startsWith("/") ? "https://" : link.href });
+      return;
+    }
+    const opt = FOOTER_INTERNAL_LINK_OPTIONS.find((o) => o.href === routeValue);
+    update(index, {
+      href: routeValue,
+      label: link.label.trim() || opt?.suggestedLabel || link.label,
+    });
+  };
+
+  return (
+    <EditorSection title="Lista de enlaces" sectionId="footer-quick">
+      <p className="mb-3 text-xs text-slate-500">
+        Elige una página del sitio o un enlace personalizado (URL externa). El texto es el que verá el visitante en el
+        pie.
+      </p>
+      {links.map((link, i) => {
+        const routeValue = footerQuickLinkSelectValue(link.href);
+        const isCustom = routeValue === FOOTER_QUICK_LINK_CUSTOM;
+        return (
+          <div key={i} className="mb-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 last:mb-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-600">Enlace {i + 1}</p>
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Eliminar
+              </button>
+            </div>
+            <LabeledField label="Texto en el pie" editorFieldKey={`footer-quick-${i}-label`}>
+              <TextInput value={link.label} onChange={(v) => update(i, { label: v })} />
+            </LabeledField>
+            <LabeledField label="Página del sitio" editorFieldKey={`footer-quick-${i}-route`}>
+              <select
+                value={routeValue}
+                onChange={(e) => setRoute(i, e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              >
+                {FOOTER_INTERNAL_LINK_OPTIONS.map((o) => (
+                  <option key={o.href} value={o.href}>
+                    {o.suggestedLabel} ({o.href})
+                  </option>
+                ))}
+                <option value={FOOTER_QUICK_LINK_CUSTOM}>Enlace personalizado (URL externa)…</option>
+              </select>
+            </LabeledField>
+            {isCustom ? (
+              <LabeledField
+                label="URL del enlace"
+                hint="https://…, mailto:… o tel:…"
+                editorFieldKey={`footer-quick-${i}-href`}
+              >
+                <TextInput value={link.href} onChange={(v) => update(i, { href: v })} />
+              </LabeledField>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Destino: <span className="font-mono text-slate-700">{link.href}</span>
+              </p>
+            )}
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={add}
+        className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+      >
+        Añadir enlace
+      </button>
+    </EditorSection>
+  );
+}
+
+export function FooterEditorForm({
+  draft,
+  onChange,
+  activeSectionId,
+  serviceCards,
+}: {
+  draft: F;
+  onChange: (next: F) => void;
+  activeSectionId: string | null;
+  /** Tarjetas de Sitio web → Servicios (lista automática del pie). */
+  serviceCards: ServiceCardContent[];
+}) {
+  const safe = mergeSiteSection("footer", draft);
+  const p = (patch: Partial<F>) => onChange(mergeSiteSection("footer", { ...draft, ...patch }));
+  const s = (id: string) => pickSection(activeSectionId, id);
+  const autoServiceLinks = footerServiceLinksFromCards(serviceCards);
+
+  const updateContactItem = (index: number, patch: Partial<F["contactItems"][number]>) => {
+    const contactItems = safe.contactItems.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    p({ contactItems });
+  };
+  const addContactItem = () => {
+    p({ contactItems: [...safe.contactItems, { icon: "message", body: "" }] });
+  };
+  const removeContactItem = (index: number) => {
+    p({ contactItems: safe.contactItems.filter((_, i) => i !== index) });
+  };
+  const updateSocialLink = (index: number, patch: Partial<F["socialLinks"][number]>) => {
+    const socialLinks = safe.socialLinks.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    p({ socialLinks });
+  };
+  const addSocialLink = () => {
+    p({ socialLinks: [...safe.socialLinks, { platform: "instagram", url: "" }] });
+  };
+  const removeSocialLink = (index: number) => {
+    p({ socialLinks: safe.socialLinks.filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-6">
+      {activeSectionId == null && (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Elige un bloque en «Secciones de esta página» para editar el pie de página.
+        </p>
+      )}
+
+      {s("footer-brand") && (
+        <EditorSection title="Marca e introducción" sectionId="footer-brand">
+          <LabeledField label="Nombre (marca)" editorFieldKey="footer-brand-title">
+            <TextInput value={safe.brandTitle} onChange={(v) => p({ brandTitle: v })} />
+          </LabeledField>
+          <LabeledField label="Subtítulo" editorFieldKey="footer-brand-subtitle">
+            <TextInput value={safe.brandSubtitle} onChange={(v) => p({ brandSubtitle: v })} />
+          </LabeledField>
+          <LabeledField label="Descripción" editorFieldKey="footer-brand-description">
+            <TextArea value={safe.brandDescription} onChange={(v) => p({ brandDescription: v })} rows={3} />
+          </LabeledField>
+        </EditorSection>
+      )}
+
+      {s("footer-quick") && (
+        <>
+          <EditorSection title="Enlaces rápidos" sectionId="footer-quick">
+            <LabeledField label="Título de columna" editorFieldKey="footer-quick-title">
+              <TextInput value={safe.quickLinksTitle} onChange={(v) => p({ quickLinksTitle: v })} />
+            </LabeledField>
+          </EditorSection>
+          <FooterQuickLinksEditor links={safe.quickLinks} onChange={(quickLinks) => p({ quickLinks })} />
+        </>
+      )}
+
+      {s("footer-services") && (
+        <EditorSection title="Servicios (automático)" sectionId="footer-services">
+          <LabeledField label="Título de columna" editorFieldKey="footer-services-title">
+            <TextInput value={safe.servicesTitle} onChange={(v) => p({ servicesTitle: v })} />
+          </LabeledField>
+          <p className="text-xs text-slate-600">
+            Los enlaces de esta columna se generan solos desde{" "}
+            <strong className="font-medium text-slate-800">Sitio web → Servicios</strong> (cada tarjeta del grafo). Al
+            guardar o editar allí, el pie se actualiza sin volver a escribir la lista aquí.
+          </p>
+          {autoServiceLinks.length === 0 ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              No hay tarjetas con enlace válido. Revisa la pestaña Servicios.
+            </p>
+          ) : (
+            <ul className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-700">
+              {autoServiceLinks.map((link, i) => (
+                <li key={`${link.href}-${i}`} className="flex flex-wrap gap-x-2">
+                  <span className="font-medium text-slate-900">{link.label}</span>
+                  <span className="font-mono text-xs text-slate-500">{link.href}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </EditorSection>
+      )}
+
+      {s("footer-contact") && (
+        <EditorSection title="Contacto" sectionId="footer-contact">
+          <LabeledField label="Título de columna" editorFieldKey="footer-contact-title">
+            <TextInput value={safe.contactTitle} onChange={(v) => p({ contactTitle: v })} />
+          </LabeledField>
+          <p className="text-xs text-slate-500">
+            Teléfono y correo generan enlaces automáticos. La dirección y otros textos se muestran tal cual.
+          </p>
+          {safe.contactItems.map((item, i) => (
+            <div key={i} className="space-y-3 rounded-lg border border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-500">Contacto {i + 1}</p>
+                <button
+                  type="button"
+                  onClick={() => removeContactItem(i)}
+                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Eliminar
+                </button>
+              </div>
+              <LabeledField label="Icono" editorFieldKey={`footer-contact-${i}-icon`}>
+                <select
+                  value={item.icon}
+                  onChange={(e) => updateContactItem(i, { icon: e.target.value as ContactInfoIcon })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                >
+                  {CONTACT_ICON_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </LabeledField>
+              <LabeledField
+                label="Texto visible"
+                hint="Pulsa Enter para varias líneas."
+                editorFieldKey={`footer-contact-${i}-body`}
+              >
+                <TextArea value={item.body} onChange={(v) => updateContactItem(i, { body: v })} rows={3} />
+              </LabeledField>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addContactItem}
+            className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+          >
+            Añadir contacto
+          </button>
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <p className="mb-3 text-sm font-medium text-slate-800">Redes sociales</p>
+            <p className="mb-4 text-xs text-slate-500">
+              Iconos bajo la dirección y teléfono. Solo se muestran las que tengan URL (https://…).
+            </p>
+            {safe.socialLinks.map((link, i) => (
+              <div key={i} className="mb-4 space-y-3 rounded-lg border border-slate-200 p-4 last:mb-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-500">Red {i + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() => removeSocialLink(i)}
+                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+                <LabeledField label="Plataforma" editorFieldKey={`footer-social-${i}-platform`}>
+                  <select
+                    value={link.platform}
+                    onChange={(e) => updateSocialLink(i, { platform: e.target.value as ContactSocialPlatform })}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                  >
+                    {CONTACT_SOCIAL_PLATFORM_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </LabeledField>
+                <LabeledField label="URL" hint="Ej.: https://instagram.com/tu_cuenta" editorFieldKey={`footer-social-${i}-url`}>
+                  <TextInput value={link.url} onChange={(v) => updateSocialLink(i, { url: v })} />
+                </LabeledField>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addSocialLink}
+              className="w-full rounded-lg border border-dashed border-slate-300 bg-slate-50/80 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-primary hover:bg-white hover:text-primary"
+            >
+              Añadir red social
+            </button>
+          </div>
+        </EditorSection>
+      )}
+
+      {s("footer-legal") && (
+        <EditorSection title="Copyright" sectionId="footer-legal">
+          <LabeledField
+            label="Línea de copyright"
+            hint="Usa {year} para el año actual automático."
+            editorFieldKey="footer-legal-copyright"
+          >
+            <TextInput value={safe.copyrightLine} onChange={(v) => p({ copyrightLine: v })} />
+          </LabeledField>
         </EditorSection>
       )}
     </div>

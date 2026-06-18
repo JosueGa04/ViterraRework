@@ -421,7 +421,7 @@ export function ContactPage() {
             >
               <ViterraHeroTopClusterAnimated
                 kicker={
-                  <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-kicker" className="inline-block">
+                  <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-kicker" className="inline-block" layout="inline">
                     {c.heroKicker}
                   </PreviewFieldPulse>
                 }
@@ -430,7 +430,7 @@ export function ContactPage() {
               />
               <motion.div variants={heroItemVariants} className={viterraHeroMainClass}>
                 <h1 className={pl.heroTitleClass()}>
-                  <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-title" className="inline-block">
+                  <PreviewFieldPulse blockId="contact-hero" fieldKey="contact-hero-title" className="inline-block" layout="inline">
                     {c.heroTitle}
                   </PreviewFieldPulse>
                 </h1>
@@ -452,12 +452,12 @@ export function ContactPage() {
               <div className={cn("grid gap-12 lg:gap-16", pl.gridCols("grid-cols-1 lg:grid-cols-12"))}>
                 <div className={pl.colSpan("lg:col-span-5")}>
                   <SectionKicker>
-                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-kicker" className="inline-block">
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-kicker" className="inline-block" layout="inline">
                       {c.visitKicker}
                     </PreviewFieldPulse>
                   </SectionKicker>
                   <h2 className="font-heading mt-8 text-3xl font-light leading-[1.12] tracking-tight text-brand-navy md:text-4xl lg:text-[2.65rem]">
-                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-title" className="inline-block">
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-title" className="inline-block" layout="inline">
                       {c.visitTitle}
                     </PreviewFieldPulse>
                   </h2>
@@ -467,7 +467,7 @@ export function ContactPage() {
                     </PreviewFieldPulse>
                   </p>
                   <p className="font-heading mt-8 text-xs uppercase tracking-[0.1em] text-brand-navy/50">
-                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-infoTitle" className="inline-block">
+                    <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-infoTitle" className="inline-block" layout="inline">
                       {c.infoTitle}
                     </PreviewFieldPulse>
                   </p>
@@ -484,6 +484,7 @@ export function ContactPage() {
                               <PreviewFieldPulse
                                 blockId="contact-visit"
                                 fieldKey={`contact-visit-info-${idx}-icon`}
+                                layout="inline"
                                 className="inline-flex shrink-0"
                               >
                                 <row.Icon className="h-4 w-4 shrink-0 text-brand-navy/55" strokeWidth={1.5} aria-hidden />
@@ -492,7 +493,7 @@ export function ContactPage() {
                                 <PreviewFieldPulse
                                   blockId="contact-visit"
                                   fieldKey={`contact-visit-info-${idx}-title`}
-                                  className="inline"
+                                  layout="inline"
                                 >
                                   {row.title}
                                 </PreviewFieldPulse>
@@ -556,12 +557,12 @@ export function ContactPage() {
                 >
                   <div className="pointer-events-none absolute right-4 top-4 z-[30] max-w-[min(100%,280px)] rounded-lg border border-white/40 bg-white/90 p-4 shadow-lg backdrop-blur-md">
                     <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-brand-navy/50">
-                      <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionKicker" className="inline-block">
+                      <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionKicker" className="inline-block" layout="inline">
                         {c.mapSectionKicker}
                       </PreviewFieldPulse>
                     </p>
                     <p className="mt-2 font-heading text-sm font-semibold leading-snug text-brand-navy">
-                      <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionTitle" className="inline-block">
+                      <PreviewFieldPulse blockId="contact-visit" fieldKey="contact-visit-mapSectionTitle" className="inline-block" layout="inline">
                         {c.mapSectionTitle}
                       </PreviewFieldPulse>
                     </p>
@@ -653,7 +654,7 @@ export function ContactPage() {
                       <div className="min-w-0">
                         <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/55">Atención inmediata</p>
                         <h3 className="font-heading mt-1 text-xl font-light tracking-tight text-white md:text-2xl">
-                          <PreviewFieldPulse blockId="contact-whatsapp" fieldKey="contact-whatsapp-title" className="inline-block">
+                          <PreviewFieldPulse blockId="contact-whatsapp" fieldKey="contact-whatsapp-title" className="inline-block" layout="inline">
                             {c.quickTitle}
                           </PreviewFieldPulse>
                         </h3>
@@ -684,12 +685,12 @@ export function ContactPage() {
             <Reveal y={24}>
               <div className="text-center">
                 <SectionKicker>
-                  <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-kicker" className="inline-block">
+                  <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-kicker" className="inline-block" layout="inline">
                     {c.formKicker}
                   </PreviewFieldPulse>
                 </SectionKicker>
                 <h2 className="font-heading mx-auto mt-8 max-w-2xl text-3xl font-light leading-tight tracking-tight text-brand-navy md:text-4xl lg:text-[2.65rem]">
-                  <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-title" className="inline-block">
+                  <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-title" className="inline-block" layout="inline">
                     {c.formTitle}
                   </PreviewFieldPulse>
                 </h2>
@@ -706,7 +707,7 @@ export function ContactPage() {
                     transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                   >
                     <p className="font-heading text-sm font-semibold text-brand-navy">
-                      <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-successTitle" className="inline-block">
+                      <PreviewFieldPulse blockId="contact-form" fieldKey="contact-form-successTitle" className="inline-block" layout="inline">
                         {c.successTitle}
                       </PreviewFieldPulse>
                     </p>
@@ -847,12 +848,12 @@ export function ContactPage() {
           <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
             <Reveal y={22} className="text-center">
               <SectionKicker>
-                <PreviewFieldPulse blockId="contact-faq" fieldKey="contact-faq-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="contact-faq" fieldKey="contact-faq-kicker" className="inline-block" layout="inline">
                   {c.faqKicker}
                 </PreviewFieldPulse>
               </SectionKicker>
               <h2 className="font-heading mt-8 text-3xl font-light tracking-tight text-brand-navy md:text-4xl">
-                <PreviewFieldPulse blockId="contact-faq" fieldKey="contact-faq-title" className="inline-block">
+                <PreviewFieldPulse blockId="contact-faq" fieldKey="contact-faq-title" className="inline-block" layout="inline">
                   {c.faqTitle}
                 </PreviewFieldPulse>
               </h2>
@@ -869,7 +870,7 @@ export function ContactPage() {
                       aria-expanded={open}
                     >
                       <span className="font-heading text-base font-medium text-brand-navy md:text-lg">
-                        <PreviewFieldPulse blockId="contact-faq" fieldKey={`contact-faq-${i}-question`} className="inline">
+                        <PreviewFieldPulse blockId="contact-faq" fieldKey={`contact-faq-${i}-question`} layout="inline">
                           {item.question}
                         </PreviewFieldPulse>
                       </span>
@@ -901,12 +902,12 @@ export function ContactPage() {
           <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
             <Reveal y={22}>
               <SectionKicker tone="light">
-                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-kicker" className="inline-block" layout="inline">
                   {c.socialKicker}
                 </PreviewFieldPulse>
               </SectionKicker>
               <h2 className="font-heading mt-8 text-3xl font-light tracking-tight text-white md:text-4xl">
-                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-title" className="inline-block">
+                <PreviewFieldPulse blockId="contact-social" fieldKey="contact-social-title" className="inline-block" layout="inline">
                   {c.socialTitle}
                 </PreviewFieldPulse>
               </h2>
@@ -972,12 +973,12 @@ export function ContactPage() {
           <Reveal className="mx-auto max-w-3xl px-4 text-center sm:px-6" y={26}>
             <div>
               <SectionKicker>
-                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-kicker" className="inline-block" layout="inline">
                   {c.closingKicker}
                 </PreviewFieldPulse>
               </SectionKicker>
               <h2 className="font-heading mt-8 text-3xl font-light leading-tight tracking-tight text-brand-navy md:text-4xl lg:text-[2.65rem]">
-                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-title" className="inline-block">
+                <PreviewFieldPulse blockId="contact-closing" fieldKey="contact-closing-title" className="inline-block" layout="inline">
                   {c.closingTitle}
                 </PreviewFieldPulse>
               </h2>
