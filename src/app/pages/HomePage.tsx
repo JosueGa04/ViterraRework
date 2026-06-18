@@ -410,12 +410,12 @@ export function HomePage() {
           <Reveal className={cn("mb-3 shrink-0", pl.preview ? "mb-8 sm:mb-10" : "md:mb-4")} y={28}>
             <div>
               <SectionKicker tone="light">
-                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-kicker" layout="inline" className="inline-block">
                   {h.searchKicker}
                 </PreviewFieldPulse>
               </SectionKicker>
               <h2 className="font-heading font-light mt-4 text-center text-2xl leading-tight tracking-tight text-white [text-shadow:0_2px_28px_rgb(0_0_0/0.55),0_1px_2px_rgb(0_0_0/0.4)] sm:text-3xl md:text-4xl lg:text-[2.2rem]">
-                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-title" className="inline-block">
+                <PreviewFieldPulse blockId="home-search" fieldKey="home-search-title" layout="inline" className="inline-block">
                   {h.searchTitle}
                 </PreviewFieldPulse>
               </h2>
@@ -459,13 +459,13 @@ export function HomePage() {
           >
             <div className={cn(!pl.preview && "lg:max-w-[65%]")}>
               <p className="mb-4 text-[10px] font-normal uppercase tracking-[0.32em] text-brand-navy/55">
-                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-kicker" layout="inline" className="inline-block">
                   {h.selectionKicker}
                 </PreviewFieldPulse>
               </p>
               <span className="mb-6 block h-px w-10 bg-primary" aria-hidden />
               <h2 className="font-heading text-3xl font-light leading-[1.12] tracking-tight text-brand-navy sm:text-4xl md:text-5xl lg:text-[3.25rem]">
-                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-title" className="inline-block">
+                <PreviewFieldPulse blockId="home-selection" fieldKey="home-selection-title" layout="inline" className="inline-block">
                   {h.selectionTitle}
                 </PreviewFieldPulse>
               </h2>
@@ -718,13 +718,13 @@ export function HomePage() {
           <Reveal y={22} delay={0.04}>
             <div>
               <p className="text-[10px] uppercase tracking-[0.32em] text-white/45 font-normal mb-5">
-                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-kicker" className="inline-block">
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-kicker" layout="inline" className="inline-block">
                   {h.experienceKicker}
                 </PreviewFieldPulse>
               </p>
               <span className="block h-px w-10 bg-primary mb-8" aria-hidden />
               <h3 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] tracking-tight leading-[1.15] mb-6">
-                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-title" className="inline-block">
+                <PreviewFieldPulse blockId="home-experience" fieldKey="home-experience-title" layout="inline" className="inline-block">
                   {h.experienceTitle}
                 </PreviewFieldPulse>
               </h3>
@@ -761,12 +761,12 @@ export function HomePage() {
         <Reveal className="mx-auto max-w-3xl px-4 text-center sm:px-6" y={26}>
           <div>
             <SectionKicker>
-              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-kicker" className="inline-block">
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-kicker" layout="inline" className="inline-block">
                 {h.closingKicker}
               </PreviewFieldPulse>
             </SectionKicker>
             <h2 className="font-heading font-light text-3xl md:text-4xl lg:text-[2.65rem] text-brand-navy tracking-tight mt-8 mb-5 leading-tight">
-              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-title" className="inline-block">
+              <PreviewFieldPulse blockId="home-closing" fieldKey="home-closing-title" layout="inline" className="inline-block">
                 {h.closingTitle}
               </PreviewFieldPulse>
             </h2>

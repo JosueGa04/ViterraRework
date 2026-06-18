@@ -12,6 +12,19 @@ export type HeaderNavSocialLink = {
   href: string;
 };
 
+/** Enlace de navegación en el pie del sitio (columnas rápidas / servicios). */
+export type FooterNavLink = {
+  label: string;
+  href: string;
+};
+
+/** Fila de contacto en el pie (solo icono + texto visible). */
+export type FooterContactItem = {
+  icon: ContactInfoIcon;
+  /** Varias líneas: separar con Enter (\n). */
+  body: string;
+};
+
 /** Claves de icono Lucide usadas en el grafo de servicios y en el editor. */
 export const SERVICE_ICON_KEYS = [
   "home",
@@ -191,6 +204,21 @@ export interface SiteContent {
   header: {
     navSocial: HeaderNavSocialLink[];
   };
+  /** Pie de página global (marca, enlaces, contacto, copyright). */
+  footer: {
+    brandTitle: string;
+    brandSubtitle: string;
+    brandDescription: string;
+    quickLinksTitle: string;
+    quickLinks: FooterNavLink[];
+    /** Título de la columna; los ítems salen de Sitio web → Servicios. */
+    servicesTitle: string;
+    contactTitle: string;
+    contactItems: FooterContactItem[];
+    socialLinks: ContactSocialLinkItem[];
+    /** Texto legal; `{year}` se sustituye por el año actual. */
+    copyrightLine: string;
+  };
   contact: {
     /** Ritmo vertical del hero (cabecera contacto). */
     heroSectionDensity?: "default" | "compact" | "airy";
@@ -336,6 +364,32 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   },
   header: {
     navSocial: SOCIAL_LINKS.map((l) => ({ id: l.id, label: l.label, href: l.href })),
+  },
+  footer: {
+    brandTitle: "VITERRA",
+    brandSubtitle: "Grupo Inmobiliario",
+    brandDescription:
+      "Tu socio de confianza en bienes raíces. Más de 15 años ayudando a personas a encontrar su hogar ideal.",
+    quickLinksTitle: "Enlaces rápidos",
+    quickLinks: [
+      { label: "Inicio", href: "/" },
+      { label: "Propiedades", href: "/renta" },
+      { label: "Desarrollos", href: "/desarrollos" },
+      { label: "Nosotros", href: "/nosotros" },
+      { label: "Contacto", href: "/contacto" },
+    ],
+    servicesTitle: "Servicios",
+    contactTitle: "Contacto",
+    contactItems: [
+      {
+        icon: "map",
+        body: "Av Terranova 1455 local 102, Providencia 4a Secc., 44639 Zapopan, Jal.",
+      },
+      { icon: "phone", body: "(123) 456-7890" },
+      { icon: "mail", body: "info@viterra.com" },
+    ],
+    socialLinks: [],
+    copyrightLine: "© {year} Viterra Inmobiliaria. Todos los derechos reservados.",
   },
   contact: {
     heroImage: "https://blog.grupoguia.mx/hubfs/DJI_20241206140245_0034_D.jpg",

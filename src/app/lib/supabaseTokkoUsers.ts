@@ -173,6 +173,32 @@ export async function provisionTokkoUser(
   return { ok: true, id: data.id };
 }
 
+export type UpdatePasswordResult = {
+  ok: boolean;
+  message?: string;
+};
+
+/** Cambia contraseña vía Edge Function `admin-update-password` (service role). */
+export async function updateTokkoUserPassword(
+  client: SupabaseClient,
+  payload: { userId: string; password: string },
+): Promise<UpdatePasswordResult> {
+  const { data, error } = await client.functions.invoke<{
+    ok: boolean;
+    error?: string;
+  }>("admin-update-password", {
+    body: { userId: payload.userId, password: payload.password },
+  });
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+  if (!data?.ok) {
+    return { ok: false, message: data?.error ?? "No se pudo actualizar la contraseña." };
+  }
+  return { ok: true };
+}
+
 /** Cuando no hay fila en `tokko_users`, el perfil editable vive en `user_metadata` de Supabase Auth. */
 export async function updateAuthUserProfileMetadata(
   client: SupabaseClient,

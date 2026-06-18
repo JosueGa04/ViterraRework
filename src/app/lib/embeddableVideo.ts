@@ -1,3 +1,5 @@
+import { normalizeAllowedEmbedUrl } from "./safeEmbed";
+
 export type PropertyVideoPlayback =
   | { kind: "iframe"; src: string }
   | { kind: "video"; src: string };
@@ -17,13 +19,11 @@ export function embedIframeVideoSrc(raw: string): string | null {
   return null;
 }
 
-/** Igual que en el editor de servicios: incluye URL https genérica como embed. */
+/** URL segura para iframe de video (YouTube, Vimeo u host en whitelist). */
 export function embeddableVideoSrc(raw: string): string | null {
   const iframe = embedIframeVideoSrc(raw);
   if (iframe) return iframe;
-  const u = raw.trim();
-  if (/^https?:\/\//i.test(u)) return u;
-  return null;
+  return normalizeAllowedEmbedUrl(raw);
 }
 
 /** Decide si la ficha debe usar iframe (YouTube/Vimeo) o etiqueta video (MP4, Storage). */

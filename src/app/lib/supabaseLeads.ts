@@ -180,7 +180,10 @@ export function messageForCatalogLeadRpcError(raw: string): string {
   if (k.includes("invalid_email")) return "Revisa que el correo electrónico sea válido.";
   if (k.includes("invalid_phone")) return "Indica un teléfono válido (8–40 caracteres).";
   if (k.includes("invalid_message")) return "El mensaje es demasiado largo.";
-  if (k.includes("exactly_one_catalog_target")) return "Error interno al vincular la consulta. Recarga la página.";
+  if (k.includes("rate_limit")) return "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.";
+  if (k.includes("exactly_one_catalog_target") || k.includes("at_most_one_catalog_target")) {
+    return "Error interno al vincular la consulta. Recarga la página.";
+  }
   if (k.includes("property_not_found") || k.includes("development_not_found")) {
     return "Esta publicación ya no está disponible. Vuelve al listado e inténtalo de nuevo.";
   }

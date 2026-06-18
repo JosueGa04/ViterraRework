@@ -1,4 +1,5 @@
 import { resolvePropertyVideoPlayback } from "../lib/embeddableVideo";
+import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
 import { cn } from "./ui/utils";
 
 type Props = {
@@ -25,6 +26,7 @@ export function PropertyVideoPlayer({
         <iframe
           title={title}
           src={playback.src}
+          sandbox={IFRAME_SANDBOX_ATTR}
           className={cn("h-full w-full", iframeClassName)}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen

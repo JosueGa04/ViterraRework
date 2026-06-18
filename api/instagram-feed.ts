@@ -1,18 +1,17 @@
 /**
- * Vercel Serverless Function — proxy para Instagram sin restricciones CORS.
- * GET /api/instagram-feed?username=viterrainmobiliaria&count=3
- *
- * Usa https module en lugar de fetch porque Node.js fetch agrega Sec-Fetch-* headers
- * que Instagram bloquea con 400 "SecFetch Policy violation".
+ * Vercel Serverless Function — proxy Instagram (sin dependencia @vercel/node).
  */
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import https from "https";
+import https from "node:https";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+const ALLOWED_ORIGINS = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]);
+
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_MAX = 30;
+const RATE_WINDOW_MS = 60_000;
 
 type IgPost = {
   shortcode: string;
@@ -22,26 +21,75 @@ type IgPost = {
   caption: string;
 };
 
+function corsOrigin(req: IncomingMessage): string {
+  const origin = req.headers.origin ?? "";
+  if (typeof origin === "string" && ALLOWED_ORIGINS.has(origin)) return origin;
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl && typeof origin === "string" && origin.endsWith(vercelUrl)) return origin;
+  return "https://viterra.mx";
+}
+
 function httpsGet(url: string, headers: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, { headers }, (res) => {
       let body = "";
-      res.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+      res.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
       res.on("end", () => resolve(body));
     });
     req.on("error", reject);
   });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  bucket.count += 1;
+  return bucket.count <= RATE_MAX;
+}
+
+function readQuery(req: IncomingMessage): URLSearchParams {
+  const raw = req.url ?? "";
+  const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+  return new URLSearchParams(q);
+}
+
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  const origin = corsOrigin(req);
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Vary", "Origin");
 
   if (req.method === "OPTIONS") {
-    return res.status(200).end();
+    res.statusCode = 200;
+    res.end();
+    return;
   }
 
-  const username = (req.query.username as string) ?? "viterrainmobiliaria";
-  const count = Math.min(parseInt((req.query.count as string) ?? "3", 10), 9);
+  const clientKey = String(req.headers["x-forwarded-for"] ?? req.socket?.remoteAddress ?? "unknown");
+  if (!checkRateLimit(clientKey)) {
+    res.statusCode = 429;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Too many requests", posts: [] }));
+    return;
+  }
+
+  const params = readQuery(req);
+  const username = params.get("username") ?? "viterrainmobiliaria";
+  const count = Math.min(parseInt(params.get("count") ?? "3", 10), 9);
+
+  if (!/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Invalid username", posts: [] }));
+    return;
+  }
 
   try {
     const body = await httpsGet(
@@ -50,10 +98,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "User-Agent":
           "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
         "x-ig-app-id": "936619743392459",
-        "Accept": "application/json",
+        Accept: "application/json",
         "Accept-Language": "es-MX,es;q=0.9",
-        "Referer": "https://www.instagram.com/",
-      }
+        Referer: "https://www.instagram.com/",
+      },
     );
 
     const data = JSON.parse(body) as {
@@ -64,7 +112,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const posts: IgPost[] = edges.slice(0, count).map(({ node: n }) => {
       const isVideo = n.__typename === "GraphVideo";
-      const captionEdges = (n.edge_media_to_caption as { edges: { node: { text: string } }[] } | undefined)?.edges ?? [];
+      const captionEdges =
+        (n.edge_media_to_caption as { edges: { node: { text: string } }[] } | undefined)?.edges ?? [];
       const caption = captionEdges[0]?.node?.text ?? "";
 
       return {
@@ -76,11 +125,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
     });
 
+    res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "s-maxage=300");
-    return res.status(200).json({ posts });
-  } catch (err) {
+    res.end(JSON.stringify({ posts }));
+  } catch {
+    res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
-    return res.status(500).json({ error: String(err), posts: [] });
+    res.end(JSON.stringify({ error: "Instagram feed unavailable", posts: [] }));
   }
 }

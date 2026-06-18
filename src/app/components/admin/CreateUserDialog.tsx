@@ -216,7 +216,7 @@ export function CreateUserDialog({
                       required
                       type="password"
                       autoComplete="new-password"
-                      minLength={6}
+                      minLength={8}
                       placeholder="Mínimo 6 caracteres"
                       value={form.password}
                       onChange={(e) => onFormChange((p) => ({ ...p, password: e.target.value }))}

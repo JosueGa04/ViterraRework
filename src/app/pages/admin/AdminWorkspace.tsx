@@ -206,6 +206,7 @@ import {
   buildAdminHref,
   buildAdminProfileHref,
   parseAdminPath,
+  ADMIN_NON_WORKSPACE_PATHS,
   type AdminTab,
   type CompanySubtab,
 } from "./adminNavigation";
@@ -308,6 +309,10 @@ export function AdminWorkspace() {
 
   useEffect(() => {
     if (!location.pathname.startsWith("/admin")) return;
+    const normalized = location.pathname.replace(/\/+$/, "");
+    const rest = normalized.slice("/admin".length).replace(/^\//, "");
+    const firstSeg = rest.split("/").filter(Boolean)[0] ?? "";
+    if (ADMIN_NON_WORKSPACE_PATHS.has(firstSeg)) return;
     const parsed = parseAdminPath(location.pathname);
     const canonical = buildAdminCanonicalHref(parsed);
     const cur = location.pathname.replace(/\/+$/, "") || "/admin";
@@ -782,19 +787,28 @@ export function AdminWorkspace() {
   useEffect(() => {
     if (!pipelineSourcesHydrated) return;
     const client = getSupabaseClient();
+    const snapshot = pipelineByGroup;
     const handle = window.setTimeout(() => {
       if (client) {
-        void persistSalesPipelineConfigs(client, pipelineByGroup).then((r) => {
+        void persistSalesPipelineConfigs(client, snapshot).then((r) => {
           if (r.error) {
             toast.error(`Pipeline: no se pudo guardar en la base (${r.error.message}).`);
-            savePipelineByGroup(pipelineByGroup);
+            savePipelineByGroup(snapshot);
           }
         });
       } else {
-        savePipelineByGroup(pipelineByGroup);
+        savePipelineByGroup(snapshot);
       }
     }, 500);
-    return () => window.clearTimeout(handle);
+    return () => {
+      window.clearTimeout(handle);
+      const flushClient = getSupabaseClient();
+      if (flushClient) {
+        void persistSalesPipelineConfigs(flushClient, snapshot);
+      } else {
+        savePipelineByGroup(snapshot);
+      }
+    };
   }, [pipelineByGroup, pipelineSourcesHydrated]);
 
   useEffect(() => {
@@ -1507,25 +1521,35 @@ export function AdminWorkspace() {
    */
   const autoMoveAppliedRef = useRef(false);
   useEffect(() => {
-    if (leadsLoading || !pipelineSourcesHydrated) return;
-    if (autoMoveAppliedRef.current) return;
-    autoMoveAppliedRef.current = true;
+    if (leadsLoading || !pipelineSourcesHydrated || autoMoveAppliedRef.current) return;
+    if (leads.length === 0) return;
 
     const triggers = computeAutoMoveTriggers(leads, pipelineByGroup);
+    autoMoveAppliedRef.current = true;
     if (triggers.length === 0) return;
 
-    // Apply sequentially with a small stagger to avoid rate-limiting Supabase.
+    let cancelled = false;
     (async () => {
       for (const t of triggers) {
+        if (cancelled) return;
         await handleUpdateLeadStatus(t.leadId, t.toStageId);
       }
-      if (triggers.length > 0) {
+      if (!cancelled && triggers.length > 0) {
         toast.info(
           `${triggers.length} lead${triggers.length === 1 ? "" : "s"} movido${triggers.length === 1 ? "" : "s"} automáticamente según las reglas del pipeline.`
         );
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [leadsLoading, pipelineSourcesHydrated, leads, pipelineByGroup, handleUpdateLeadStatus]);
+
+  useEffect(() => {
+    if (leadsLoading || !pipelineSourcesHydrated || autoMoveAppliedRef.current) return;
+    if (leads.length > 0) return;
+    autoMoveAppliedRef.current = true;
+  }, [leadsLoading, pipelineSourcesHydrated, leads.length]);
 
   const handleAddKanbanStage = useCallback(
     (label: string) => {

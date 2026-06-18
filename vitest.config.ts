@@ -34,6 +34,7 @@ export default defineConfig({
     ],
 
     // ── Variables de entorno ──────────────────────────────────────────────────
+    envFile: [".env", ".env.local"],
     env: {
       VITE_SUPABASE_URL: "https://test-project.supabase.co",
       VITE_SUPABASE_ANON_KEY: "test-anon-key-placeholder",

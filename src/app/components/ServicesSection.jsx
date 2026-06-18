@@ -620,6 +620,7 @@ export function ServicesSection() {
                       blockId={`services-card-${i}`}
                       label={`Tarjeta ${i + 1}`}
                       compact
+                      hideLabel
                     >
                       <div
                         style={{

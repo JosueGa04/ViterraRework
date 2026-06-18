@@ -1,3 +1,5 @@
+import DOMPurify from "isomorphic-dompurify";
+
 /** HTML de TipTap vacío o solo párrafo en blanco. */
 export function hasRichDescription(html: string | undefined | null): boolean {
   if (!html?.trim()) return false;
@@ -12,3 +14,26 @@ export function hasRichDescription(html: string | undefined | null): boolean {
 
 export const RICH_DESCRIPTION_HTML_CLASS =
   "text-base leading-relaxed text-slate-700 [&_strong]:font-semibold [&_em]:italic [&_u]:underline [&_s]:line-through [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1 [&_a]:text-primary [&_a]:underline";
+
+/** Sanitiza HTML rico antes de renderizar con dangerouslySetInnerHTML. */
+export function sanitizeRichHtml(html: string | undefined | null): string {
+  if (!html?.trim()) return "";
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      "p",
+      "br",
+      "strong",
+      "em",
+      "u",
+      "s",
+      "h2",
+      "h3",
+      "ul",
+      "ol",
+      "li",
+      "a",
+    ],
+    ALLOWED_ATTR: ["href", "target", "rel", "class"],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  });
+}

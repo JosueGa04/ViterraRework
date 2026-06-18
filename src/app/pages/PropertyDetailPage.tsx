@@ -38,7 +38,8 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import { resolveWhatsappHref, whatsappDisplayLabel } from "../lib/whatsappLink";
 import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
-import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS } from "../lib/propertyDescription";
+import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS, sanitizeRichHtml } from "../lib/propertyDescription";
+import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
 import { orientationLabel } from "../lib/propertyOrientation";
 
 /* ─── Design tokens ──────────────────────────────────────────────────────── */
@@ -281,10 +282,12 @@ export function PropertyDetailPage() {
 
   /* leaflet map */
   useEffect(() => {
+    let cancelled = false;
     const initMap = async () => {
       if (!property?.coordinates || !mapRef.current || mapInstanceRef.current) return;
       try {
         const L = await import("leaflet");
+        if (cancelled || !mapRef.current) return;
         await import("leaflet/dist/leaflet.css");
         const map = L.map(mapRef.current).setView([property.coordinates.lat, property.coordinates.lng], 15);
         const street = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
@@ -311,7 +314,7 @@ export function PropertyDetailPage() {
     }
     try { mapInstanceRef.current?.remove(); } catch (_) {}
     mapInstanceRef.current = null;
-    let cancelled = false, rafId: number | null = null, invalidateId: number | null = null;
+    let rafId: number | null = null, invalidateId: number | null = null;
     const mount = () => {
       if (cancelled) return;
       if (!mapRef.current) { rafId = requestAnimationFrame(mount); return; }
@@ -616,7 +619,7 @@ export function PropertyDetailPage() {
                                 {property.description.trim()}
                               </p>
                             ) : null}
-                            <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "pd-rich-desc")} dangerouslySetInnerHTML={{ __html: property.richDescription! }} />
+                            <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "pd-rich-desc")} dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(property.richDescription) }} />
                           </>
                         ) : property.description?.trim() ? (
                           <p className="whitespace-pre-line text-[15px]" style={{ color: T.body, lineHeight: 1.8 }}>
@@ -718,6 +721,7 @@ export function PropertyDetailPage() {
                               <iframe
                                 title={heading ?? "Recorrido virtual 3D"}
                                 src={embedUrl}
+                                sandbox={IFRAME_SANDBOX_ATTR}
                                 className="h-[min(70vh,520px)] w-full"
                                 style={{ borderRadius: 8, border: `1px solid ${T.border}`, background: "#e8e4de" }}
                                 allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer"

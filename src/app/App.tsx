@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router";
 import { Toaster } from "sonner";
 import { router } from "./router";
 import { SiteContentProvider } from "../contexts/SiteContentContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function RouteLazyFallback() {
   return (
@@ -22,11 +23,13 @@ function RouteLazyFallback() {
 
 export default function App() {
   return (
-    <SiteContentProvider>
-      <Suspense fallback={<RouteLazyFallback />}>
-        <RouterProvider router={router} />
-      </Suspense>
-      <Toaster position="top-center" richColors closeButton />
-    </SiteContentProvider>
+    <ErrorBoundary>
+      <SiteContentProvider>
+        <Suspense fallback={<RouteLazyFallback />}>
+          <RouterProvider router={router} />
+        </Suspense>
+        <Toaster position="top-center" richColors closeButton />
+      </SiteContentProvider>
+    </ErrorBoundary>
   );
 }

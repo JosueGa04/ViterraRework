@@ -2,6 +2,23 @@ import type { SiteContent } from "../../../../data/siteContent";
 
 export type SiteKey = keyof SiteContent;
 
+const TAB_BLOCK_PREFIX: Record<SiteKey, string> = {
+  home: "home-",
+  rent: "rent-",
+  sale: "sale-",
+  contact: "contact-",
+  services: "services-",
+  about: "about-",
+  developments: "dev-",
+  header: "header-",
+  footer: "footer-",
+};
+
+/** Solo resaltar bloques de la pestaña activa del editor (evita halos en Inicio al editar Header/Footer). */
+export function blockBelongsToEditorTab(blockId: string, tab: SiteKey): boolean {
+  return blockId.startsWith(TAB_BLOCK_PREFIX[tab]);
+}
+
 /** Bloques del editor de la página Servicios en función del número de tarjetas. */
 export function getServicesEditorPageBlocks(cardCount: number): { id: string; label: string }[] {
   const n = Math.max(0, Math.floor(cardCount));
@@ -50,4 +67,11 @@ export const EDITOR_PAGE_BLOCKS: Record<SiteKey, { id: string; label: string }[]
   rent: [{ id: "rent-hero", label: "Cabecera" }],
   sale: [{ id: "sale-hero", label: "Cabecera" }],
   header: [{ id: "header-social", label: "Redes del encabezado" }],
+  footer: [
+    { id: "footer-brand", label: "Marca e introducción" },
+    { id: "footer-quick", label: "Enlaces rápidos" },
+    { id: "footer-services", label: "Servicios (automático)" },
+    { id: "footer-contact", label: "Contacto" },
+    { id: "footer-legal", label: "Copyright" },
+  ],
 };

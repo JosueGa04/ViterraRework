@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { usePreviewCanvas } from "../../contexts/PreviewCanvasContext";
 import { useSitePreviewVirtualPath } from "../../contexts/SitePreviewVirtualPathContext";
 import { useSitePreviewSuppressHeader } from "../../contexts/SitePreviewSuppressHeaderContext";
-import { useVisualSiteEditorOptional } from "../../contexts/VisualSiteEditorContext";
 import { PreviewSectionChrome } from "./admin/siteEditor/PreviewSectionChrome";
 import { SocialNavIcons } from "./SocialNavIcons";
 import { cn } from "./ui/utils";
@@ -144,7 +143,6 @@ export function Header() {
   const inPreviewCanvas = usePreviewCanvas();
   const sitePreviewPath = useSitePreviewVirtualPath();
   const suppressSitePreviewHeader = useSitePreviewSuppressHeader();
-  const visualSiteEditor = useVisualSiteEditorOptional();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollP, setScrollP] = useState(0);
   const location = useLocation();
@@ -260,13 +258,6 @@ export function Header() {
         borderBottom: `1px solid rgba(255,255,255,${borderAlpha})`,
       }}
     >
-      {visualSiteEditor?.enabled ? (
-        <div className="absolute left-0 top-0 z-[70] overflow-visible">
-          <PreviewSectionChrome blockId="header-social" label="Redes del encabezado" compact>
-            <span className="sr-only">Ancla de edición: redes del encabezado</span>
-          </PreviewSectionChrome>
-        </div>
-      ) : null}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
           className={cn("relative overflow-x-visible transition-none", inPreviewCanvas ? "hidden" : "hidden lg:flex lg:justify-center")}
@@ -331,9 +322,11 @@ export function Header() {
               className="pointer-events-auto absolute left-8 top-0 z-[56] flex h-full items-center justify-start overflow-visible sm:left-10"
               style={{ width: markBoxW }}
             >
-              <span className="inline-flex shrink-0" style={{ marginLeft: desktopSocialMarginLeft }}>
-                <SocialNavIcons iconSize="md" />
-              </span>
+              <PreviewSectionChrome blockId="header-social" label="Redes del encabezado" compact hideLabel>
+                <span className="inline-flex shrink-0" style={{ marginLeft: desktopSocialMarginLeft }}>
+                  <SocialNavIcons iconSize="md" />
+                </span>
+              </PreviewSectionChrome>
             </div>
           </div>
           <nav

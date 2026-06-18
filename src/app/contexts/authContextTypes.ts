@@ -112,7 +112,11 @@ export interface AuthContextType {
   isAdmin: boolean;
   createUser: (input: CreateUserInput, actorName?: string) => Promise<{ ok: boolean; message?: string }>;
   updateUser: (id: string, input: UpdateUserInput, actorName?: string) => void;
-  updateUserPassword: (id: string, newPassword: string, actorName?: string) => void;
+  updateUserPassword: (
+    id: string,
+    newPassword: string,
+    actorName?: string,
+  ) => Promise<{ ok: boolean; message?: string }>;
   updateUserPermissions: (id: string, role: UserRole, permissions: UserPermission[], actorName?: string) => void;
   archiveUser: (id: string, actorName?: string) => void;
   reactivateUser: (id: string, actorName?: string) => void;

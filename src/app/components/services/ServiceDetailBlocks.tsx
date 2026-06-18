@@ -11,6 +11,7 @@ import {
 import type { ContactInfoIcon, ServiceDetailBlock } from "@/data/siteContent";
 import { serviceIconForKey } from "@/lib/serviceIcons";
 import { embeddableVideoSrc } from "../../lib/embeddableVideo";
+import { IFRAME_SANDBOX_ATTR } from "../../lib/safeEmbed";
 import { cn } from "../ui/utils";
 import { PreviewFieldPulse } from "../admin/siteEditor/PreviewFieldPulse";
 
@@ -229,6 +230,7 @@ export function ServiceDetailBlockRenderer({
             <iframe
               title={block.caption?.trim() || "Video"}
               src={src}
+              sandbox={IFRAME_SANDBOX_ATTR}
               className="h-full w-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen

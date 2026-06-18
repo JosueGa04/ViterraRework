@@ -46,8 +46,20 @@ Confirmar que no haya policies de escritura abiertas.
 
 ## Pruebas de penetración rápidas (consola del navegador, logueado como `asesor`)
 
+En desarrollo, el cliente está en `window.__supabase` tras cargar la app.
+
+Automatizado (requiere credenciales de un usuario **asesor** — no admin — en `.env`):
+
+```bash
+npm run test:rls:script
+```
+
+Si el script aborta con "Este usuario es admin", crea o usa una cuenta con `role = 'asesor'` en `tokko_users`.
+
+Manual en consola:
+
 ```js
-const c = window.__supabase ?? supabase; // según cómo expongas el cliente
+const c = window.__supabase ?? supabase;
 // 1) ¿Puede un asesor reescribir un lead que NO es suyo? → debe FALLAR (403/0 filas)
 await c.from('leads').update({ priority_stars: 6 }).eq('id', '<lead_de_otro>');
 // 2) ¿Puede elevar su propio rol? → debe FALLAR

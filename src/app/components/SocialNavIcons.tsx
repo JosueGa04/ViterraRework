@@ -4,6 +4,7 @@ import { useSiteContent } from "../../contexts/SiteContentContext";
 import { useSitePreviewVirtualPath } from "../../contexts/SitePreviewVirtualPathContext";
 import { mergeSiteSection } from "../../lib/siteContentMerge";
 import type { HeaderSocialIconId } from "../config/socialLinks";
+import { PreviewFieldPulse } from "./admin/siteEditor/PreviewFieldPulse";
 import { cn } from "./ui/utils";
 
 const iconById: Partial<Record<HeaderSocialIconId, typeof Facebook>> = {
@@ -40,8 +41,10 @@ export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsPro
   if (hidden) return null;
 
   const headerSocial = mergeSiteSection("header", content.header).navSocial;
-  const links = headerSocial.filter((l) => l.href.trim().length > 0);
-  if (links.length === 0) return null;
+  const linksWithIndex = headerSocial.flatMap((link, i) =>
+    link.href.trim().length > 0 ? [{ link, index: i }] : [],
+  );
+  if (linksWithIndex.length === 0) return null;
 
   const { pad, icon } = sizeStyles[iconSize];
 
@@ -55,26 +58,32 @@ export function SocialNavIcons({ className, iconSize = "md" }: SocialNavIconsPro
         className
       )}
     >
-      {links.map(({ id, label, href }) => {
+      {linksWithIndex.map(({ link: { id, label, href }, index }) => {
         const Lucide = iconById[id] ?? LinkIcon;
         return (
-          <li key={id} className="shrink-0">
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={label}
-              title={label}
-              className={cn(
-                "inline-flex items-center justify-center rounded-md text-white/85 transition-colors",
-                "hover:bg-white/[0.07] hover:text-white",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60",
-                "active:bg-white/[0.1]",
-                pad
-              )}
+          <li key={`${id}-${index}`} className="shrink-0">
+            <PreviewFieldPulse
+              blockId="header-social"
+              fieldKey={`header-social-${index}-href`}
+              layout="inline"
             >
-              <Lucide className={icon} strokeWidth={1.5} aria-hidden />
-            </a>
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+                title={label}
+                className={cn(
+                  "inline-flex items-center justify-center rounded-md text-white/85 transition-colors",
+                  "hover:bg-white/[0.07] hover:text-white",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60",
+                  "active:bg-white/[0.1]",
+                  pad
+                )}
+              >
+                <Lucide className={icon} strokeWidth={1.5} aria-hidden />
+              </a>
+            </PreviewFieldPulse>
           </li>
         );
       })}
