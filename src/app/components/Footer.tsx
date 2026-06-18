@@ -207,28 +207,69 @@ export function Footer() {
             </div>
           </PreviewSectionChrome>
 
-          {/* Contact */}
-          <div>
-            <h4 className="text-[10px] uppercase tracking-[0.28em] text-white/90 mb-6 font-heading font-medium">Contacto</h4>
-            <ul className="space-y-4 text-sm">
-              <li className="flex items-start gap-3 group">
-                <MapPin className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 mt-0.5 transition-colors" strokeWidth={1.5} />
-                <span className="group-hover:text-white transition-colors" style={{ fontWeight: 400 }}>Av Terranova 1455 local 102, Providencia 4a Secc., 44639 Zapopan, Jal.</span>
-              </li>
-              <li className="flex items-center gap-3 group">
-                <Phone className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 transition-colors" strokeWidth={1.5} />
-                <a href="tel:+523336297122" className="hover:text-white transition-colors" style={{ fontWeight: 400 }}>
-                  33 3629-7122
-                </a>
-              </li>
-              <li className="flex items-center gap-3 group">
-                <Mail className="w-5 h-5 text-slate-400 group-hover:text-white flex-shrink-0 transition-colors" strokeWidth={1.5} />
-                <a href="mailto:contacto@viterrainmobiliaria.com" className="hover:text-white transition-colors" style={{ fontWeight: 400 }}>
-                  contacto@viterrainmobiliaria.com
-                </a>
-              </li>
-            </ul>
-          </div>
+          <PreviewSectionChrome blockId="footer-contact" label="Contacto" hideLabel hideStripe surface="dark">
+            <div>
+              <PreviewFieldPulse blockId="footer-contact" fieldKey="footer-contact-title">
+                <h4 className="text-[10px] uppercase tracking-[0.28em] text-white/90 mb-6 font-heading font-medium">
+                  {f.contactTitle}
+                </h4>
+              </PreviewFieldPulse>
+              <ul className="space-y-4 text-sm">
+                {f.contactItems.map((item, i) => (
+                  <FooterContactRow
+                    key={`contact-${i}-${item.icon}`}
+                    icon={item.icon}
+                    body={item.body}
+                    fieldKey={`footer-contact-${i}-body`}
+                  />
+                ))}
+              </ul>
+              {f.socialLinks.some((item) => item.url.trim()) ? (
+                <ul
+                  className="mt-6 flex flex-wrap items-center gap-2"
+                  role="list"
+                  aria-label="Redes sociales"
+                >
+                  {f.socialLinks.map((item, i) => {
+                    if (!item.url.trim()) return null;
+                    const href = normalizeExternalHref(item.url);
+                    const label = CONTACT_SOCIAL_LABELS[item.platform];
+                    const isInternal = href.startsWith("/") && !href.startsWith("//");
+                    const isHttp = /^https?:\/\//i.test(href);
+                    const ringClass =
+                      "inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white/90 transition-colors hover:border-primary hover:bg-white/[0.06] hover:text-white";
+                    return (
+                      <li key={`${item.platform}-${i}`}>
+                        <PreviewFieldPulse
+                          blockId="footer-contact"
+                          fieldKey={`footer-social-${i}-url`}
+                          layout="inline"
+                          className="inline-flex"
+                        >
+                          {isInternal ? (
+                            <Link to={href} aria-label={label} title={label} className={ringClass}>
+                              <ContactSocialGlyph platform={item.platform} className="h-4 w-4" />
+                            </Link>
+                          ) : (
+                            <a
+                              href={href}
+                              target={isHttp ? "_blank" : undefined}
+                              rel={isHttp ? "noopener noreferrer" : undefined}
+                              aria-label={label}
+                              title={label}
+                              className={ringClass}
+                            >
+                              <ContactSocialGlyph platform={item.platform} className="h-4 w-4" />
+                            </a>
+                          )}
+                        </PreviewFieldPulse>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
+          </PreviewSectionChrome>
         </div>
 
         <PreviewSectionChrome blockId="footer-legal" label="Copyright" hideLabel hideStripe surface="dark">
