@@ -70,7 +70,9 @@ export function RichDescriptionEditor({
       Placeholder.configure({ placeholder }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: "text-primary underline" },
+        protocols: ["http", "https", "mailto"],
+        defaultProtocol: "https",
+        HTMLAttributes: { class: "text-primary underline", rel: "noopener noreferrer" },
       }),
     ],
     content: value || "",

@@ -12,6 +12,12 @@ export type HeaderNavSocialLink = {
   href: string;
 };
 
+/** Enlace de navegación en el pie del sitio (columnas rápidas / servicios). */
+export type FooterNavLink = {
+  label: string;
+  href: string;
+};
+
 /** Claves de icono Lucide usadas en el grafo de servicios y en el editor. */
 export const SERVICE_ICON_KEYS = [
   "home",

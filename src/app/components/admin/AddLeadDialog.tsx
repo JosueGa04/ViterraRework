@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { AlertTriangle, Search } from "lucide-react";
 import {
   Dialog,
@@ -298,11 +299,17 @@ export function AddLeadDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!defaultStageId) return;
+    if (!defaultStageId) {
+      toast.error("No hay etapa inicial configurada en el pipeline.");
+      return;
+    }
     const name = form.name.trim();
     const email = form.email.trim();
     const phone = form.phone.trim();
-    if (!name || !phone) return;
+    if (!name || !phone) {
+      toast.error("Nombre y teléfono son obligatorios.");
+      return;
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     const relatedProperty =

@@ -17,6 +17,9 @@ export function getSupabaseClient(): SupabaseClient | null {
         flowType: "pkce",
       },
     });
+    if (import.meta.env.DEV && typeof window !== "undefined") {
+      (window as unknown as { __supabase?: SupabaseClient }).__supabase = clientRef;
+    }
   }
   return clientRef;
 }

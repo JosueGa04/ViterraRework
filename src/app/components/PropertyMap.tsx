@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Layers, MapPin } from "lucide-react";
 import type { Property } from "./PropertyCard";
+import { escapeHtml } from "../lib/escapeHtml";
 
 interface PropertyMapProps {
   properties: Property[];
@@ -22,10 +23,13 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
   const propertiesWithCoordinates = properties.filter((p) => p.coordinates);
 
   useEffect(() => {
+    let cancelled = false;
+
     const initMap = async () => {
       if (!mapRef.current || mapInstanceRef.current || propertiesWithCoordinates.length === 0) return;
       try {
         const L = await import("leaflet");
+        if (cancelled || !mapRef.current) return;
         leafletRef.current = L;
         await import("leaflet/dist/leaflet.css");
 
@@ -63,6 +67,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
     void initMap();
 
     return () => {
+      cancelled = true;
       if (!mapInstanceRef.current) return;
       try {
         mapInstanceRef.current.remove();
@@ -75,7 +80,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
       satelliteLayerRef.current = null;
       setMapReady(false);
     };
-  }, []);
+  }, [propertiesWithCoordinates.length]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -115,10 +120,10 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         marker.bindPopup(
           `
             <div style="font-family: Poppins, sans-serif; width: 220px;">
-              <a href="/propiedades/${property.id}" style="text-decoration:none;color:#141c2e;">
-                <p style="margin:0 0 6px 0;font-size:15px;font-weight:600;line-height:1.3;">${property.title}</p>
-                <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;">${property.location}</p>
-                <p style="margin:0;font-size:14px;font-weight:700;">$${property.price.toLocaleString()}</p>
+              <a href="/propiedades/${escapeHtml(property.id)}" style="text-decoration:none;color:#141c2e;">
+                <p style="margin:0 0 6px 0;font-size:15px;font-weight:600;line-height:1.3;">${escapeHtml(property.title)}</p>
+                <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;">${escapeHtml(property.location)}</p>
+                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(property.price.toLocaleString())}</p>
               </a>
             </div>
           `,

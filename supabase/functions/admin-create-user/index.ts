@@ -59,12 +59,32 @@ type Payload = {
   picture?: string;
 };
 
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_MAX = 10;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  bucket.count += 1;
+  return bucket.count <= RATE_MAX;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
   if (req.method !== "POST") {
     return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
+  }
+
+  const clientKey = req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? "unknown";
+  if (!checkRateLimit(`admin-create-user:${clientKey}`)) {
+    return jsonResponse({ ok: false, error: "Too many requests" }, 429);
   }
 
   try {
@@ -124,9 +144,9 @@ Deno.serve(async (req: Request) => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return jsonResponse({ ok: false, error: "Correo inválido." }, 400);
     }
-    if (!password || password.length < 6) {
+    if (!password || password.length < 8) {
       return jsonResponse(
-        { ok: false, error: "La contraseña debe tener al menos 6 caracteres." },
+        { ok: false, error: "La contraseña debe tener al menos 8 caracteres." },
         400
       );
     }

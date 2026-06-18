@@ -1,3 +1,5 @@
+import { normalizeAllowedEmbedUrl } from "./safeEmbed";
+
 export type PropertyTour3dEntry = {
   id: string;
   url: string;
@@ -77,7 +79,7 @@ export function resolvePropertyTour3dUrls(
 ): { entry: PropertyTour3dEntry; embedUrl: string }[] {
   const out: { entry: PropertyTour3dEntry; embedUrl: string }[] = [];
   for (const entry of propertyTours3dToJson(tours)) {
-    const embedUrl = entry.url?.trim();
+    const embedUrl = normalizeAllowedEmbedUrl(entry.url ?? "");
     if (embedUrl) out.push({ entry, embedUrl });
   }
   return out;

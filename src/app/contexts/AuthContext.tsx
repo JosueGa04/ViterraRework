@@ -9,6 +9,7 @@ import {
   fetchAllTokkoUsersForDirectory,
   fetchTokkoUserRow,
   provisionTokkoUser,
+  updateTokkoUserPassword,
   upsertTokkoUserAccess,
 } from "../lib/supabaseTokkoUsers";
 import { AuthContext } from "./authContextInstance";
@@ -38,7 +39,6 @@ export type {
 export { useAuth } from "./authContextInstance";
 
 const USERS_STORAGE_KEY = "viterra_admin_users";
-const PASSWORDS_STORAGE_KEY = "viterra_admin_passwords";
 
 function toStorageSafeUser(u: User): User {
   return {
@@ -428,18 +428,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  const [passwordByUserId, setPasswordByUserId] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem(PASSWORDS_STORAGE_KEY);
-    if (!saved) return {};
-    try {
-      return JSON.parse(saved) as Record<string, string>;
-    } catch {
-      return {};
-    }
-  });
-
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const sessionApplyGenRef = useRef(0);
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem("viterra_admin_passwords");
+    } catch {
+      // noop
+    }
+  }, []);
 
   const TOKKO_DIRECTORY_MS = 6_000;
 
@@ -575,8 +574,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const applySession = async (session: Session | null) => {
+      const gen = ++sessionApplyGenRef.current;
       if (!session?.user) {
-        setUser(null);
+        if (gen === sessionApplyGenRef.current) setUser(null);
         return;
       }
       const c = getSupabaseClient();
@@ -592,9 +592,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const appUser = tokkoDbNeededForPath(pathnameRef.current)
           ? (await loadUserWithTokkoMerge(c, session)).user
           : applyConfirmedRole(sessionToAppUser(session), session.user);
+        if (gen !== sessionApplyGenRef.current) return;
         setUser(appUser);
       } else {
         const appUser = applyConfirmedRole(sessionToAppUser(session), session.user);
+        if (gen !== sessionApplyGenRef.current) return;
         mergeSessionUserIntoDirectory(appUser);
         setUser(appUser);
       }
@@ -610,9 +612,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await applySession(session);
       } catch (err) {
         if (import.meta.env.DEV) {
-          console.warn("[Viterra] Error en inicialización de sesión:", err);
+          console.warn("[Viterra] Error en inicialización de sesión (reintentando):", err);
         }
-        await applySession(null);
+        try {
+          const { data: { session } } = await client.auth.getSession();
+          await applySession(session);
+        } catch (retryErr) {
+          if (import.meta.env.DEV) {
+            console.warn("[Viterra] Reintento de sesión falló:", retryErr);
+          }
+        }
       }
     };
 
@@ -650,17 +659,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       } else {
         setUser(refreshed);
-      }
-    }
-  };
-
-  const persistPasswords = (next: Record<string, string>) => {
-    setPasswordByUserId(next);
-    try {
-      localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(next));
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn("[Viterra] No se pudo persistir contraseñas locales por cuota:", e);
       }
     }
   };
@@ -809,9 +807,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       history: [newHistoryEntry("created", "Usuario creado", actorName)],
     });
     persistUsers([...users, created]);
-    if (input.password) {
-      persistPasswords({ ...passwordByUserId, [newId]: input.password });
-    }
     return { ok: true };
   };
 
@@ -829,15 +824,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const updateUserPassword: AuthContextType["updateUserPassword"] = (id, newPassword, actorName = "Admin") => {
-    persistPasswords({ ...passwordByUserId, [id]: newPassword });
+  const updateUserPassword: AuthContextType["updateUserPassword"] = async (
+    id,
+    newPassword,
+    actorName = "Admin",
+  ) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: "Supabase no está configurado." };
+    }
+    const remote = await updateTokkoUserPassword(client, { userId: id, password: newPassword });
+    if (!remote.ok) {
+      return { ok: false, message: remote.message ?? "No se pudo actualizar la contraseña." };
+    }
     persistUsers(
       users.map((item) =>
         item.id === id
           ? appendHistory(item, newHistoryEntry("password_changed", "Contraseña actualizada", actorName))
-          : item
-      )
+          : item,
+      ),
     );
+    return { ok: true };
   };
 
   const updateUserPermissions: AuthContextType["updateUserPermissions"] = (id, role, permissions, actorName = "Admin") => {
@@ -925,10 +932,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistUsers(users.filter((item) => item.id !== id));
-    if (passwordByUserId[id]) {
-      const { [id]: _omit, ...rest } = passwordByUserId;
-      persistPasswords(rest);
-    }
     return { ok: true };
   };
 

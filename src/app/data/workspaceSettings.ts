@@ -67,6 +67,5 @@ export const CRM_LOCAL_STORAGE_KEYS: Array<{ key: string; label: string }> = [
   { key: "viterra_site_content", label: "Contenido del sitio web" },
   { key: "viterra_admin_users", label: "Usuarios del CRM" },
   { key: "viterra_user_groups", label: "Equipos de trabajo (usuarios)" },
-  { key: "viterra_admin_passwords", label: "Contraseñas (hash local)" },
   { key: WORKSPACE_ADMIN_SETTINGS_KEY, label: "Ajustes del espacio de trabajo" },
 ];

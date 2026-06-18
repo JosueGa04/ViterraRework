@@ -25,7 +25,8 @@ import { useDevelopmentDetail } from "../hooks/useDevelopmentsCatalog";
 import { displayDeliveryDate } from "../data/developments";
 import { previewDevelopmentReferenceCode } from "../lib/developmentReferenceCode";
 import { developmentTours3dList, developmentVideosList } from "../lib/developmentMedia";
-import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS } from "../lib/propertyDescription";
+import { hasRichDescription, RICH_DESCRIPTION_HTML_CLASS, sanitizeRichHtml } from "../lib/propertyDescription";
+import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
 import {
   propertyTour3dDisplayTitle,
   resolvePropertyTour3dUrls,
@@ -133,10 +134,12 @@ export function DevelopmentDetailPage() {
 
   /* map */
   useEffect(() => {
+    let cancelled = false;
     const initMap = async () => {
       if (!mapRef.current || !development) return;
       try {
         const L = await import("leaflet");
+        if (cancelled || !mapRef.current) return;
         await import("leaflet/dist/leaflet.css");
         const map = (L as any).map(mapRef.current).setView([development.coordinates.lat, development.coordinates.lng], 15);
         const isSatellite = mapViewMode === "satellite";
@@ -163,7 +166,7 @@ export function DevelopmentDetailPage() {
     }
     try { mapInstanceRef.current?.remove(); } catch (_) {}
     mapInstanceRef.current = null;
-    let cancelled = false, rafId: number | null = null, invalidateId: number | null = null;
+    let rafId: number | null = null, invalidateId: number | null = null;
     const mount = () => {
       if (cancelled) return;
       if (!mapRef.current) { rafId = requestAnimationFrame(mount); return; }
@@ -482,7 +485,7 @@ export function DevelopmentDetailPage() {
                                     {development.description.trim()}
                                   </p>
                                 ) : null}
-                                <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "dd-rich-desc")} dangerouslySetInnerHTML={{ __html: development.richDescription! }} />
+                                <div className={cn(RICH_DESCRIPTION_HTML_CLASS, "dd-rich-desc")} dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(development.richDescription) }} />
                               </>
                             ) : development.description?.trim() ? (
                               <p className="text-[15px]" style={{ color: T.body, lineHeight: 1.8 }}>{development.description}</p>
@@ -532,6 +535,7 @@ export function DevelopmentDetailPage() {
                               <iframe
                                 title={heading ?? "Recorrido virtual 3D"}
                                 src={embedUrl}
+                                sandbox={IFRAME_SANDBOX_ATTR}
                                 className="h-[min(70vh,520px)] w-full"
                                 style={{ borderRadius: 8, border: `1px solid ${T.border}`, background: "#e8e4de" }}
                                 allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer"
