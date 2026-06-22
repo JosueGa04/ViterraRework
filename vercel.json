@@ -17,6 +17,11 @@
       ]
     }
   ],
+  "redirects": [
+    { "source": "/locales", "destination": "/renta", "permanent": true },
+    { "source": "/departamentos", "destination": "/renta", "permanent": true },
+    { "source": "/nuestros-servicios", "destination": "/servicios", "permanent": true }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
