@@ -18,8 +18,15 @@
     }
   ],
   "redirects": [
+    { "source": "/Locales", "destination": "/renta", "permanent": true },
     { "source": "/locales", "destination": "/renta", "permanent": true },
+    { "source": "/Departamentos", "destination": "/renta", "permanent": true },
     { "source": "/departamentos", "destination": "/renta", "permanent": true },
+    { "source": "/Casas", "destination": "/renta", "permanent": true },
+    { "source": "/casas", "destination": "/renta", "permanent": true },
+    { "source": "/s/Nosotros", "destination": "/nosotros", "permanent": true },
+    { "source": "/s/nosotros", "destination": "/nosotros", "permanent": true },
+    { "source": "/s/Servicios", "destination": "/servicios", "permanent": true },
     { "source": "/nuestros-servicios", "destination": "/servicios", "permanent": true }
   ],
   "rewrites": [
