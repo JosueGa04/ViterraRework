@@ -42,7 +42,7 @@ const MAP_CARD_GAP_ABOVE_DOT_PX = 18;
 /** Separación del borde superior de la tarjeta respecto al punto cuando la tarjeta va debajo del punto. */
 const MAP_CARD_GAP_BELOW_DOT_PX = 14;
 /** Altura aproximada de la tarjeta (imagen + texto + CTA) para decidir si voltea arriba/abajo. */
-const MAP_CARD_ESTIMATED_HEIGHT_PX = 460;
+const MAP_CARD_ESTIMATED_HEIGHT_PX = 356;
 const MAP_CARD_ESTIMATED_WIDTH_PX = 320;
 /** Margen respecto al borde del contenedor del mapa (volteo arriba/abajo). */
 const MAP_CARD_VIEWPORT_PADDING_PX = 16;
@@ -303,12 +303,12 @@ export function MapSearchPage() {
 
     const yAboveAnchor = mapPopupPos.y - MAP_CARD_ESTIMATED_HEIGHT_PX;
     const yBelowAnchor = mapPopupPos.y;
-    const minY = MAP_CARD_VIEWPORT_PADDING_PX;
+    const minY = isReducedViewport ? 64 : MAP_CARD_VIEWPORT_PADDING_PX;
     const maxY = size.y - MAP_CARD_VIEWPORT_PADDING_PX - MAP_CARD_ESTIMATED_HEIGHT_PX;
 
     let top = mapPopupPos.placement === "above" ? yAboveAnchor : yBelowAnchor;
     if (Number.isFinite(maxY)) {
-      top = Math.max(minY, Math.min(maxY, top));
+      top = Math.max(minY, Math.min(Math.max(minY, maxY), top));
     } else {
       top = minY;
     }
@@ -318,7 +318,7 @@ export function MapSearchPage() {
       top,
       transform: "translateX(-50%)",
     } as const;
-  }, [mapPopupPos, selectedProperty]);
+  }, [mapPopupPos, selectedProperty, isReducedViewport]);
 
   const syncMarkers = useCallback((list: Property[]) => {
     const dots = mapDotsGroupRef.current;
@@ -500,7 +500,7 @@ export function MapSearchPage() {
           "Satélite": satelliteLayer,
         },
         undefined,
-        { position: "topright" }
+        { position: "bottomleft" }
       ).addTo(map);
 
       const dotsGroup = L.layerGroup().addTo(map);
@@ -565,10 +565,10 @@ export function MapSearchPage() {
 
         const ring = decimateLatLngs(raw, MAX_POLYGON_VERTICES);
         const poly = L.polygon(ring, {
-          color: "#C8102E",
+          color: "#141c2e",
           weight: 2,
-          fillColor: "#C8102E",
-          fillOpacity: 0.14,
+          fillColor: "#141c2e",
+          fillOpacity: 0.08,
           lineJoin: "round",
           lineCap: "round",
         });
@@ -591,7 +591,7 @@ export function MapSearchPage() {
         strokeActive = true;
         strokePts = [latlng];
         tempLine = L.polyline(strokePts, {
-          color: "#C8102E",
+          color: "#141c2e",
           weight: 2.5,
           opacity: 0.95,
           lineJoin: "round",
@@ -818,6 +818,7 @@ export function MapSearchPage() {
 
   return (
     <div className="viterra-page map-search-page flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-white text-slate-900">
+      <MapSearchHeaderBar />
       <div data-reveal className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
         <aside
           className={cn(
@@ -829,7 +830,6 @@ export function MapSearchPage() {
               : "h-[50dvh]"
           )}
         >
-          {isReducedViewport && !mobileShowMap && <MapSearchHeaderBar />}
           <div className="shrink-0 border-b-2 border-brand-navy/15 bg-gradient-to-b from-[#f4f2ef] to-white px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -863,10 +863,10 @@ export function MapSearchPage() {
                   type="button"
                   onClick={toggleDrawingMode}
                   className={cn(
-                    "font-heading inline-flex items-center justify-center rounded-none px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] shadow-lg transition-all sm:text-xs",
+                    "font-heading inline-flex items-center justify-center rounded-none px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] shadow-[0_4px_12px_rgba(20,28,46,0.12)] transition-all sm:text-xs",
                     isDrawingMode
-                      ? "border-2 border-primary bg-white text-primary shadow-none ring-2 ring-primary/25 hover:bg-red-50"
-                      : "bg-primary text-white shadow-primary/35 hover:bg-brand-red-hover hover:shadow-xl"
+                      ? "border-2 border-brand-navy bg-white text-brand-navy shadow-none ring-2 ring-brand-navy/15 hover:bg-slate-50"
+                      : "bg-brand-navy text-white hover:bg-brand-navy/90 hover:shadow-lg"
                   )}
                 >
                   {isDrawingMode ? "Cancelar" : "Dibujar zona"}
@@ -937,7 +937,6 @@ export function MapSearchPage() {
             isReducedViewport && !mobileShowMap && "hidden lg:flex"
           )}
         >
-          {(!isReducedViewport || mobileShowMap) && <MapSearchHeaderBar />}
           <div className="relative z-0 min-h-0 w-full flex-1 overflow-hidden lg:min-h-0">
             {isReducedViewport && mobileShowMap && (
               <div className="pointer-events-none absolute left-3 right-3 top-2 z-[1006] flex flex-col gap-2">
@@ -946,7 +945,7 @@ export function MapSearchPage() {
                     <button
                       type="button"
                       onClick={toggleDrawingMode}
-                      className="font-heading inline-flex w-full items-center justify-center rounded-none border-2 border-primary bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary shadow-[0_8px_24px_rgba(0,0,0,0.18)] ring-2 ring-primary/25 hover:bg-red-50"
+                      className="font-heading inline-flex w-full items-center justify-center rounded-none border-2 border-brand-navy bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-[0_4px_12px_rgba(20,28,46,0.12)] hover:bg-slate-50"
                     >
                       Cancelar trazo
                     </button>
@@ -956,14 +955,14 @@ export function MapSearchPage() {
                     <button
                       type="button"
                       onClick={() => setMobileFiltersOpen((v) => !v)}
-                      className="font-heading inline-flex flex-1 items-center justify-center rounded-none border-2 border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                      className="font-heading inline-flex flex-1 items-center justify-center rounded-none border-2 border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-brand-navy hover:text-primary"
                     >
                       {mobileFiltersOpen ? "Cerrar filtros" : "Filtros"}
                     </button>
                     <button
                       type="button"
                       onClick={zone && !isDrawingMode ? redrawZone : toggleDrawingMode}
-                      className="font-heading inline-flex flex-1 items-center justify-center rounded-none bg-primary px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-lg shadow-primary/35 transition-all hover:bg-brand-red-hover"
+                      className="font-heading inline-flex flex-1 items-center justify-center rounded-none bg-brand-navy px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_4px_12px_rgba(20,28,46,0.15)] transition-all hover:bg-brand-navy/90"
                     >
                       {zone ? "Redibujar zona" : "Dibujar zona"}
                     </button>
@@ -971,7 +970,7 @@ export function MapSearchPage() {
                       <button
                         type="button"
                         onClick={clearZone}
-                        className="font-heading inline-flex flex-1 items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                        className="font-heading inline-flex flex-1 items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-brand-navy hover:text-primary"
                       >
                         Quitar zona
                       </button>
@@ -982,7 +981,7 @@ export function MapSearchPage() {
                   <button
                     type="button"
                     onClick={() => setMobileShowMap(false)}
-                    className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                    className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-brand-navy hover:text-primary"
                   >
                     Ver propiedades ({results.length})
                   </button>
@@ -992,17 +991,6 @@ export function MapSearchPage() {
                     {filterFields}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (document.fullscreenElement) {
-                      void document.exitFullscreen();
-                    }
-                  }}
-                  className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-slate-200 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
-                >
-                  Salir pantalla completa
-                </button>
               </div>
             )}
             {mapFs && (
@@ -1011,7 +999,7 @@ export function MapSearchPage() {
                   <button
                     type="button"
                     onClick={toggleDrawingMode}
-                    className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-primary bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary shadow-[0_8px_24px_rgba(0,0,0,0.18)] ring-2 ring-primary/25 hover:bg-red-50"
+                    className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-[0_4px_12px_rgba(20,28,46,0.12)] hover:bg-slate-50"
                   >
                     Cancelar trazo
                   </button>
@@ -1020,7 +1008,7 @@ export function MapSearchPage() {
                     <button
                       type="button"
                       onClick={zone ? redrawZone : toggleDrawingMode}
-                      className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none bg-primary px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-lg shadow-primary/35 transition-all hover:bg-brand-red-hover"
+                      className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none bg-brand-navy px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_4px_12px_rgba(20,28,46,0.15)] transition-all hover:bg-brand-navy/90"
                     >
                       {zone ? "Redibujar zona" : "Dibujar zona"}
                     </button>
@@ -1028,7 +1016,7 @@ export function MapSearchPage() {
                       <button
                         type="button"
                         onClick={clearZone}
-                        className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
+                        className="pointer-events-auto font-heading inline-flex items-center justify-center rounded-none border-2 border-brand-navy/25 bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-navy shadow-sm transition-colors hover:border-brand-navy hover:text-primary"
                       >
                         Quitar zona
                       </button>
@@ -1051,29 +1039,31 @@ export function MapSearchPage() {
               </div>
             )}
 
-            <button
-              type="button"
-              className={cn(
-                "absolute left-3 z-[1002] flex h-9 w-9 items-center justify-center rounded-none border-2 border-slate-200 bg-white text-slate-800 shadow-md transition-colors hover:bg-slate-50",
-                isReducedViewport && mobileShowMap ? "top-16" : "top-3"
-              )}
-              aria-label={mapFs ? "Salir de pantalla completa" : "Pantalla completa"}
-              onClick={() => {
-                const shell = mapShellRef.current;
-                if (!shell) return;
-                if (!document.fullscreenElement) {
-                  void shell.requestFullscreen();
-                } else {
-                  void document.exitFullscreen();
-                }
-              }}
-            >
-              {mapFs ? (
-                <Minimize2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-              ) : (
-                <Maximize2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-              )}
-            </button>
+            {!isReducedViewport && (
+              <button
+                type="button"
+                className={cn(
+                  "absolute left-3 z-[1002] flex h-9 w-9 items-center justify-center rounded-none border-2 border-slate-200 bg-white text-slate-800 shadow-md transition-colors hover:bg-slate-50",
+                  "top-3"
+                )}
+                aria-label={mapFs ? "Salir de pantalla completa" : "Pantalla completa"}
+                onClick={() => {
+                  const shell = mapShellRef.current;
+                  if (!shell) return;
+                  if (!document.fullscreenElement) {
+                    void shell.requestFullscreen();
+                  } else {
+                    void document.exitFullscreen();
+                  }
+                }}
+              >
+                {mapFs ? (
+                  <Minimize2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                ) : (
+                  <Maximize2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                )}
+              </button>
+            )}
 
             {selectedProperty && mapPopupPos && (
               <div className="pointer-events-none absolute inset-0 z-[1001] overflow-hidden">
@@ -1157,7 +1147,7 @@ export function MapSearchPage() {
                   <button
                     type="button"
                     onClick={redrawZone}
-                    className="font-heading flex flex-1 items-center justify-center rounded-none bg-primary px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-red-hover"
+                    className="font-heading flex flex-1 items-center justify-center rounded-none bg-brand-navy px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-navy/90"
                   >
                     Redibujar zona
                   </button>

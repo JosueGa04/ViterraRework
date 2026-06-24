@@ -7,7 +7,7 @@ import { SearchBar, SearchFilters } from "../components/SearchBar";
 import { useFeaturedHomeProperties } from "../hooks/useFeaturedHomeProperties";
 import { useCatalogPriceSlices } from "../hooks/useCatalogPriceSlices";
 import { ArrowRight, ChevronLeft, ChevronRight, Bed, Bath, Square } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion, AnimatePresence } from "motion/react";
 import { usePreviewLayout } from "../../contexts/PreviewCanvasContext";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import { PreviewFieldPulse } from "../components/admin/siteEditor/PreviewFieldPulse";
@@ -182,11 +182,34 @@ function LazyInstagramCard({ post }: { post: InstagramPost }) {
   );
 }
 
+function HeroLoader() {
+  return (
+    <section
+      className={
+        "relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-brand-navy " +
+        "pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] sm:pb-16 md:pb-24 " +
+        "pt-[calc(env(safe-area-inset-top,0px)+4.25rem)] lg:pt-[calc(env(safe-area-inset-top,0px)+8.25rem)]"
+      }
+    >
+      <div className="absolute inset-0 z-0 overflow-hidden bg-brand-navy">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
+      </div>
+
+      <div className="relative z-10 flex flex-col items-center justify-center gap-4">
+        <span className="font-heading text-xs font-light tracking-[0.32em] text-white/80 animate-pulse">
+          VITERRA
+        </span>
+        <div className="h-6 w-6 animate-spin rounded-full border-[2px] border-white/10 border-t-primary" />
+      </div>
+    </section>
+  );
+}
+
 
 export function HomePage() {
   const pl = usePreviewLayout();
   const reduceMotion = useReducedMotion();
-  const { content } = useSiteContent();
+  const { content, loading } = useSiteContent();
   const { posts: igPosts } = useInstagramFeed(3);
   const h = content.home;
   const experienceMediaOnRight = h.experienceMediaPosition === "right";
@@ -258,109 +281,131 @@ export function HomePage() {
 
       {/* Hero portada: layout propio (no compartido con el resto de páginas). */}
       <PreviewSectionChrome blockId="home-hero" label="Portada principal">
-      <section
-        className={
-          "viterra-reveal-off scroll-fade-exit-white relative flex min-h-[100svh] flex-col justify-center overflow-hidden " +
-          "pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] sm:pb-16 md:pb-24 " +
-          "pt-[calc(env(safe-area-inset-top,0px)+4.25rem)] lg:pt-[calc(env(safe-area-inset-top,0px)+8.25rem)]"
-        }
-      >
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-bg" layout="cover">
-            <HeroBackdropMedia
-              src={h.heroImage}
-              fallbackSrc={DEFAULT_SITE_CONTENT.home.heroImage}
-              reduceMotion={!!reduceMotion}
-              imageProps={{ decoding: "async", fetchPriority: "high" }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
-          </PreviewFieldPulse>
-        </div>
-
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-10 text-center sm:px-6 sm:pt-12 lg:px-8 lg:pt-16">
-          <motion.div
-            variants={heroContainerVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-8 md:space-y-10"
-          >
-            <motion.p
-              variants={heroItemVariants}
-              className="text-[11px] font-normal uppercase tracking-[0.35em] text-white/70 md:text-xs lg:mt-2"
-            >
-              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-kicker" className="block">
-                {h.heroKicker}
-              </PreviewFieldPulse>
-            </motion.p>
-
-            <motion.h1
-              variants={heroItemVariants}
-              className={pl.homePortadaTitleClass()}
-              style={{ fontFamily: "var(--font-hero-display)", fontWeight: 300 }}
-            >
-              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-title" className="block">
-                {h.heroTitle}
-              </PreviewFieldPulse>
-            </motion.h1>
-
-            <motion.p variants={heroItemVariants} className="mx-auto max-w-xl text-lg font-light leading-relaxed text-white/88 md:text-xl">
-              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-subtitle" className="block">
-                {h.heroSubtitle}
-              </PreviewFieldPulse>
-            </motion.p>
-
+        <AnimatePresence mode="wait">
+          {loading ? (
             <motion.div
-              variants={heroItemVariants}
-              className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-[11px] uppercase tracking-[0.28em] text-white/65 md:text-xs"
+              key="loader"
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: "easeInOut" }}
+              className="w-full"
             >
-              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-devLink" className="inline-flex">
-                <Link to="/desarrollos" className="py-1 font-normal transition-colors hover:text-white">
-                  {h.heroLinkDevLabel}
-                </Link>
-              </PreviewFieldPulse>
-              <span className="hidden text-white/30 sm:inline">|</span>
-              <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-aboutLink" className="inline-flex">
-                <Link to="/nosotros" className="py-1 font-normal transition-colors hover:text-white">
-                  {h.heroLinkAboutLabel}
-                </Link>
-              </PreviewFieldPulse>
+              <HeroLoader />
             </motion.div>
-
+          ) : (
             <motion.div
-              variants={heroItemVariants}
-              className={cn(
-                "mx-auto grid w-full max-w-3xl gap-5 pt-4 sm:items-center sm:gap-x-6 sm:gap-y-0 sm:pt-2 md:gap-x-10",
-                pl.gridCols("grid-cols-1 sm:grid-cols-2"),
-              )}
+              key="content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="w-full"
             >
-              <div className="flex w-full justify-center sm:justify-end">
-                <motion.button
-                  type="button"
-                  onClick={scrollToSearch}
-                  whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 24 }}
-                  className="flex w-full max-w-sm min-w-0 cursor-pointer items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
-                >
-                  <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-ctaPrimary" className="block w-full">
-                    {h.heroCtaPrimary}
+              <section
+                className={
+                  "viterra-reveal-off scroll-fade-exit-white relative flex min-h-[100svh] flex-col justify-center overflow-hidden " +
+                  "pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] sm:pb-16 md:pb-24 " +
+                  "pt-[calc(env(safe-area-inset-top,0px)+4.25rem)] lg:pt-[calc(env(safe-area-inset-top,0px)+8.25rem)]"
+                }
+              >
+                <div className="absolute inset-0 z-0 overflow-hidden">
+                  <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-bg" layout="cover">
+                    <HeroBackdropMedia
+                      src={h.heroImage}
+                      fallbackSrc={DEFAULT_SITE_CONTENT.home.heroImage}
+                      reduceMotion={!!reduceMotion}
+                      imageProps={{ decoding: "async", fetchPriority: "high" }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
                   </PreviewFieldPulse>
-                </motion.button>
-              </div>
-              <div className="flex w-full justify-center sm:justify-start">
-                <Link
-                  to="/venta"
-                  className="group flex shrink-0 items-center gap-2 border-b border-white/40 py-4 text-sm font-light leading-snug tracking-wide text-white transition-colors hover:border-white"
-                >
-                  <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-ctaSecondary" className="inline-flex shrink-0">
-                    {h.heroCtaSecondary}
-                  </PreviewFieldPulse>
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-80 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-              </div>
+                </div>
+
+                <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-10 text-center sm:px-6 sm:pt-12 lg:px-8 lg:pt-16">
+                  <motion.div
+                    variants={heroContainerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="space-y-8 md:space-y-10"
+                  >
+                    <motion.p
+                      variants={heroItemVariants}
+                      className="text-[11px] font-normal uppercase tracking-[0.35em] text-white/70 md:text-xs lg:mt-2"
+                    >
+                      <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-kicker" className="block">
+                        {h.heroKicker}
+                      </PreviewFieldPulse>
+                    </motion.p>
+
+                    <motion.h1
+                      variants={heroItemVariants}
+                      className={pl.homePortadaTitleClass()}
+                      style={{ fontFamily: "var(--font-hero-display)", fontWeight: 300 }}
+                    >
+                      <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-title" className="block">
+                        {h.heroTitle}
+                      </PreviewFieldPulse>
+                    </motion.h1>
+
+                    <motion.p variants={heroItemVariants} className="mx-auto max-w-xl text-lg font-light leading-relaxed text-white/88 md:text-xl">
+                      <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-subtitle" className="block">
+                        {h.heroSubtitle}
+                      </PreviewFieldPulse>
+                    </motion.p>
+
+                    <motion.div
+                      variants={heroItemVariants}
+                      className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-[11px] uppercase tracking-[0.28em] text-white/65 md:text-xs"
+                    >
+                      <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-devLink" className="inline-flex">
+                        <Link to="/desarrollos" className="py-1 font-normal transition-colors hover:text-white">
+                          {h.heroLinkDevLabel}
+                        </Link>
+                      </PreviewFieldPulse>
+                      <span className="hidden text-white/30 sm:inline">|</span>
+                      <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-aboutLink" className="inline-flex">
+                        <Link to="/nosotros" className="py-1 font-normal transition-colors hover:text-white">
+                          {h.heroLinkAboutLabel}
+                        </Link>
+                      </PreviewFieldPulse>
+                    </motion.div>
+
+                    <motion.div
+                      variants={heroItemVariants}
+                      className={cn(
+                        "mx-auto grid w-full max-w-3xl gap-5 pt-4 sm:items-center sm:gap-x-6 sm:gap-y-0 sm:pt-2 md:gap-x-10",
+                        pl.gridCols("grid-cols-1 sm:grid-cols-2"),
+                      )}
+                    >
+                      <div className="flex w-full justify-center sm:justify-end">
+                        <motion.button
+                          type="button"
+                          onClick={scrollToSearch}
+                          whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 24 }}
+                          className="flex w-full max-w-sm min-w-0 cursor-pointer items-center justify-center border-0 border-b border-white/40 bg-transparent px-2 py-4 text-center text-xs font-normal uppercase tracking-[0.22em] text-white transition-colors hover:border-white sm:w-auto sm:max-w-none sm:shrink-0 sm:px-0"
+                        >
+                          <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-ctaPrimary" className="block w-full">
+                            {h.heroCtaPrimary}
+                          </PreviewFieldPulse>
+                        </motion.button>
+                      </div>
+                      <div className="flex w-full justify-center sm:justify-start">
+                        <Link
+                          to="/venta"
+                          className="group flex shrink-0 items-center gap-2 border-b border-white/40 py-4 text-sm font-light leading-snug tracking-wide text-white transition-colors hover:border-white"
+                        >
+                          <PreviewFieldPulse blockId="home-hero" fieldKey="home-hero-ctaSecondary" className="inline-flex shrink-0">
+                            {h.heroCtaSecondary}
+                          </PreviewFieldPulse>
+                          <ArrowRight className="h-4 w-4 shrink-0 opacity-80 transition-transform group-hover:translate-x-0.5" />
+                        </Link>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                </div>
+              </section>
             </motion.div>
-          </motion.div>
-        </div>
-      </section>
+          )}
+        </AnimatePresence>
       </PreviewSectionChrome>
 
       {/* Búsqueda — mismo lenguaje visual que el hero: imagen + velo para legibilidad */}
