@@ -499,6 +499,5 @@ export async function updatePropertyFeatured(client: SupabaseClient, id: string,
 }
 
 export async function softDeleteProperty(client: SupabaseClient, id: string) {
-  const ts = nowIso();
-  return client.from("properties").update({ deleted_at: ts, updated_at: ts, synced_at: ts }).eq("id", id);
+  return client.from("properties").delete().eq("id", id);
 }

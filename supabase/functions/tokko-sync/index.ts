@@ -801,6 +801,15 @@ function deaccent(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function isManualTokkoId(tokkoId: string): boolean {
+  const clean = tokkoId.trim();
+  if (clean.startsWith("manual_")) return true;
+  const num = Number(clean);
+  if (Number.isInteger(num) && num >= 9000000 && num <= 9999999) return true;
+  return false;
+}
+
+
 /** Etiquetas crudas de Tokko (`lead_status`) que no se migran. Default: Cerrado. `NONE` = sin filtro. */
 function tokkoSkipLeadStatusLabels(): Set<string> {
   const raw = getEnv("TOKKO_SKIP_LEAD_STATUSES");
@@ -1024,6 +1033,27 @@ Deno.serve(async (req: Request) => {
               errors.push(e instanceof Error ? e.message : String(e));
             }
           }
+          // Clean up obsolete developments (not in Tokko Broker responses and not manual)
+          const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
+          if (fetchedTokkoIds.length > 0 && errors.length === 0) {
+            const { data: dbDevs, error: fetchErr } = await supabase
+              .from("developments")
+              .select("tokko_id");
+            if (!fetchErr && dbDevs) {
+              const idsToDelete = dbDevs
+                .map((d) => String(d.tokko_id))
+                .filter((tokkoId) => !fetchedTokkoIds.includes(tokkoId) && !isManualTokkoId(tokkoId));
+              if (idsToDelete.length > 0) {
+                const { error: delErr } = await supabase
+                  .from("developments")
+                  .delete()
+                  .in("tokko_id", idsToDelete);
+                if (delErr) {
+                  errors.push(`Error al limpiar desarrollos obsoletos: ${delErr.message}`);
+                }
+              }
+            }
+          }
           summary.developments = { upserted, errors };
         }
       } catch (e) {
@@ -1155,6 +1185,27 @@ Deno.serve(async (req: Request) => {
               }
             }
             await syncPropertyTagLinksForBatch(supabase, pairs, byTokko, errors);
+          }
+          // Clean up obsolete properties (not in Tokko Broker responses and not manual)
+          const fetchedTokkoIds = items.map((item) => String(pickTokkoId(item))).filter(Boolean);
+          if (fetchedTokkoIds.length > 0 && errors.length === 0) {
+            const { data: dbProps, error: fetchErr } = await supabase
+              .from("properties")
+              .select("tokko_id");
+            if (!fetchErr && dbProps) {
+              const idsToDelete = dbProps
+                .map((p) => String(p.tokko_id))
+                .filter((tokkoId) => !fetchedTokkoIds.includes(tokkoId) && !isManualTokkoId(tokkoId));
+              if (idsToDelete.length > 0) {
+                const { error: delErr } = await supabase
+                  .from("properties")
+                  .delete()
+                  .in("tokko_id", idsToDelete);
+                if (delErr) {
+                  errors.push(`Error al limpiar propiedades obsoletas: ${delErr.message}`);
+                }
+              }
+            }
           }
           summary.properties = { upserted, errors };
         }
