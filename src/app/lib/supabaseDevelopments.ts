@@ -469,6 +469,5 @@ export async function upsertDevelopment(client: SupabaseClient, d: Development) 
 }
 
 export async function softDeleteDevelopment(client: SupabaseClient, id: string) {
-  const ts = nowIso();
-  return client.from("developments").update({ deleted_at: ts, updated_at: ts, synced_at: ts }).eq("id", id);
+  return client.from("developments").delete().eq("id", id);
 }
