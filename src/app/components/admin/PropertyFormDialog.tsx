@@ -74,6 +74,30 @@ const STEP_ICONS: Record<PropertyFormStepId, typeof ImageIcon> = {
 const defaultImage =
   "https://images.unsplash.com/photo-1520106392146-ef585c111254?w=1080&q=80";
 
+/**
+ * El sitio público prioriza "Título de publicación" sobre "Título" (para copy de Tokko
+ * más descriptivo, ver cardHeadline() en PropertyCard.tsx). Si antes de este cambio ambos
+ * coincidían (publicationTitle solo reflejaba el título viejo, no una copia personalizada)
+ * y aquí se editó el título sin tocar el de publicación, hay que sincronizarlo — si no, el
+ * sitio seguiría mostrando el título viejo aunque el admin ya haya "guardado" el nuevo.
+ */
+export function resolvePublicationTitleOnSave(
+  mode: "create" | "edit",
+  original: Property | null,
+  draft: Pick<Property, "title" | "publicationTitle">,
+): string | undefined {
+  if (mode !== "edit" || !original) return draft.publicationTitle;
+
+  const titleChanged = draft.title !== original.title;
+  const publicationTitleUntouched = draft.publicationTitle === original.publicationTitle;
+  const publicationTitleWasMirroringOldTitle =
+    (original.publicationTitle?.trim() || "") === original.title.trim();
+
+  return titleChanged && publicationTitleUntouched && publicationTitleWasMirroringOldTitle
+    ? draft.title
+    : draft.publicationTitle;
+}
+
 function emptyDraft(id: string): Property {
   return {
     id,
@@ -196,6 +220,8 @@ export function PropertyFormDialog({
       return;
     }
 
+    const syncedPublicationTitle = resolvePublicationTitleOnSave(mode, property, draft);
+
     onSave({
       ...draft,
       id: propertyId,
@@ -207,6 +233,7 @@ export function PropertyFormDialog({
       images: imgs,
       galleryImages: imgs,
       featured: Boolean(draft.featured),
+      publicationTitle: syncedPublicationTitle,
     });
     onOpenChange(false);
   };
@@ -388,7 +415,11 @@ export function PropertyFormDialog({
                               placeholder="Ej. Casa con vista al parque"
                             />
                           </PropertyField>
-                          <PropertyField label="Título de publicación (opcional)" span={2}>
+                          <PropertyField
+                            label="Título de publicación (opcional)"
+                            span={2}
+                            hint="Si tiene texto, esto es lo que se muestra en el sitio público en vez de «Título»."
+                          >
                             <input
                               className={propertyFieldClass}
                               value={draft.publicationTitle ?? ""}

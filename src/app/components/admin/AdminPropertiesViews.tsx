@@ -164,7 +164,12 @@ export function AdminPropertiesViews({
                               )}
                               {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
                                 <p className={property.status === "venta_y_alquiler" ? "text-sm text-slate-600" : "text-lg font-light tracking-tight text-slate-900"}>
-                                  {property.rentalPrice ? `$${property.rentalPrice.toLocaleString()}/mes` : "—"}
+                                  {/* En renta simple, `price` ya es la renta (rental_price solo aplica al caso dual venta_y_alquiler). */}
+                                  {property.status === "alquiler"
+                                    ? `$${(property.rentalPrice ?? property.price).toLocaleString()}/mes`
+                                    : property.rentalPrice
+                                      ? `$${property.rentalPrice.toLocaleString()}/mes`
+                                      : "—"}
                                 </p>
                               )}
                             </div>
@@ -314,7 +319,12 @@ export function AdminPropertiesViews({
                                 )}
                                 {(property.status === "alquiler" || property.status === "venta_y_alquiler") && (
                                   <p className="text-sm text-slate-600">
-                                    {property.rentalPrice ? `$${property.rentalPrice.toLocaleString()}/mes` : "—"}
+                                    {/* En renta simple, `price` ya es la renta (rental_price solo aplica al caso dual venta_y_alquiler). */}
+                                    {property.status === "alquiler"
+                                      ? `$${(property.rentalPrice ?? property.price).toLocaleString()}/mes`
+                                      : property.rentalPrice
+                                        ? `$${property.rentalPrice.toLocaleString()}/mes`
+                                        : "—"}
                                   </p>
                                 )}
                               </div>
