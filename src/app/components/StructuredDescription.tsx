@@ -1,4 +1,5 @@
-import { parseStructuredDescription } from "../lib/propertyDescription";
+import { parseStructuredDescription, sanitizeRichHtml } from "../lib/propertyDescription";
+import { cn } from "./ui/utils";
 
 type Props = {
   source: string;
@@ -8,8 +9,8 @@ type Props = {
 };
 
 /**
- * Descripción pública con el mismo esquema visual que la ficha PDF:
- * párrafos, títulos por palabra clave y viñetas.
+ * Descripción pública con soporte para HTML enriquecido (TipTap) y formato
+ * estructurado (párrafos, títulos por palabra clave y viñetas para texto Tokko/plano).
  */
 export function StructuredDescription({
   source,
@@ -17,6 +18,25 @@ export function StructuredDescription({
   headerColor = "#141c2e",
   className,
 }: Props) {
+  if (!source?.trim()) return null;
+
+  // Si contiene etiquetas HTML (procedente del editor con formato), renderizar el HTML sanitizado
+  if (/<[a-z][\s\S]*>/i.test(source)) {
+    return (
+      <div
+        className={cn("viterra-prose", className)}
+        style={
+          {
+            color: bodyColor,
+            "--body-color": bodyColor,
+            "--header-color": headerColor,
+          } as React.CSSProperties
+        }
+        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(source) }}
+      />
+    );
+  }
+
   const blocks = parseStructuredDescription(source);
   if (blocks.length === 0) return null;
 

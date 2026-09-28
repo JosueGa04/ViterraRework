@@ -52,7 +52,7 @@ export function publicDescriptionPlainText(args: {
 }
 
 export const RICH_DESCRIPTION_HTML_CLASS =
-  "text-base leading-relaxed text-slate-700 [&_strong]:font-semibold [&_em]:italic [&_u]:underline [&_s]:line-through [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1 [&_a]:text-primary [&_a]:underline";
+  "viterra-prose text-[15px] leading-relaxed text-slate-700 [&_strong]:font-bold [&_strong]:text-[#141c2e] [&_b]:font-bold [&_b]:text-[#141c2e] [&_em]:italic [&_i]:italic [&_u]:underline [&_u]:underline-offset-2 [&_s]:line-through [&_del]:line-through [&_strike]:line-through [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-[#141c2e] [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-[#141c2e] [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mb-1 [&_a]:text-primary [&_a]:underline";
 
 export type DescriptionBlock =
   | { type: "header"; text: string }
@@ -119,15 +119,20 @@ export function sanitizeRichHtml(html: string | undefined | null): string {
       "p",
       "br",
       "strong",
+      "b",
       "em",
+      "i",
       "u",
       "s",
+      "del",
+      "strike",
       "h2",
       "h3",
       "ul",
       "ol",
       "li",
       "a",
+      "span",
     ],
     ALLOWED_ATTR: ["href", "target", "rel", "class"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,

@@ -3,6 +3,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
+import Underline from "@tiptap/extension-underline";
 import {
   Bold,
   Eraser,
@@ -15,6 +16,7 @@ import {
   Pilcrow,
   Redo2,
   Strikethrough,
+  Underline as UnderlineIcon,
   Undo2,
   Unlink,
 } from "lucide-react";
@@ -72,6 +74,7 @@ export function RichDescriptionEditor({
         heading: { levels: [2, 3] },
         link: false,
       }),
+      Underline,
       Placeholder.configure({ placeholder }),
       Link.configure({
         openOnClick: false,
@@ -139,18 +142,32 @@ export function RichDescriptionEditor({
     >
       <div className="flex flex-wrap items-center gap-0.5 border-b border-stone-100 bg-stone-50/80 px-2 py-1.5">
         <ToolbarButton
-          title="Negrita"
+          title="Negrita (Ctrl+B)"
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
         >
           <Bold className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
-          title="Cursiva"
+          title="Cursiva (Ctrl+I)"
           active={editor.isActive("italic")}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         >
           <Italic className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Subrayado (Ctrl+U)"
+          active={editor.isActive("underline")}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
+          <UnderlineIcon className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Tachado"
+          active={editor.isActive("strike")}
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+        >
+          <Strikethrough className="h-4 w-4" />
         </ToolbarButton>
 
         <div className="mx-1 h-4 w-px bg-stone-200" />

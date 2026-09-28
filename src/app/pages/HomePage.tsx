@@ -24,6 +24,7 @@ import { useInstagramFeed, type InstagramPost } from "../hooks/useInstagramFeed"
 import { optimizedImageUrl } from "../lib/supabaseImageUrl";
 import { useLocale } from "../i18n/LocaleContext";
 import { translatePropertyType } from "../i18n/catalogTerms";
+import { resolvePropertyDisplaySurface } from "../lib/propertySurface";
 
 function SectionKicker({ children, tone = "dark" }: { children: ReactNode; tone?: "dark" | "light" }) {
   return (
@@ -723,11 +724,14 @@ export function HomePage() {
                                   <Bath className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.bathrooms} {t("card.bathroomsShort")}
                                 </span>
                               )}
-                              {property.area > 0 && (
-                                <span className="flex items-center gap-1.5 tabular-nums">
-                                  <Square className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {property.area} m²
-                                </span>
-                              )}
+                              {(() => {
+                                const surfaceDisplay = resolvePropertyDisplaySurface(property, locale);
+                                return surfaceDisplay.numericValue > 0 ? (
+                                  <span className="flex items-center gap-1.5 tabular-nums">
+                                    <Square className="w-4 h-4 text-brand-navy/45 stroke-[1.5]"/> {surfaceDisplay.formatted}
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
 
                             {/* Fila de precio y llamada a la acción */}

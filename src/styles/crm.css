@@ -113,6 +113,27 @@ body.admin-crm-montserrat .viterra-preview-canvas [data-viterra-editor-field] {
   min-height: 10rem;
 }
 
+.viterra-rich-editor .ProseMirror strong,
+.viterra-rich-editor .ProseMirror b {
+  font-weight: 700;
+  color: #141c2e;
+}
+
+.viterra-rich-editor .ProseMirror em,
+.viterra-rich-editor .ProseMirror i {
+  font-style: italic;
+}
+
+.viterra-rich-editor .ProseMirror u {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.viterra-rich-editor .ProseMirror s,
+.viterra-rich-editor .ProseMirror strike {
+  text-decoration: line-through;
+}
+
 .viterra-rich-editor .ProseMirror ul {
   list-style-type: disc;
   padding-left: 1.35rem;
@@ -125,9 +146,18 @@ body.admin-crm-montserrat .viterra-preview-canvas [data-viterra-editor-field] {
 
 .viterra-rich-editor .ProseMirror h2 {
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: 700;
+  color: #141c2e;
   margin-top: 0.75rem;
   margin-bottom: 0.35rem;
+}
+
+.viterra-rich-editor .ProseMirror h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #141c2e;
+  margin-top: 0.65rem;
+  margin-bottom: 0.25rem;
 }
 
 .viterra-rich-editor .ProseMirror a {

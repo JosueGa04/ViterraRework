@@ -221,3 +221,83 @@
     margin: 0;
   }
 }
+
+/* ─── Fichas Públicas: Contenido con formato enriquecido (WYSIWYG) ───────── */
+.viterra-prose {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--body-color, rgba(20, 28, 46, 0.75));
+}
+
+.viterra-prose p {
+  margin-bottom: 0.875rem;
+}
+
+.viterra-prose p:last-child {
+  margin-bottom: 0;
+}
+
+.viterra-prose strong,
+.viterra-prose b {
+  font-weight: 700 !important;
+  color: var(--header-color, #141c2e);
+}
+
+.viterra-prose em,
+.viterra-prose i {
+  font-style: italic !important;
+}
+
+.viterra-prose u {
+  text-decoration: underline !important;
+  text-underline-offset: 3px !important;
+}
+
+.viterra-prose s,
+.viterra-prose del,
+.viterra-prose strike {
+  text-decoration: line-through !important;
+}
+
+.viterra-prose h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--header-color, #141c2e);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.viterra-prose h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--header-color, #141c2e);
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.viterra-prose ul {
+  list-style-type: disc !important;
+  padding-left: 1.35rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.875rem;
+}
+
+.viterra-prose ol {
+  list-style-type: decimal !important;
+  padding-left: 1.35rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.875rem;
+}
+
+.viterra-prose li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.viterra-prose a {
+  color: var(--primary, #c8102e);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+}

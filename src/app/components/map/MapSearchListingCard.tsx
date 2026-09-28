@@ -5,6 +5,7 @@ import { cn } from "../ui/utils";
 import { propertyStatusLabel, type Property } from "../PropertyCard";
 import { useWishlist } from "../../contexts/WishlistContext";
 import { useLocale } from "../../i18n/LocaleContext";
+import { resolvePropertyDisplaySurface } from "../../lib/propertySurface";
 
 function demoRating(id: string): string {
   const n = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -80,7 +81,14 @@ export function MapSearchListingCard({ property, selected, onSelect }: Props) {
           </span>
         </div>
         <p className="mt-0.5 line-clamp-1 text-[13px] text-slate-500">
-          {property.type} · {property.bedrooms} rec. · {property.area} m²
+          {(() => {
+            const surfaceDisplay = resolvePropertyDisplaySurface(property, locale);
+            return [
+              property.type,
+              property.bedrooms > 0 ? `${property.bedrooms} rec.` : null,
+              surfaceDisplay.numericValue > 0 ? surfaceDisplay.formatted : null,
+            ].filter(Boolean).join(" · ");
+          })()}
         </p>
         {isDual && (
           <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">

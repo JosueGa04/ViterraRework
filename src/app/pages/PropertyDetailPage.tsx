@@ -49,6 +49,7 @@ import type { Locale } from "../i18n/locale";
 import { translateCatalogFeatures, translatePropertyType } from "../i18n/catalogTerms";
 import { resolveTelHref, formatPhoneForDisplay } from "../lib/phoneLink";
 import { resolvePublicDescription } from "../lib/propertyDescription";
+import { resolvePropertyDisplaySurface, formatM2 } from "../lib/propertySurface";
 import { StructuredDescription } from "../components/StructuredDescription";
 import { IFRAME_SANDBOX_ATTR } from "../lib/safeEmbed";
 import { orientationLabel } from "../lib/propertyOrientation";
@@ -293,6 +294,11 @@ export function PropertyDetailPage() {
     const fallback = (siteWa && !siteWa.includes("1234567890")) ? siteWa : PROPERTIES_GLOBAL_WA_HREF;
     return resolveWhatsappHref(stored ?? undefined, fallback, whatsappInterestMessage);
   }, [property?.contactWhatsapp, contactSite.quickWhatsappHref, whatsappInterestMessage]);
+
+  const surfaceStat = useMemo(
+    () => resolvePropertyDisplaySurface(property, locale),
+    [property, locale],
+  );
 
   const propertyTags = useMemo(
     () =>
@@ -1043,7 +1049,7 @@ export function PropertyDetailPage() {
                   {[
                     { icon: <Bed className="w-4 h-4" strokeWidth={1.4} />, value: property.bedrooms, label: t("card.bedrooms") },
                     { icon: <Bath className="w-4 h-4" strokeWidth={1.4} />, value: property.bathrooms, label: t("card.bathrooms") },
-                    { icon: <Square className="w-4 h-4" strokeWidth={1.4} />, value: `${property.area.toLocaleString()} m²`, label: t("detail.coveredArea") },
+                    { icon: <Square className="w-4 h-4" strokeWidth={1.4} />, value: surfaceStat.formatted, label: surfaceStat.label },
                   ].map((stat, i) => (
                     <div
                       key={i}
@@ -1095,6 +1101,49 @@ export function PropertyDetailPage() {
                   <DetailRow label={t("detail.reference")}>{property.referenceCode ?? "—"}</DetailRow>
                   <div style={{ height: 1, background: T.border }} />
                   <DetailRow label="Tipo"><span className="capitalize">{translatePropertyType(property.type, locale)}</span></DetailRow>
+                  {property.surfaceLand != null && property.surfaceLand > 0 ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label={t("detail.landArea")}>{formatM2(property.surfaceLand, locale)}</DetailRow>
+                    </>
+                  ) : null}
+                  {((property.roofedSurface ?? 0) > 0 || (property.area ?? 0) > 0) ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label={t("detail.coveredArea")}>
+                        {formatM2(property.roofedSurface || property.area, locale)}
+                      </DetailRow>
+                    </>
+                  ) : null}
+                  {property.totalSurface != null &&
+                  property.totalSurface > 0 &&
+                  property.totalSurface !== property.surfaceLand &&
+                  property.totalSurface !== property.area ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label={t("detail.totalArea")}>{formatM2(property.totalSurface, locale)}</DetailRow>
+                    </>
+                  ) : null}
+                  {property.frontMeasure != null && property.frontMeasure > 0 ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label={t("detail.front")}>{property.frontMeasure} m</DetailRow>
+                    </>
+                  ) : null}
+                  {property.depthMeasure != null && property.depthMeasure > 0 ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label={t("detail.depth")}>{property.depthMeasure} m</DetailRow>
+                    </>
+                  ) : null}
+                  {surfaceStat.source === "extracted_text" ? (
+                    <>
+                      <div style={{ height: 1, background: T.border }} />
+                      <DetailRow label={surfaceStat.fullLabel}>
+                        {surfaceStat.formatted}
+                      </DetailRow>
+                    </>
+                  ) : null}
                   {orientationLabel(property.orientation) ? (
                     <>
                       <div style={{ height: 1, background: T.border }} />

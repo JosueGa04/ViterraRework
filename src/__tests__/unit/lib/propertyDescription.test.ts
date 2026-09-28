@@ -33,5 +33,14 @@ describe("propertyDescription utilities", () => {
       const clean = sanitizeRichHtml(input);
       expect(clean).toContain('href="https://viterrainmobiliaria.com"');
     });
+
+    it("should preserve bold, underline, italic, and strikethrough tags", () => {
+      const input = "<p><strong>Negrita</strong> y <u>subrayado</u> y <em>cursiva</em> y <s>tachado</s></p>";
+      const clean = sanitizeRichHtml(input);
+      expect(clean).toContain("<strong>Negrita</strong>");
+      expect(clean).toContain("<u>subrayado</u>");
+      expect(clean).toContain("<em>cursiva</em>");
+      expect(clean).toContain("<s>tachado</s>");
+    });
   });
 });
