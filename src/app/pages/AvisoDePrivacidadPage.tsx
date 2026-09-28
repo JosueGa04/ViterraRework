@@ -6,7 +6,7 @@ import { Footer } from "../components/Footer";
 import { Reveal } from "../components/Reveal";
 
 const EFFECTIVE_DATE = "24 de junio de 2025";
-const COMPANY_NAME = "Viterra Inmobiliaria, S.A. de C.V.";
+const COMPANY_NAME = "Comercializadora Vida y Tierra, S.A. de C.V.";
 const TRADE_NAME = "Viterra Grupo Inmobiliario";
 const ADDRESS = "Av. Terranova 1455, local 102, Colonia Providencia 4a Sección, C.P. 44639, Zapopan, Jalisco, México";
 const EMAIL = "contacto@viterrainmobiliaria.com";

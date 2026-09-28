@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Cloud, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Cloud, EyeOff, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
+import { cn } from "../ui/utils";
 import { getSupabaseClient } from "../../lib/supabaseClient";
 import {
   messageFromFunctionsError,
@@ -248,23 +249,70 @@ export function TokkoImportDialog({ open, onOpenChange, onImportComplete, copy }
               <p className="text-sm text-slate-600">{selectedOption.description}</p>
             </div>
 
+            {mode === "new_only" && (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-300/80 bg-gradient-to-r from-amber-50 to-orange-50/30 p-4 text-xs text-amber-950 shadow-sm">
+                <div className="rounded-lg bg-amber-100 p-2 text-amber-800 shrink-0">
+                  <EyeOff className="h-5 w-5" strokeWidth={1.75} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[13px] font-bold text-amber-950">
+                    ¿Deseas dar de baja propiedades eliminadas en Tokko?
+                  </p>
+                  <p className="mt-1 text-amber-900/90 leading-relaxed text-xs">
+                    El modo actual solo busca propiedades nuevas. Para que el sistema detecte y retire automáticamente de la web las propiedades que diste de baja o pausaste en Tokko Broker, activa la <strong>sincronización completa con bajas</strong>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("sync_all");
+                      setPrune(true);
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-black transition-all hover:scale-[1.01]"
+                  >
+                    <EyeOff className="h-3.5 w-3.5 text-amber-300" />
+                    Activar bajas automáticas de Tokko
+                  </button>
+                </div>
+              </div>
+            )}
+
             {pruneAvailable && (
-              <label
-                htmlFor="tokko-import-prune"
-                className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3"
+              <div
+                className={cn(
+                  "rounded-xl border p-4 transition-all",
+                  prune
+                    ? "border-amber-400 bg-amber-50/70 shadow-sm ring-1 ring-amber-300"
+                    : "border-slate-200 bg-slate-50/60 hover:border-slate-300"
+                )}
               >
-                <input
-                  id="tokko-import-prune"
-                  type="checkbox"
-                  checked={prune}
-                  onChange={(e) => setPrune(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-slate-900">{copy.pruneLabel}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">{copy.pruneHelp}</span>
-                </span>
-              </label>
+                <label
+                  htmlFor="tokko-import-prune"
+                  className="flex cursor-pointer items-start gap-3.5"
+                >
+                  <input
+                    id="tokko-import-prune"
+                    type="checkbox"
+                    checked={prune}
+                    onChange={(e) => setPrune(e.target.checked)}
+                    className="mt-1 h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <EyeOff
+                        className={cn("h-4 w-4", prune ? "text-amber-800" : "text-slate-400")}
+                        strokeWidth={1.75}
+                      />
+                      <span className="text-sm font-bold text-slate-900">{copy.pruneLabel}</span>
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900 border border-amber-200">
+                        Recomendado
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600 leading-relaxed font-normal">
+                      {copy.pruneHelp}
+                    </p>
+                  </div>
+                </label>
+              </div>
             )}
 
             {mode !== "new_only" && (

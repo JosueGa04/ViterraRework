@@ -24,6 +24,7 @@ import {
 } from "../lib/propertyVideos";
 import type { PropertyTour3dEntry } from "../lib/propertyTours3d";
 import { tours3dFromLegacyFields } from "../lib/propertyTours3d";
+import { resolvePropertyDisplaySurface } from "../lib/propertySurface";
 
 export type { PropertyVideoEntry, PropertyTour3dEntry };
 
@@ -527,7 +528,7 @@ export function PropertyCard({
                 </div>
                 <div className="flex flex-1 flex-col items-center gap-1 py-2.5">
                   <Square className="h-3.5 w-3.5 text-brand-navy" strokeWidth={1.5} />
-                  <span className="font-medium tabular-nums">{property.area} m²</span>
+                  <span className="font-medium tabular-nums">{resolvePropertyDisplaySurface(property, locale).formatted}</span>
                 </div>
               </div>
 

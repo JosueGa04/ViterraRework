@@ -50,6 +50,7 @@
     "@supabase/supabase-js": "^2.104.0",
     "@tiptap/extension-link": "^3.23.5",
     "@tiptap/extension-placeholder": "^3.23.6",
+    "@tiptap/extension-underline": "^3.23.6",
     "@tiptap/react": "^3.23.6",
     "@tiptap/starter-kit": "^3.23.6",
     "class-variance-authority": "0.7.1",
