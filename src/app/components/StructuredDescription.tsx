@@ -20,22 +20,7 @@ export function StructuredDescription({
 }: Props) {
   if (!source?.trim()) return null;
 
-  // Si contiene etiquetas HTML (procedente del editor con formato), renderizar el HTML sanitizado
-  if (/<[a-z][\s\S]*>/i.test(source)) {
-    return (
-      <div
-        className={cn("viterra-prose", className)}
-        style={
-          {
-            color: bodyColor,
-            "--body-color": bodyColor,
-            "--header-color": headerColor,
-          } as React.CSSProperties
-        }
-        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(source) }}
-      />
-    );
-  }
+  // Procesamos SIEMPRE la descripción para extraer títulos y viñetas y asegurar el estilo uniforme.
 
   const blocks = parseStructuredDescription(source);
   if (blocks.length === 0) return null;
@@ -47,7 +32,7 @@ export function StructuredDescription({
           return (
             <h3
               key={`h-${i}`}
-              className="mt-5 mb-2 text-[13px] font-semibold uppercase tracking-[0.14em] first:mt-0"
+              className="mt-6 mb-3 text-[14px] font-bold uppercase tracking-[0.16em] first:mt-0"
               style={{ color: headerColor }}
             >
               {block.text}
@@ -56,13 +41,13 @@ export function StructuredDescription({
         }
         if (block.type === "bullet") {
           return (
-            <div key={`b-${i}`} className="flex items-start gap-2.5 py-1 pl-0.5">
+            <div key={`b-${i}`} className="flex items-start gap-3 py-1 pl-1">
               <span
-                className="mt-[0.55em] h-1.5 w-1.5 shrink-0 rounded-full"
+                className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full"
                 style={{ background: "#9a7b4f" }}
                 aria-hidden
               />
-              <p className="text-[15px] leading-relaxed" style={{ color: bodyColor, lineHeight: 1.75 }}>
+              <p className="text-[15px] font-medium leading-relaxed" style={{ color: bodyColor, lineHeight: 1.75 }}>
                 {block.text}
               </p>
             </div>
@@ -71,7 +56,7 @@ export function StructuredDescription({
         return (
           <p
             key={`p-${i}`}
-            className="mb-3 text-[15px] last:mb-0"
+            className="mb-4 text-[15px] font-normal last:mb-0"
             style={{ color: bodyColor, lineHeight: 1.8 }}
           >
             {block.text}

@@ -79,7 +79,19 @@ export function descriptionSourceToStructuredText(source: string | undefined | n
   text = text.replace(/&amp;/gi, "&");
   text = text.replace(/&lt;/gi, "<");
   text = text.replace(/&gt;/gi, ">");
+  
+  // Fix glued words from poorly formatted Tokko descriptions (e.g., "clóset3 baños completosSala-comedor")
+  text = text.replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g, "$1\n$2");
+  text = text.replace(/([a-zA-ZáéíóúñÁÉÍÓÚÑ])(\d)/g, "$1 $2");
+
   text = text.replace(/([^\n])\s*\*/g, "$1\n*");
+  
+  // Ensure common section titles are treated as headers by appending ':' if missing
+  text = text.replace(
+    /^\s*(Características|Amenidades|Ubicación|Servicios|Acabados|Equipamiento|Distribución|Espacios|Áreas comunes|Incluye|Features|Amenities|Location|Services|Ubicación y conectividad|Ubicación y Conectividad)\s*$/gim,
+    "$1:"
+  );
+
   text = text.replace(
     /(?<=[\n.!?]| )((?:Características|Amenidades|Ubicación|Servicios|Acabados|Equipamiento|Distribución|Espacios|Áreas comunes|Incluye|Features|Amenities|Location|Services)\s*:)/gi,
     "\n$1",
