@@ -4,6 +4,15 @@ import type { Property } from "./PropertyCard";
 import { escapeHtml } from "../lib/escapeHtml";
 import { getViterraStreetTileLayer } from "../lib/mapTileConfig";
 
+function formatShortPrice(price: number): string {
+  if (price >= 1_000_000) {
+    return (price / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  }
+  if (price >= 1_000) {
+    return (price / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  }
+  return price.toString();
+}
 function computeDisplayCoordinates(list: Property[]): Map<string, { lat: number; lng: number }> {
   const grouped = new Map<string, Property[]>();
   const out = new Map<string, { lat: number; lng: number }>();
@@ -57,7 +66,7 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
   const markersLayerRef = useRef<any>(null);
   const streetLayerRef = useRef<any>(null);
   const satelliteLayerRef = useRef<any>(null);
-  const [mapMode, setMapMode] = useState<MapMode>("satellite");
+  const [mapMode, setMapMode] = useState<MapMode>("map");
   const [mapReady, setMapReady] = useState(false);
 
   const propertiesWithCoordinates = properties.filter((p) => p.coordinates);
@@ -81,12 +90,22 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         const map = (L as any).map(mapRef.current, { zoomControl: true }).setView(center, 12);
         mapInstanceRef.current = map;
 
+        const updateTooltipVisibility = () => {
+          if (!mapRef.current) return;
+          if (map.getZoom() < 12) {
+            mapRef.current.classList.add('hide-price-tooltips');
+          } else {
+            mapRef.current.classList.remove('hide-price-tooltips');
+          }
+        };
+        map.on('zoomend', updateTooltipVisibility);
+        updateTooltipVisibility();
+
         streetLayerRef.current = getViterraStreetTileLayer(L);
         satelliteLayerRef.current = (L as any).tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
           {
-            attribution:
-              "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+            attribution: "&copy; <a href=\"https://www.google.com/maps\">Google Maps</a>",
             maxZoom: 20,
           }
         );
@@ -154,24 +173,65 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
           fillOpacity: 0.95,
         });
 
+        const activePrice = property.status === "alquiler"
+          ? (property.rentalPrice || property.price || 0)
+          : (property.price || property.rentalPrice || 0);
+        const shortPrice = formatShortPrice(activePrice);
+
+        marker.bindTooltip(`$${shortPrice}`, {
+          permanent: true,
+          direction: "top",
+          className: "price-marker-tooltip",
+          offset: [0, -8]
+        });
+
+        const displayPrice = property.status === "alquiler" 
+          ? (property.rentalPrice || property.price || 0) 
+          : (property.price || 0);
+
         marker.bindPopup(
           `
             <div style="font-family: Poppins, sans-serif; width: 220px;">
-              <a href="/propiedades/${escapeHtml(property.id)}" style="text-decoration:none;color:#141c2e;">
+              <a href="/propiedades/${escapeHtml(property.id)}" style="text-decoration:none;color:#141c2e;display:block;">
                 <p style="margin:0 0 6px 0;font-size:15px;font-weight:600;line-height:1.3;">${escapeHtml(property.title)}</p>
                 <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;">${escapeHtml(property.location)}</p>
-                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(property.price.toLocaleString())}${
-                  property.status === "alquiler"
-                    ? ' <span style="font-weight:500;color:#64748b;">/ mes</span>'
-                    : property.status === "venta_y_alquiler"
-                      ? ` <span style="font-weight:500;color:#64748b;">venta</span><br/><span style="font-size:13px;font-weight:600;">$${escapeHtml((property.rentalPrice ?? property.price).toLocaleString())} / mes</span>`
-                      : ""
-                }</p>
+                <p style="margin:0;font-size:14px;font-weight:700;">$${escapeHtml(displayPrice.toLocaleString())}${property.status === "alquiler"
+            ? ' <span style="font-weight:500;color:#64748b;">/ mes</span>'
+            : property.status === "venta_y_alquiler"
+              ? ` <span style="font-weight:500;color:#64748b;">venta</span><br/><span style="font-size:13px;font-weight:600;">$${escapeHtml((property.rentalPrice ?? property.price).toLocaleString())} / mes</span>`
+              : ""
+          }</p>
               </a>
             </div>
           `,
           { className: "property-map-popup", maxWidth: 250 }
         );
+
+        let closeTimeout: any;
+
+        marker.on('mouseover', function (this: any) {
+          if (closeTimeout) clearTimeout(closeTimeout);
+          this.openPopup();
+        });
+
+        marker.on('mouseout', function (this: any) {
+          closeTimeout = setTimeout(() => {
+            this.closePopup();
+          }, 250);
+        });
+
+        marker.on('popupopen', function(e: any) {
+           const popupNode = e.popup._container;
+           if (!popupNode) return;
+           popupNode.addEventListener('mouseenter', () => {
+             if (closeTimeout) clearTimeout(closeTimeout);
+           });
+           popupNode.addEventListener('mouseleave', () => {
+             closeTimeout = setTimeout(() => {
+               marker.closePopup();
+             }, 250);
+           });
+        });
 
         markersLayer.addLayer(marker);
       });
@@ -192,6 +252,25 @@ export function PropertyMap({ properties, mapHeightClassName = "h-[500px]" }: Pr
         .property-map-popup .leaflet-popup-content-wrapper {
           border-radius: 10px;
           border: 1px solid rgba(20, 28, 46, 0.14);
+        }
+        .hide-price-tooltips .price-marker-tooltip {
+          opacity: 0 !important;
+          pointer-events: none;
+        }
+        .price-marker-tooltip {
+          background: #ffffff;
+          border: none;
+          border-radius: 20px;
+          padding: 3px 8px;
+          font-family: Poppins, sans-serif;
+          font-weight: 600;
+          font-size: 11px;
+          color: #141c2e;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+          transition: opacity 0.2s ease-in-out;
+        }
+        .price-marker-tooltip.leaflet-tooltip-top:before {
+          display: none;
         }
       `}</style>
       {!mapReady && (

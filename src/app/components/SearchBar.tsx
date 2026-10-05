@@ -187,12 +187,12 @@ export function SearchBar({
 
   const mainGridWide =
     showPriceOperationToggle
-      ? "lg:grid-cols-[minmax(10.25rem,auto)_minmax(0,1.5fr)_minmax(0,0.9fr)_minmax(11rem,auto)] lg:items-end lg:gap-x-5"
+      ? "lg:grid-cols-[14rem_1fr_minmax(0,16rem)_minmax(12rem,auto)] lg:items-center"
       : showStatusFilter
-        ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
+        ? "lg:grid-cols-[1.55fr_0.95fr_0.95fr_auto] lg:items-center"
         : hideTypeFilter
-          ? "lg:grid-cols-[minmax(0,1fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5"
-          : "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,0.95fr)_minmax(10.5rem,auto)] lg:items-end lg:gap-x-5";
+          ? "lg:grid-cols-[1fr_auto] lg:items-center"
+          : "lg:grid-cols-[1fr_minmax(0,16rem)_minmax(12rem,auto)] lg:items-center";
 
   const showAdvancedFiltersBlock = !hidePropertyAdvancedFilters;
 
@@ -210,18 +210,14 @@ export function SearchBar({
   };
 
   const labelClass = cn(
-    "block text-left uppercase tracking-[0.16em]",
-    isAmbient && "text-[10px] font-medium text-white/75",
-    isAmbient && (previewCanvas ? "mb-4 sm:mb-4" : "mb-1.5 sm:mb-2 lg:mb-3"),
-    !isAmbient && "mb-2",
-    isPremium && !isAmbient && "text-[10px] text-brand-navy/60 font-medium",
-    !isPremium && !isAmbient && "text-sm font-medium text-slate-700"
+    "block text-left uppercase tracking-[0.15em]",
+    isAmbient && "text-[9px] font-medium text-white/50 mb-2",
+    !isAmbient && "mb-2 text-sm font-medium text-slate-700"
   );
 
   const ambientField = cn(
-    "box-border w-full border-0 border-b border-white/55 bg-transparent px-0 text-sm text-white placeholder:text-white/55",
-    "h-11 pb-2.5 pt-1 outline-none transition-[border-color,box-shadow] duration-200 focus-visible:border-primary focus-visible:shadow-[0_1px_0_0_rgb(200_16_46_/_0.85)] focus-visible:ring-0",
-    "[text-shadow:0_1px_2px_rgb(0_0_0/0.45)]"
+    "box-border w-full border-0 border-b border-white/20 bg-transparent text-[16px] font-light text-white placeholder:text-white/30",
+    "px-0 py-2.5 outline-none transition-colors hover:border-white/50 focus:border-white focus:ring-0"
   );
 
   const fieldClass = cn(
@@ -234,24 +230,17 @@ export function SearchBar({
 
   const selectChevronStyle = isAmbient
     ? {
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.65' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='1.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
       }
-    : isPremium
-      ? {
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23525252' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-        }
-      : undefined;
+    : undefined;
 
   const btnClass = cn(
     !isAmbient && CONTROL_H,
-    isAmbient && "h-11 min-h-[2.75rem]",
-    "inline-flex w-full shrink-0 items-center justify-center gap-2 font-medium transition-colors",
+    isAmbient && "h-[3.25rem] min-h-[3.25rem]",
+    "inline-flex w-full shrink-0 items-center justify-center gap-2 transition-all duration-300",
     isAmbient &&
-      "rounded-none border border-primary/70 bg-primary/[0.14] px-5 text-[11px] uppercase tracking-[0.14em] text-white shadow-[0_2px_14px_rgb(0_0_0/0.4),0_0_0_1px_rgb(200_16_46_/_0.25)_inset] hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-[0_4px_20px_rgb(200_16_46_/_0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary focus-visible:ring-offset-0",
-    isPremium &&
-      !isAmbient &&
-      "rounded-none bg-primary px-5 text-white tracking-[0.12em] text-[11px] uppercase hover:bg-brand-red-hover focus-visible:ring-1 focus-visible:ring-brand-burgundy focus-visible:ring-offset-2",
-    !isPremium && !isAmbient && "rounded-lg bg-primary px-5 text-sm text-white hover:bg-brand-red-hover"
+      "rounded-none bg-primary px-8 text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-brand-red-hover hover:shadow-[0_0_20px_rgba(200,16,46,0.4)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
+    !isAmbient && "rounded-lg bg-primary px-5 text-sm text-white hover:bg-brand-red-hover"
   );
 
   return (
@@ -259,9 +248,8 @@ export function SearchBar({
       onSubmit={handleSubmit}
       className={cn(
         "min-w-0 w-full overflow-visible",
-        isAmbient && "border-0 bg-transparent p-0 shadow-none",
+        isAmbient && "bg-transparent border-0 p-0 shadow-none",
         !isAmbient && "border bg-white px-5 py-6 sm:px-6 sm:py-7 md:px-8 md:py-8",
-        isPremium && !isAmbient && "border-white/25 md:rounded-sm",
         !isPremium && !isAmbient && "rounded-lg border-slate-200",
         className
       )}
@@ -269,38 +257,35 @@ export function SearchBar({
       <div
         className={cn(
           "grid w-full grid-cols-1",
-          compactAmbient ? "gap-y-2.5 sm:gap-y-3" : "gap-4 sm:gap-4",
-          !previewCanvas && mainGridWide,
-          previewCanvas && isAmbient && "gap-y-6 sm:gap-y-7",
-          compactAmbient && "lg:gap-y-0"
+          isAmbient ? "gap-y-6 lg:gap-x-8 lg:gap-y-0" : "gap-4 sm:gap-4",
+          !previewCanvas && mainGridWide
         )}
       >
         {showPriceOperationToggle ? (
-          <div className="min-w-0 w-full">
+          <div className="min-w-0 w-full lg:pr-6">
             <label className={labelClass}>{t("search.operationLabel")}</label>
             <div
               role="group"
               aria-label={t("search.operationGroupLabel")}
               className={cn(
-                "flex w-full rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]",
-                !previewCanvas && !compactAmbient && "max-w-md",
-                compactAmbient && "max-w-none",
-                isAmbient
-                  ? "border-white/25 bg-black/35 backdrop-blur-sm"
-                  : "border-slate-200 bg-slate-100/90"
+                "flex w-full",
+                !isAmbient && "rounded-xl border p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] border-slate-200 bg-slate-100/90",
+                isAmbient && "bg-white/5 backdrop-blur-md rounded-sm p-1 border border-white/10"
               )}
             >
               <button
                 type="button"
                 onClick={() => setPriceOperation("venta")}
                 className={cn(
-                  "relative flex-1 rounded-lg px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] transition-[color,background,box-shadow,transform] duration-200",
+                  "relative flex-1 text-center text-[10px] font-semibold uppercase tracking-[0.18em] transition-all duration-300",
+                  !isAmbient && "rounded-lg px-3 py-1.5",
+                  isAmbient && "px-3 py-2 rounded-sm",
                   priceOp === "venta"
                     ? isAmbient
-                      ? "bg-white text-brand-navy shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+                      ? "bg-white text-brand-navy shadow-sm"
                       : "bg-white text-brand-navy shadow-sm"
                     : isAmbient
-                      ? "text-white/65 hover:text-white"
+                      ? "text-white/50 hover:text-white"
                       : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -310,13 +295,15 @@ export function SearchBar({
                 type="button"
                 onClick={() => setPriceOperation("alquiler")}
                 className={cn(
-                  "relative flex-1 rounded-lg px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] transition-[color,background,box-shadow,transform] duration-200",
+                  "relative flex-1 text-center text-[10px] font-semibold uppercase tracking-[0.18em] transition-all duration-300",
+                  !isAmbient && "rounded-lg px-3 py-1.5",
+                  isAmbient && "px-3 py-2 rounded-sm",
                   priceOp === "alquiler"
                     ? isAmbient
-                      ? "bg-white text-brand-navy shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+                      ? "bg-white text-brand-navy shadow-sm"
                       : "bg-white text-brand-navy shadow-sm"
                     : isAmbient
-                      ? "text-white/65 hover:text-white"
+                      ? "text-white/50 hover:text-white"
                       : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -326,7 +313,7 @@ export function SearchBar({
           </div>
         ) : null}
 
-        <div className={cn("min-w-0 w-full", !previewCanvas && "lg:min-w-[12rem]")}>
+        <div className="min-w-0 w-full">
           <label className={labelClass}>{t("search.locationFieldLabel")}</label>
           <input
             type="text"
@@ -338,14 +325,16 @@ export function SearchBar({
         </div>
 
         {!hideTypeFilter ? (
-          <PropertyTypeFilterField
-            value={filters.type}
-            onChange={(type) => setFilters({ ...filters, type })}
-            options={propertyTypeOptions}
-            loading={propertyTypesLoading}
-            labelClassName={labelClass}
-            inputClassName={fieldClass}
-          />
+          <div className="min-w-0 w-full">
+            <PropertyTypeFilterField
+              value={filters.type}
+              onChange={(type) => setFilters({ ...filters, type })}
+              options={propertyTypeOptions}
+              loading={propertyTypesLoading}
+              labelClassName={labelClass}
+              inputClassName={fieldClass}
+            />
+          </div>
         ) : null}
 
         {showStatusFilter ? (
@@ -356,7 +345,7 @@ export function SearchBar({
               onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               className={cn(
                 fieldClass,
-                "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.25rem_center] bg-no-repeat pr-9"
+                "cursor-pointer appearance-none bg-[length:12px] bg-[right_0_center] bg-no-repeat"
               )}
               style={selectChevronStyle}
             >
@@ -369,16 +358,15 @@ export function SearchBar({
 
         <div
           className={cn(
-            "flex min-w-0 w-full flex-col",
-            isAmbient && previewCanvas ? "gap-4" : "gap-2",
-            compactAmbient && "max-lg:mt-0.5"
+            "flex min-w-0 w-full flex-col justify-end",
+            !isAmbient && "gap-2"
           )}
         >
-          <label className={cn(labelClass, "text-transparent", compactAmbient && "max-lg:hidden")} aria-hidden="true">
+          <label className={cn(labelClass, "text-transparent", isAmbient && "max-lg:hidden")} aria-hidden="true">
             {t("search.submit")}
           </label>
           <button type="submit" className={cn(btnClass, "lg:w-full min-w-0")}>
-            <Search className={cn("h-5 w-5 shrink-0", isAmbient ? "opacity-80" : "opacity-95")} strokeWidth={1.5} aria-hidden />
+            <Search className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
             <span>{t("search.submit")}</span>
           </button>
         </div>
@@ -399,9 +387,9 @@ export function SearchBar({
             aria-controls={advancedRegionId}
             onClick={() => setAdvancedOpen((o) => !o)}
             className={cn(
-              "inline-flex items-center gap-1.5 border-b border-dotted pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors",
+              "inline-flex items-center gap-1.5 border-b border-dotted pb-0.5 text-[11px] font-medium uppercase tracking-[0.16em] transition-colors",
               isAmbient
-                ? "border-white/35 text-white/75 hover:border-white/60 hover:text-white"
+                ? "border-white/30 text-white/60 hover:border-white hover:text-white"
                 : "border-slate-400 text-slate-600 hover:border-primary hover:text-primary"
             )}
           >
@@ -548,24 +536,24 @@ export function SearchBar({
       {showMapZoneLink && (
         <div
           className={cn(
-            "flex mt-3 pt-1 justify-center border-t border-white/15",
-            compactAmbient && "justify-start"
+            "flex mt-5 pt-3 justify-center border-t",
+            compactAmbient && "justify-start",
+            isAmbient ? "border-brand-navy/10" : "border-slate-200"
           )}
         >
           <Link
             to={mapZoneHref}
             aria-label="Ir a la búsqueda en mapa"
             className={cn(
-              "group font-heading text-[15px] tracking-tight transition-colors duration-200 sm:text-base",
-              isAmbient ? "text-white/90" : "text-brand-navy"
+              "group font-heading text-[12px] uppercase tracking-[0.2em] transition-colors duration-200 font-medium",
+              isAmbient ? "text-white/60 hover:text-white" : "text-brand-navy"
             )}
-            style={{ fontWeight: isAmbient ? 500 : 600 }}
           >
             <span
               className={cn(
                 "border-b border-current pb-0.5 transition-[border-color,color] duration-200",
                 isAmbient &&
-                  "border-white/40 text-white/90 group-hover:border-white group-hover:text-white",
+                  "border-white/30 group-hover:border-white",
                 isPremium &&
                   !isAmbient &&
                   "border-brand-navy/30 group-hover:border-primary group-hover:text-primary",

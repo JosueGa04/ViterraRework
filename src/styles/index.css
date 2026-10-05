@@ -24,5 +24,5 @@
    oscurecer primero y luego estirar el contraste para que las calles "clipeen" de vuelta
    a blanco puro mientras el terreno queda en gris. Invertir el orden anula el efecto. */
 .viterra-street-tiles {
-  filter: brightness(0.8) contrast(1.7) !important;
+  /* No filter applied, using natural tile colors */
 }
