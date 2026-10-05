@@ -210,12 +210,14 @@ function makePriceMarkerElement(
     const rent = property.rentalPrice ?? property.price;
     pill.textContent = `$${property.price.toLocaleString()} · $${rent.toLocaleString()}/mes`;
   } else {
-    const amount = propertyPriceForOperation(property, filterStatus);
     const asRent =
       filterStatus === "alquiler" ||
       property.status === "alquiler" ||
       (property.status === "venta_y_alquiler" && filterStatus === "alquiler");
-    pill.textContent = asRent || (property.status === "alquiler")
+    
+    const amount = asRent ? (property.rentalPrice || property.price || 0) : (property.price || 0);
+    
+    pill.textContent = asRent
       ? `$${amount.toLocaleString()} /mes`
       : `$${amount.toLocaleString()}`;
   }
@@ -230,7 +232,7 @@ function statusFromSearchParams(searchParams: URLSearchParams): "" | "venta" | "
 
 export function MapSearchPage() {
   const { locale, t } = useLocale();
-  const { properties: catalogProperties } = useCatalogProperties();
+  const { properties: catalogProperties, loading: catalogLoading } = useCatalogProperties();
   const catalogPropertyTypes = useMemo(
     () => catalogProperties.map((p) => p.type).filter(Boolean),
     [catalogProperties]
@@ -513,14 +515,13 @@ export function MapSearchPage() {
 
       const streetLayer = getViterraStreetTileLayer(L);
       const satelliteLayer = L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         {
-          attribution:
-            'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+          attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
           maxZoom: 20,
         }
       );
-      satelliteLayer.addTo(map);
+      streetLayer.addTo(map);
       L.control.layers(
         {
           [t("map.street")]: streetLayer,
@@ -992,7 +993,14 @@ export function MapSearchPage() {
               ))}
             </div>
 
-            {results.length === 0 && (
+            {catalogLoading && (
+              <div className="px-4 py-16 text-center sm:px-5 flex flex-col items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-navy" />
+                <p className="mt-4 font-heading text-sm font-medium uppercase tracking-[0.1em] text-slate-500">Cargando propiedades...</p>
+              </div>
+            )}
+
+            {!catalogLoading && results.length === 0 && (
               <div className="px-4 pb-16 pt-4 text-center sm:px-5">
                 <p className="text-[15px] font-semibold text-slate-900">Sin resultados</p>
                 <p className="mt-1 text-[13px] text-slate-500">
