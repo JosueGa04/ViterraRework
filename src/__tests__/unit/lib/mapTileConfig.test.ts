@@ -6,9 +6,9 @@ import {
 } from "../../../app/lib/mapTileConfig";
 
 describe("mapTileConfig", () => {
-  it("should export CARTO tile URL and attribution strings", () => {
-    expect(MAP_STREET_TILE_URL).toContain("cartocdn.com");
-    expect(MAP_STREET_TILE_ATTRIBUTION).toContain("OpenStreetMap");
+  it("should export Google Maps tile URL and attribution strings", () => {
+    expect(MAP_STREET_TILE_URL).toContain("google.com");
+    expect(MAP_STREET_TILE_ATTRIBUTION).toContain("Google Maps");
   });
 
   it("should create Leaflet tile layer using getViterraStreetTileLayer", () => {
@@ -20,7 +20,7 @@ describe("mapTileConfig", () => {
       MAP_STREET_TILE_URL,
       expect.objectContaining({
         attribution: MAP_STREET_TILE_ATTRIBUTION,
-        subdomains: "abcd",
+        subdomains: "abc",
         maxZoom: 20,
       })
     );
