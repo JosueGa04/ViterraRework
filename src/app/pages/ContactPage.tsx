@@ -261,10 +261,9 @@ export function ContactPage() {
         const map = L.map(el).setView(center, 15);
 
         L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}",
           {
-            attribution:
-              "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+            attribution: "&copy; Google Maps",
             maxZoom: 20,
           }
         ).addTo(map);

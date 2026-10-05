@@ -384,23 +384,23 @@ export function Header() {
             inPreviewCanvas ? "" : "xl:hidden"
           )}
         >
-          <Link
-            to={localePath("/")}
-            className="relative z-[56] hidden min-w-0 max-w-full flex-col items-start justify-center gap-0.5 justify-self-start sm:inline-flex"
-            onClick={() => setIsMenuOpen(false)}
-            aria-label="Viterra Grupo Inmobiliario — Inicio"
-          >
-            <span className="font-heading truncate text-[13px] font-medium tracking-[0.16em] text-white sm:tracking-[0.18em]">
-              VITERRA
-            </span>
-            <span className="h-px w-7 shrink-0 bg-[#C8102E] sm:w-8" aria-hidden />
-          </Link>
+          <div className="relative z-[56] flex min-w-0 flex-col items-start justify-center justify-self-start">
+            <Link
+              to={localePath("/")}
+              className="hidden max-w-full flex-col items-start justify-center gap-0.5 sm:inline-flex"
+              onClick={() => setIsMenuOpen(false)}
+              aria-label="Viterra Grupo Inmobiliario — Inicio"
+            >
+              <span className="font-heading truncate text-[13px] font-medium tracking-[0.16em] text-white sm:tracking-[0.18em]">
+                VITERRA
+              </span>
+              <span className="h-px w-7 shrink-0 bg-[#C8102E] sm:w-8" aria-hidden />
+            </Link>
+            <div className="flex items-center sm:hidden pl-1">
+              <SocialNavIcons iconSize="xs" />
+            </div>
+          </div>
           <div className="absolute left-1/2 z-[52] flex min-w-0 -translate-x-1/2 flex-col items-center justify-center gap-1 overflow-visible sm:relative sm:left-auto sm:translate-x-0 sm:justify-self-center sm:gap-1.5">
-            {/*
-              Misma anchura que la caja del logo: así la fila de redes comparte el mismo marco horizontal
-              que la marca y `justify-center` alinea el grupo de iconos con la V (evita que `w-full` herede
-              un ancho distinto del de la columna en grid / flex).
-            */}
             <div
               className="inline-flex flex-col items-center gap-1"
               style={{ width: markBoxWMobile, maxWidth: "100%" }}
@@ -439,26 +439,9 @@ export function Header() {
                   </span>
                 </span>
               </Link>
-              <div className="mt-0.5 flex w-full shrink-0 justify-center">
-                <SocialNavIcons iconSize="xs" />
-              </div>
             </div>
           </div>
           <div className="relative col-start-2 z-[56] flex items-center justify-end gap-0.5 justify-self-end sm:col-start-3">
-            <LanguageToggle />
-            <Link
-              to={localePath("/favoritos")}
-              aria-label={`${t("nav.favorites")} (${count})`}
-              className="relative p-2 text-white transition-colors hover:text-white/80"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Heart className={cn("h-5 w-5", count > 0 && "fill-[#C8102E] text-[#C8102E]")} strokeWidth={1.5} />
-              {count > 0 && (
-                <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#C8102E] px-1 text-[9px] font-bold leading-none text-white">
-                  {count}
-                </span>
-              )}
-            </Link>
             <button
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
