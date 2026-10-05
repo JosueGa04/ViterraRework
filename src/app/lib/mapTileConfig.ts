@@ -6,10 +6,10 @@
  * solo a los tiles de calle (vía `className`) para no afectar la capa satelital, que
  * comparte el mismo `.leaflet-tile-pane` cuando ambas capas coexisten en el mismo mapa.
  */
-export const MAP_STREET_TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+export const MAP_STREET_TILE_URL = "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}";
 export const MAP_STREET_TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
-export const MAP_STREET_TILE_SUBDOMAINS = "abcd";
+  '&copy; <a href="https://www.google.com/maps">Google Maps</a>';
+export const MAP_STREET_TILE_SUBDOMAINS = "abc";
 export const MAP_STREET_TILE_MAX_ZOOM = 20;
 export const MAP_STREET_TILE_CLASS_NAME = "viterra-street-tiles";
 
